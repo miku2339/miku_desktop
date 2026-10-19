@@ -1,0 +1,9 @@
+.build/
+.DS_Store
+*.app/
+*.zip
+.env
+.env.*
+*.log
+Wallpaper/assets/companion-model/*.pmd
+Wallpaper/assets/companion-model/*.bmp

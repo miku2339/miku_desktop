@@ -10,6 +10,8 @@ Animasa Hatsune Miku v2.3, originally bundled with MikuMikuDance. The model and 
 
 Hatsune Miku is a character of Crypton Future Media, Inc. Consult [Piapro character licensing](https://piapro.jp/license/character_guideline) for character use. The repository does not include model weights or character model binaries. A local build may contain the separately downloaded character model; the build does not grant redistribution rights.
 
+The optional detailed classic-outfit model is **Tda式初音ミク デフォ服ver v1.1**, edited by **金子卵黄** from **Tda**'s model. Obtain it from the [author's original distribution](https://bowlroll.net/file/16344). Keep `ReadMe_Tda.txt`, `ReadMe_Tda_English.txt` and `ReadMe_金子卵黄.txt` with the locally imported assets. Both authors prohibit redistribution of the unmodified original data. The optional model and its textures are excluded from this repository and must not be included in public binary releases.
+
 ## Backgrounds and marks
 
 The generated Tokyo and school backgrounds are recreations inspired by real locations and the atmosphere of the official [セカイ music video](https://www.youtube.com/watch?v=9vyIPWBeRes). They are not official music-video frames. Generated fallback character artwork remains subject to the character owner's rights.

@@ -20,8 +20,6 @@ final class WallpaperWindowController: NSObject, WKNavigationDelegate, WKScriptM
     private var backgroundPanel: NSPanel!
     private var backgroundWebView: WKWebView!
 
-    var onOpenChat: (() -> Void)?
-
     private var characterRect: CGRect = .zero
     private var pointerTimer: Timer?
     private var interactiveMode: Bool
@@ -149,8 +147,6 @@ final class WallpaperWindowController: NSObject, WKNavigationDelegate, WKScriptM
             )
         case "haptic":
             NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
-        case "chat":
-            onOpenChat?()
         default:
             break
         }

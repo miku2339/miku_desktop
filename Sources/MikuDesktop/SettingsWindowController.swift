@@ -6,7 +6,12 @@ extension Notification.Name {
 
 @MainActor
 final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTextFieldDelegate {
+    var onSceneChanged: ((String) -> Void)?
+
     private let configuration: AIConfiguration
+    private let sceneKeys = ["shibuya", "ikebukuro", "akihabara", "shinjuku", "hallway", "musicroom"]
+    private let scenePopup = NSPopUpButton()
+    private let automaticSceneSwitch = NSSwitch()
     private let personalityPopup = NSPopUpButton()
     private let customField = NSTextField()
     private let nicknameField = NSTextField()
@@ -21,7 +26,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
     init(configuration: AIConfiguration? = nil) {
         self.configuration = configuration ?? AIConfiguration.shared
         let window = NSWindow(
-            contentRect: CGRect(x: 0, y: 0, width: 540, height: 470),
+            contentRect: CGRect(x: 0, y: 0, width: 540, height: 550),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -50,10 +55,23 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
     func refreshLocalization() {
         window?.title = L10n.text("settings")
         for (key, label) in labelFields { label.stringValue = L10n.text(key) }
+        updatePopupTitles(scenePopup, keys: sceneKeys)
+        scenePopup.setAccessibilityLabel(L10n.text("background"))
+        automaticSceneSwitch.setAccessibilityLabel(L10n.text("autoSceneRotation"))
         updatePopupTitles(personalityPopup, keys: ["lively", "gentle", "quiet", "custom"])
         updatePopupTitles(replyLanguagePopup, keys: ["automatic", "traditionalChinese", "english", "japanese"])
         updatePopupTitles(interfaceLanguagePopup, keys: ["automatic", "traditionalChinese", "english", "japanese"])
         if !loginStatusLabel.isHidden { loginStatusLabel.stringValue = L10n.text("loginItemError") }
+        refreshSceneSelection()
+    }
+
+    func refreshSceneSelection() {
+        let selected = UserDefaults.standard.string(forKey: "selectedScene") ?? "auto"
+        let automatic = selected == "auto"
+        let manual = automatic ? UserDefaults.standard.string(forKey: "lastManualScene") ?? "shibuya" : selected
+        select(manual, in: scenePopup)
+        automaticSceneSwitch.state = automatic ? .on : .off
+        scenePopup.isEnabled = !automatic
     }
 
     func controlTextDidEndEditing(_ notification: Notification) {
@@ -66,6 +84,12 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
 
     private func buildUI() {
         guard let contentView = window?.contentView else { return }
+
+        configurePopup(scenePopup, items: sceneKeys.map { (L10n.text($0), $0) }, action: #selector(sceneChanged))
+        scenePopup.setAccessibilityLabel(L10n.text("background"))
+        automaticSceneSwitch.target = self
+        automaticSceneSwitch.action = #selector(automaticSceneChanged)
+        automaticSceneSwitch.setAccessibilityLabel(L10n.text("autoSceneRotation"))
 
         configurePopup(personalityPopup, items: [
             (L10n.text("lively"), "lively"),
@@ -88,6 +112,8 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         loginStatusLabel.isHidden = true
 
         let grid = NSGridView(views: [
+            row("background", scenePopup),
+            row("autoSceneRotation", automaticSceneSwitch),
             row("personality", personalityPopup),
             row("customPersonality", customField),
             row("nickname", nicknameField),
@@ -155,6 +181,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
     }
 
     private func loadValues() {
+        refreshSceneSelection()
         select(configuration.personalityPreset, in: personalityPopup)
         customField.stringValue = configuration.customPersonality
         nicknameField.stringValue = configuration.nickname
@@ -175,6 +202,18 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
     @objc private func personalityChanged() {
         configuration.personalityPreset = personalityPopup.selectedItem?.representedObject as? String ?? "lively"
         saveAndNotify()
+    }
+
+    @objc private func sceneChanged() {
+        guard let scene = scenePopup.selectedItem?.representedObject as? String else { return }
+        onSceneChanged?(scene)
+    }
+
+    @objc private func automaticSceneChanged() {
+        let scene = automaticSceneSwitch.state == .on
+            ? "auto"
+            : scenePopup.selectedItem?.representedObject as? String ?? "shibuya"
+        onSceneChanged?(scene)
     }
 
     @objc private func replyLanguageChanged() {

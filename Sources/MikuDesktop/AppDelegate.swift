@@ -5,6 +5,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private var server: StaticHTTPServer?
     private var wallpaperController: WallpaperWindowController?
+    private var desktopControlsController: DesktopControlsWindowController?
     private var chatController: ChatWindowController?
     private var settingsController: SettingsWindowController?
     private var settingsObserver: NSObjectProtocol?
@@ -24,6 +25,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.rebuildMenu()
                 self?.chatController?.refreshLocalization()
                 self?.settingsController?.refreshLocalization()
+                self?.desktopControlsController?.refreshLocalization()
             }
         }
 
@@ -39,9 +41,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 switch result {
                 case .success(let url):
                     let controller = WallpaperWindowController(url: url)
-                    controller.onOpenChat = { [weak self] in self?.openChat(nil) }
                     self.wallpaperController = controller
-                    self.openChat(nil)
+                    let controls = DesktopControlsWindowController()
+                    controls.onOpenChat = { [weak self] in self?.openChat(nil) }
+                    controls.onOpenSettings = { [weak self] in self?.openSettings(nil) }
+                    self.desktopControlsController = controls
                 case .failure:
                     self.presentStartupError()
                 }
@@ -164,14 +168,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func selectScene(_ sender: NSMenuItem) {
         guard let scene = sender.representedObject as? String else { return }
+        applyScene(scene)
+    }
+
+    private func applyScene(_ scene: String) {
         UserDefaults.standard.set(scene, forKey: "selectedScene")
+        if scene != "auto" { UserDefaults.standard.set(scene, forKey: "lastManualScene") }
         wallpaperController?.setScene(scene)
+        settingsController?.refreshSceneSelection()
         rebuildMenu()
     }
 
     @objc private func openSettings(_ sender: Any?) {
         if settingsController == nil {
-            settingsController = SettingsWindowController()
+            let controller = SettingsWindowController()
+            controller.onSceneChanged = { [weak self] scene in self?.applyScene(scene) }
+            settingsController = controller
         }
         settingsController?.present()
     }

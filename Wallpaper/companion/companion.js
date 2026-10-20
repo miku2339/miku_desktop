@@ -625,16 +625,6 @@ function resetMorphs() {
   state.model.morphTargetInfluences.fill(0);
 }
 
-function applyFaceShape() {
-  if (!state.modelURL?.endsWith('/tda/miku.pmx')) return;
-  const head = state.bones.get('頭');
-  if (head) {
-    head.scale.x *= 1.05;
-    head.scale.y *= 0.96;
-  }
-  setMorph('輪郭', 0.7);
-}
-
 function gestureEnvelope(progress) {
   return easeBetween(progress, 0, 0.18) * (1 - easeBetween(progress, 0.82, 1));
 }
@@ -904,7 +894,6 @@ function updateModel(elapsed) {
   if (!state.model) return;
   resetSkeleton();
   resetMorphs();
-  applyFaceShape();
   state.model.rotation.y = 0;
 
   const routineBehavior = behaviorAt(elapsed);

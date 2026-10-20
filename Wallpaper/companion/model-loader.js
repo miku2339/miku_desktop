@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { MMDLoader } from './vendor/loaders/MMDLoader.js';
 import { MMDParser } from './vendor/libs/mmdparser.module.js';
+import { applyFaceMaterials } from './face-materials.js';
+import { applyFaceStyle } from './face-style.js';
 
 const TDA_MODEL_URL = '../assets/companion-model/tda/miku.pmx';
 const DEFAULT_MODEL_URL = '../assets/companion-model/miku_v2.pmd';
@@ -24,5 +26,9 @@ export async function loadCompanionModel() {
   const resourcePath = url.slice(0, url.lastIndexOf('/') + 1);
   const model = loader.meshBuilder.build(data, resourcePath);
   await texturesReady;
+  if (url === TDA_MODEL_URL) {
+    applyFaceStyle(model);
+    applyFaceMaterials(model);
+  }
   return { model, url, name: data.metadata.modelName || 'Animasa Miku' };
 }

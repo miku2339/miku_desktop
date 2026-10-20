@@ -117,6 +117,7 @@ final class ChatWindowController: NSWindowController, NSTextFieldDelegate {
         let documentView = NSView()
         documentView.translatesAutoresizingMaskIntoConstraints = false
         documentView.addSubview(messageStack)
+        scrollView.documentView = documentView
         NSLayoutConstraint.activate([
             messageStack.leadingAnchor.constraint(equalTo: documentView.leadingAnchor),
             messageStack.trailingAnchor.constraint(equalTo: documentView.trailingAnchor),
@@ -125,7 +126,6 @@ final class ChatWindowController: NSWindowController, NSTextFieldDelegate {
             documentView.widthAnchor.constraint(equalTo: scrollView.contentView.widthAnchor)
         ])
 
-        scrollView.documentView = documentView
         scrollView.hasVerticalScroller = true
         scrollView.drawsBackground = false
         scrollView.borderType = .noBorder

@@ -1,4 +1,5 @@
 .build/
+/outputs/
 .DS_Store
 *.app/
 *.zip

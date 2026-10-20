@@ -3,6 +3,13 @@ import CoreGraphics
 import WebKit
 
 final class DesktopPanel: NSPanel {
+    var rendersBehindDesktopIcons = false
+
+    // Finder's transparent icon window must not suspend wallpaper rendering.
+    override var occlusionState: NSWindow.OcclusionState {
+        let state = super.occlusionState
+        return rendersBehindDesktopIcons && isVisible ? state.union(.visible) : state
+    }
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
 }
@@ -51,6 +58,7 @@ final class WallpaperWindowController: NSObject, WKNavigationDelegate, WKScriptM
             level: NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopWindow)) + 1),
             transparent: false
         )
+        backgroundPanel.title = "Miku Desktop Background"
         backgroundPanel.ignoresMouseEvents = true
         backgroundPanel.orderFrontRegardless()
 
@@ -60,6 +68,7 @@ final class WallpaperWindowController: NSObject, WKNavigationDelegate, WKScriptM
             level: NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) + 1),
             transparent: true
         )
+        panel.title = "Miku Desktop Character"
         panel.ignoresMouseEvents = true
         panel.orderFrontRegardless()
 
@@ -192,6 +201,7 @@ final class WallpaperWindowController: NSObject, WKNavigationDelegate, WKScriptM
             defer: false
         )
         result.contentView = contentView
+        result.rendersBehindDesktopIcons = !transparent
         result.backgroundColor = transparent ? .clear : .black
         result.isOpaque = !transparent
         result.hasShadow = false

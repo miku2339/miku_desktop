@@ -12,11 +12,11 @@ Hatsune Miku is a character of Crypton Future Media, Inc. Consult [Piapro charac
 
 The optional detailed classic-outfit model is **Tda式初音ミク デフォ服ver v1.1**, edited by **金子卵黄** from **Tda**'s model. Obtain it from the [author's original distribution](https://bowlroll.net/file/16344). Keep `ReadMe_Tda.txt`, `ReadMe_Tda_English.txt` and `ReadMe_金子卵黄.txt` with the locally imported assets. Both authors prohibit redistribution of the unmodified original data. The optional model and its textures are excluded from this repository and must not be included in public binary releases.
 
-## Backgrounds and marks
+## Background photograph and generated artwork
 
-The generated Tokyo and school backgrounds are recreations inspired by real locations and the atmosphere of the official [セカイ music video](https://www.youtube.com/watch?v=9vyIPWBeRes). They are not official music-video frames. Generated fallback character artwork remains subject to the character owner's rights.
+The Shibuya background is **JR Shibuya Station Hachiko Gates.jpg** by **Mister0124**, obtained from the [original Wikimedia Commons file page](https://commons.wikimedia.org/wiki/File:JR_Shibuya_Station_Hachiko_Gates.jpg) under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). The background at `Wallpaper/assets/scenes/shibuya-hachiko.png` is a semi-anime adaptation produced with image editing, based on the photograph. The station perspective, ticket gates and original sign placement are retained; textures and lighting are stylized. All three time-of-day views use this adapted image, with responsive display cropping and CSS color grading for dusk and night. The photograph and this visual adaptation remain under CC BY-SA 4.0; the project code is licensed separately. Photographed signage remains the property of its respective owners. Attribution is also bundled in `Wallpaper/assets/scenes/ATTRIBUTION.md`.
 
-The JR East mark is reproduced without distortion from the [JR East logo SVG](https://commons.wikimedia.org/wiki/File:JR_East_logo.svg), whose original source is JR East. It remains a mark of its owner and is not licensed under this project's MIT license.
+The other Tokyo and school backgrounds are generated recreations inspired by real locations and the atmosphere of the official [セカイ music video](https://www.youtube.com/watch?v=9vyIPWBeRes). They are not official music-video frames. Generated fallback character artwork remains subject to the character owner's rights.
 
 ## AI backend and model
 

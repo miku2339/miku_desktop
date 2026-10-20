@@ -61,10 +61,9 @@ const TIME_ANCHORS = [
 const SCENE_CONFIGS = [
   {
     id: 'shibuya',
-    day: '../assets/sekai-day.jpg',
-    dusk: '../assets/sekai-dusk.jpg',
-    night: '../assets/sekai-night.jpg',
-    mark: '../assets/sekai-jr-overlay.svg'
+    day: '../assets/scenes/shibuya-hachiko.png',
+    dusk: '../assets/scenes/shibuya-hachiko.png',
+    night: '../assets/scenes/shibuya-hachiko.png'
   },
   {
     id: 'ikebukuro',

@@ -1,18 +1,38 @@
 import AppKit
 import CoreGraphics
 
+/// A small "♪" grip; dragging it moves the floating control bar.
+private final class GripView: NSView {
+    override var mouseDownCanMoveWindow: Bool { true }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let note = NSAttributedString(string: "♪", attributes: [
+            .font: MikuTheme.font(17, .bold),
+            .foregroundColor: MikuTheme.teal
+        ])
+        let size = note.size()
+        note.draw(at: NSPoint(x: bounds.midX - size.width / 2, y: bounds.midY - size.height / 2))
+    }
+
+    override func resetCursorRects() {
+        addCursorRect(bounds, cursor: .openHand)
+    }
+}
+
 @MainActor
-final class DesktopControlsWindowController: NSWindowController {
+final class DesktopControlsWindowController: NSWindowController, NSWindowDelegate {
     var onOpenChat: (() -> Void)?
     var onOpenSettings: (() -> Void)?
 
-    private let chatButton = NSButton()
-    private let settingsButton = NSButton()
+    private static let originKey = "desktopControlsOrigin"
+    private let chatButton = MikuPillButton(frame: .zero)
+    private let settingsButton = MikuPillButton(frame: .zero)
     private var screenObserver: NSObjectProtocol?
+    private var isRestoringPosition = false
 
     init() {
         let panel = DesktopPanel(
-            contentRect: CGRect(x: 0, y: 0, width: 260, height: 52),
+            contentRect: CGRect(x: 0, y: 0, width: 190, height: 46),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -28,43 +48,62 @@ final class DesktopControlsWindowController: NSWindowController {
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
         panel.animationBehavior = .none
         super.init(window: panel)
+        panel.delegate = self
 
         let background = NSVisualEffectView()
-        background.material = .popover
+        background.material = .hudWindow
         background.blendingMode = .behindWindow
         background.state = .active
         background.wantsLayer = true
-        background.layer?.cornerRadius = 14
+        background.layer?.cornerRadius = 23
+        background.layer?.cornerCurve = .continuous
         background.layer?.masksToBounds = true
+        background.layer?.borderWidth = 1
+        background.layer?.borderColor = MikuTheme.teal.withAlphaComponent(0.45).cgColor
         panel.contentView = background
 
-        configureButton(chatButton, symbol: "bubble.left.and.bubble.right", action: #selector(openChat))
-        configureButton(settingsButton, symbol: "gearshape", action: #selector(openSettings))
+        let grip = GripView()
+        grip.translatesAutoresizingMaskIntoConstraints = false
+
+        chatButton.style = .primary
+        chatButton.symbolName = "bubble.left.and.bubble.right.fill"
+        chatButton.controlHeight = 32
+        chatButton.target = self
+        chatButton.action = #selector(openChat)
         chatButton.setAccessibilityIdentifier("desktop-chat")
+
+        settingsButton.style = .soft
+        settingsButton.symbolName = "gearshape.fill"
+        settingsButton.iconOnly = true
+        settingsButton.controlHeight = 32
+        settingsButton.target = self
+        settingsButton.action = #selector(openSettings)
         settingsButton.setAccessibilityIdentifier("desktop-settings")
 
-        let stack = NSStackView(views: [chatButton, settingsButton])
+        let stack = NSStackView(views: [grip, chatButton, settingsButton])
         stack.orientation = .horizontal
-        stack.distribution = .fillEqually
-        stack.spacing = 8
+        stack.alignment = .centerY
+        stack.spacing = 6
         stack.translatesAutoresizingMaskIntoConstraints = false
         background.addSubview(stack)
         NSLayoutConstraint.activate([
+            grip.widthAnchor.constraint(equalToConstant: 22),
+            grip.heightAnchor.constraint(equalToConstant: 32),
+            settingsButton.widthAnchor.constraint(equalToConstant: 32),
             stack.leadingAnchor.constraint(equalTo: background.leadingAnchor, constant: 8),
-            stack.trailingAnchor.constraint(equalTo: background.trailingAnchor, constant: -8),
-            stack.topAnchor.constraint(equalTo: background.topAnchor, constant: 8),
-            stack.bottomAnchor.constraint(equalTo: background.bottomAnchor, constant: -8)
+            stack.trailingAnchor.constraint(equalTo: background.trailingAnchor, constant: -7),
+            stack.centerYAnchor.constraint(equalTo: background.centerYAnchor)
         ])
 
         refreshLocalization()
-        updatePosition()
+        restorePosition()
         panel.orderFrontRegardless()
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.updatePosition() }
+            Task { @MainActor in self?.restorePosition() }
         }
     }
 
@@ -83,20 +122,38 @@ final class DesktopControlsWindowController: NSWindowController {
             button.toolTip = button.title
             button.setAccessibilityLabel(button.title)
         }
+        resizeToFit()
     }
 
-    private func configureButton(_ button: NSButton, symbol: String, action: Selector) {
-        button.bezelStyle = .texturedRounded
-        button.setButtonType(.momentaryPushIn)
-        button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
-        button.imagePosition = .imageLeading
-        button.font = .systemFont(ofSize: 13, weight: .medium)
-        button.target = self
-        button.action = action
+    func windowDidMove(_ notification: Notification) {
+        guard !isRestoringPosition, let window else { return }
+        UserDefaults.standard.set(NSStringFromPoint(window.frame.origin), forKey: Self.originKey)
     }
 
-    private func updatePosition() {
-        guard let window, let screen = NSScreen.main ?? NSScreen.screens.first else { return }
+    private func resizeToFit() {
+        guard let window, let contentView = window.contentView else { return }
+        contentView.layoutSubtreeIfNeeded()
+        let width = 8 + 22 + 6 + chatButton.intrinsicContentSize.width + 6 + 32 + 7
+        var frame = window.frame
+        frame.size = NSSize(width: width, height: 46)
+        isRestoringPosition = true
+        window.setFrame(frame, display: true)
+        isRestoringPosition = false
+    }
+
+    private func restorePosition() {
+        guard let window else { return }
+        isRestoringPosition = true
+        defer { isRestoringPosition = false }
+        if let saved = UserDefaults.standard.string(forKey: Self.originKey) {
+            let origin = NSPointFromString(saved)
+            let frame = NSRect(origin: origin, size: window.frame.size)
+            if NSScreen.screens.contains(where: { $0.visibleFrame.intersects(frame.insetBy(dx: 20, dy: 10)) }) {
+                window.setFrameOrigin(origin)
+                return
+            }
+        }
+        guard let screen = NSScreen.screens.first ?? NSScreen.main else { return }
         let visible = screen.visibleFrame
         window.setFrameOrigin(CGPoint(
             x: max(visible.minX, visible.maxX - window.frame.width - 20),

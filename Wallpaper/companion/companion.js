@@ -148,8 +148,41 @@ const state = {
   previewElapsed: null,
   lastTimestamp: null,
   raf: null,
-  renderedAt: 0
+  renderedAt: 0,
+  pinnedAnchor: null,
+  sceneSlotSeconds: 300,
+  thinking: false,
+  hover: null,
+  hoverBlend: 0,
+  lastModelElapsed: null,
+  nextHoverGreeting: 0,
+  nextHoverHaptic: 0,
+  language: 'zh-Hant'
 };
+
+const HOVER_PHRASES = {
+  'zh-Hant': {
+    head: ['要摸摸頭嗎？♪', '嘿嘿～', '頭髮今天也很順喔！'],
+    hand: ['要擊掌嗎？', '嗨～♪', '牽手？'],
+    body: ['嗯？找我嗎？', '♪～', '在這裡喔！']
+  },
+  en: {
+    head: ['Head pats? ♪', 'Hehe~', 'Careful with the twintails!'],
+    hand: ['High five?', 'Hi~ ♪', 'Hold hands?'],
+    body: ['Hm? Need me?', '♪~', "I'm right here!"]
+  },
+  ja: {
+    head: ['なでなでする？♪', 'えへへ～', 'ツインテ、崩さないでね！'],
+    hand: ['ハイタッチする？', 'やっほー♪', '手、つなぐ？'],
+    body: ['ん？呼んだ？', '♪～', 'ここにいるよ！']
+  }
+};
+const HOVER_NOTE_SYMBOLS = ['♪', '♫', '♬', '♪'];
+const HOVER_GREETING_COOLDOWN = 40;
+const HOVER_DWELL_SECONDS = 2.2;
+
+const SCENE_FADE_SECONDS = 8;
+const BACKGROUND_IDLE_INTERVAL = 1000;
 
 const smoothstep = value => {
   const bounded = THREE.MathUtils.clamp(value, 0, 1);
@@ -277,8 +310,8 @@ function sceneWeightsAt(elapsed) {
   if (state.forcedScene && ids.includes(state.forcedScene)) return { [state.forcedScene]: 1 };
   if (ids.length <= 1 || reducedMotion.matches) return { [ids[0] || 'shibuya']: 1 };
 
-  const slot = 90;
-  const fadeStart = 82;
+  const slot = Math.max(30, state.sceneSlotSeconds);
+  const fadeStart = slot - SCENE_FADE_SECONDS;
   const cycle = slot * ids.length;
   const time = ((elapsed % cycle) + cycle) % cycle;
   const index = Math.floor(time / slot);
@@ -336,16 +369,42 @@ function postNative(message) {
   return true;
 }
 
-function showBubble(text, emotion = 'calm', duration = 5200) {
+const bubbleName = document.createElement('span');
+bubbleName.className = 'bubble-name';
+bubbleName.textContent = 'MIKU';
+const bubbleText = document.createElement('span');
+bubbleText.className = 'bubble-text';
+speechBubble.replaceChildren(bubbleName, bubbleText);
+
+function showBubble(text, emotion = 'calm', duration = null) {
   if (!showsCharacter) return;
   const safeText = typeof text === 'string' ? text.trim().slice(0, 240) : '';
   if (!safeText) return;
   const safeEmotion = ALLOWED_EMOTIONS.has(emotion) ? emotion : 'calm';
-  speechBubble.textContent = safeText;
+  state.thinking = false;
+  speechBubble.classList.remove('thinking');
+  bubbleText.textContent = safeText;
   speechBubble.dataset.emotion = safeEmotion;
   speechBubble.classList.add('visible');
   clearTimeout(state.bubbleTimer);
-  state.bubbleTimer = window.setTimeout(() => speechBubble.classList.remove('visible'), duration);
+  // Longer replies stay up longer so they can actually be read.
+  const visibleFor = duration ?? THREE.MathUtils.clamp(3800 + [...safeText].length * 110, 4200, 14000);
+  state.bubbleTimer = window.setTimeout(() => speechBubble.classList.remove('visible'), visibleFor);
+}
+
+function setThinking(thinking) {
+  if (!showsCharacter) return;
+  state.thinking = Boolean(thinking);
+  clearTimeout(state.bubbleTimer);
+  if (state.thinking) {
+    bubbleText.textContent = '♪ ♫ ♪';
+    speechBubble.dataset.emotion = 'calm';
+    speechBubble.classList.add('thinking', 'visible');
+    // Safety net in case the reply never arrives.
+    state.bubbleTimer = window.setTimeout(() => speechBubble.classList.remove('visible', 'thinking'), 120000);
+  } else if (speechBubble.classList.contains('thinking')) {
+    speechBubble.classList.remove('visible', 'thinking');
+  }
 }
 
 function holdAnchor(anchor, elapsed, seconds = 12) {
@@ -524,7 +583,8 @@ function updateCharacterBounds(timestamp) {
   state.bounds = rect;
 
   speechBubble.style.left = `${THREE.MathUtils.clamp(rect.x + rect.width * 0.5, 0.15, 0.85) * 100}%`;
-  speechBubble.style.top = `${Math.max(0.025, rect.y - 0.045) * 100}%`;
+  // The bubble is translated up by its own height, so this is where its tail points.
+  speechBubble.style.top = `${Math.max(0.2, rect.y - 0.012) * 100}%`;
   postNative({ type: 'bounds', rect: { ...rect } });
 }
 
@@ -544,7 +604,7 @@ function raycastCharacter(clientX, clientY) {
   const width = Math.max(0.001, modelBox.max.x - modelBox.min.x);
   const normalizedHeight = (hit.point.y - modelBox.min.y) / height;
   const lateral = Math.abs((hit.point.x - (modelBox.min.x + modelBox.max.x) / 2) / width);
-  let zone = 'none';
+  let zone = 'body';
   if (normalizedHeight >= 0.73) zone = 'head';
   else if (normalizedHeight >= 0.43 && lateral >= 0.19) zone = 'hand';
   else if (normalizedHeight >= 0.4) zone = 'torso';
@@ -719,6 +779,16 @@ function applyBasePose(elapsed) {
   if (state.emotion === 'happy') setSmile(0.32);
   if (state.emotion === 'sleepy') setMorph('まばたき', Math.max(blinkAmount(elapsed), 0.18));
   if (state.emotion === 'curious') rotateBone('頭', 0, 0.035, 0.045);
+
+  // Cursor resting on Miku: she brightens up and tilts her head towards it.
+  const hover = state.hoverBlend;
+  if (hover > 0.001) {
+    const base = state.emotion === 'happy' ? 0.32 : 0.12;
+    setSmile(Math.max(base, 0.14 + hover * (state.hover?.zone === 'head' ? 0.5 : 0.38)));
+    const tilt = state.hover?.side ?? 1;
+    rotateBone('頭', -0.025 * hover, 0.02 * tilt * hover, 0.07 * tilt * hover);
+    rotateBone('上半身', -0.012 * hover, 0, 0.012 * tilt * hover);
+  }
 }
 
 function applyWave(progress, elapsed) {
@@ -876,20 +946,37 @@ function applyHairClearance() {
   rotateBone('右髪１', counterPitch, 0, counterRoll);
 }
 
+function updateHoverBlend(elapsed) {
+  const previous = state.lastModelElapsed ?? elapsed;
+  const delta = THREE.MathUtils.clamp(elapsed - previous, 0, 0.1);
+  state.lastModelElapsed = elapsed;
+  const target = state.hover ? 1 : 0;
+  state.hoverBlend += (target - state.hoverBlend) * Math.min(1, delta * 7);
+  if (Math.abs(target - state.hoverBlend) < 0.002) state.hoverBlend = target;
+}
+
 function updateModel(elapsed) {
   if (!state.model) return;
+  updateHoverBlend(elapsed);
   resetSkeleton();
   resetMorphs();
   state.model.rotation.y = 0;
 
-  const routineBehavior = behaviorAt(elapsed);
-  const routineAnchor = anchorAt(elapsed, routineBehavior);
+  let routineBehavior = behaviorAt(elapsed);
+  let routineAnchor = anchorAt(elapsed, routineBehavior);
+  if (state.pinnedAnchor !== null) {
+    // Pinned by the user: keep the idle gestures but don't walk away.
+    if (routineBehavior.name === 'walk') routineBehavior = { name: 'idle', progress: 0 };
+    routineAnchor = state.pinnedAnchor;
+  }
   const pointerReaction = state.pointer?.dragging
     ? { type: 'drag', progress: 0.5, fromAnchor: state.currentAnchor, toAnchor: state.currentAnchor }
     : null;
   const reaction = reducedMotion.matches ? null : pointerReaction || activeReactionAt(elapsed);
   const behavior = reaction || (reducedMotion.matches ? { name: 'idle', progress: 0 } : routineBehavior);
-  let anchor = reducedMotion.matches ? POSITION_ANCHORS[1] : heldAnchorAt(routineAnchor, elapsed);
+  let anchor = reducedMotion.matches
+    ? (state.pinnedAnchor ?? POSITION_ANCHORS[1])
+    : heldAnchorAt(routineAnchor, elapsed);
   if (reaction?.type === 'move') {
     anchor = THREE.MathUtils.lerp(reaction.fromAnchor, reaction.toAnchor, smoothstep(reaction.progress));
   }
@@ -998,8 +1085,19 @@ function renderState(timestamp) {
   state.renderedAt = timestamp;
 }
 
+function sceneIsCrossfading(elapsed) {
+  return Object.values(sceneWeightsAt(elapsed)).some(weight => weight > 0.001 && weight < 0.999);
+}
+
+function frameInterval() {
+  if (reducedMotion.matches) return 1000;
+  // The background is mostly static images; only animate smoothly while scenes crossfade.
+  if (!showsCharacter) return sceneIsCrossfading(currentElapsed()) ? 1000 / FPS_CAP : BACKGROUND_IDLE_INTERVAL;
+  return 1000 / FPS_CAP;
+}
+
 function frame(timestamp) {
-  const interval = reducedMotion.matches ? 1000 : 1000 / FPS_CAP;
+  const interval = frameInterval();
   if (state.lastTimestamp === null) state.lastTimestamp = timestamp;
   const delta = Math.min((timestamp - state.lastTimestamp) / 1000, 0.1);
   state.lastTimestamp = timestamp;
@@ -1048,6 +1146,7 @@ function handlePointerDown(event) {
     dragging: false
   };
   canvas.setPointerCapture?.(event.pointerId);
+  postNative({ type: 'drag', active: true });
   postNative({ type: 'haptic' });
 
   if (result.zone === 'head') startReaction('headPat', point);
@@ -1076,6 +1175,9 @@ function handlePointerMove(event) {
   const now = performance.now();
   if (now - state.lastLookPointerTime < 50) return;
   state.lastLookPointerTime = now;
+  if (!hasNativeBridge() && !state.pointer) {
+    updateHover(raycastCharacter(event.clientX, event.clientY), point.x, point.y);
+  }
   const bounds = state.bounds;
   if (bounds
     && point.x >= bounds.x && point.x <= bounds.x + bounds.width
@@ -1089,11 +1191,103 @@ function finishPointer(event) {
   if (!pointer || pointer.id !== event.pointerId) return;
   canvas.releasePointerCapture?.(event.pointerId);
   state.pointer = null;
+  postNative({ type: 'drag', active: false });
+  if (pointer.dragging) {
+    // Remember where she was dropped.
+    const anchor = state.anchorHold?.anchor ?? state.currentAnchor;
+    state.pinnedAnchor = THREE.MathUtils.clamp(anchor, 0.16, 0.68);
+    state.anchorHold = null;
+    postNative({ type: 'pin', x: state.pinnedAnchor });
+  }
 }
+
+function spawnHoverNote(x, y, zone) {
+  if (reducedMotion.matches || !showsCharacter) return;
+  const note = document.createElement('span');
+  note.className = `hover-note zone-${zone}`;
+  note.textContent = HOVER_NOTE_SYMBOLS[Math.floor(Math.random() * HOVER_NOTE_SYMBOLS.length)];
+  note.style.left = `${x * 100}%`;
+  note.style.top = `${y * 100}%`;
+  note.style.setProperty('--drift', `${(Math.random() - 0.5) * 46}px`);
+  note.style.setProperty('--spin', `${(Math.random() - 0.5) * 40}deg`);
+  note.addEventListener('animationend', () => note.remove(), { once: true });
+  document.body.appendChild(note);
+}
+
+function pickPhrase(zone) {
+  const phrases = (HOVER_PHRASES[state.language] || HOVER_PHRASES['zh-Hant'])[zone] || [];
+  return phrases[Math.floor(Math.random() * phrases.length)] || '';
+}
+
+/** Called for every pointer position over (or near) Miku; drives the hover reaction. */
+function updateHover(hit, x, y) {
+  const elapsed = currentElapsed();
+  if (!hit) {
+    if (state.hover) endHover();
+    return;
+  }
+  const faceX = projectedFaceAnchor()?.x ?? x;
+  const side = x >= faceX ? 1 : -1;
+  if (!state.hover) {
+    state.hover = { zone: hit.zone, since: elapsed, lastNote: elapsed, dwellDone: false, side };
+    document.body.classList.add('miku-hover');
+    spawnHoverNote(x, y, hit.zone);
+    if (elapsed >= state.nextHoverHaptic) {
+      postNative({ type: 'hover-haptic' });
+      state.nextHoverHaptic = elapsed + 1.2;
+    }
+  } else {
+    state.hover.zone = hit.zone;
+    state.hover.side = side;
+    if (elapsed - state.hover.lastNote > 0.55) {
+      spawnHoverNote(x, y, hit.zone);
+      state.hover.lastNote = elapsed;
+    }
+  }
+  document.body.dataset.hoverZone = hit.zone;
+  state.lookTarget = { x, y, until: elapsed + 0.6 };
+
+  // Rest the cursor on her for a moment and she says hello back.
+  if (!state.hover.dwellDone && elapsed - state.hover.since > HOVER_DWELL_SECONDS && !state.pointer) {
+    state.hover.dwellDone = true;
+    if (!state.reaction && !reducedMotion.matches) startReaction('hello');
+    const bubbleBusy = state.thinking || speechBubble.classList.contains('visible');
+    if (!bubbleBusy && elapsed >= state.nextHoverGreeting) {
+      state.nextHoverGreeting = elapsed + HOVER_GREETING_COOLDOWN;
+      showBubble(pickPhrase(hit.zone), hit.zone === 'head' ? 'happy' : 'curious', 2600);
+    }
+  }
+}
+
+function endHover() {
+  state.hover = null;
+  document.body.classList.remove('miku-hover');
+  delete document.body.dataset.hoverZone;
+}
+
+function hitTest(x, y) {
+  if (!showsCharacter || !state.interactive || !state.model) return false;
+  if (state.pointer) return true;
+  const nx = Number(x);
+  const ny = Number(y);
+  if (!Number.isFinite(nx) || !Number.isFinite(ny)) return false;
+  const rect = canvas.getBoundingClientRect();
+  const hit = raycastCharacter(rect.left + nx * rect.width, rect.top + ny * rect.height);
+  updateHover(hit, nx, ny);
+  return hit ? hit.zone : false;
+}
+
+canvas.addEventListener('webglcontextlost', event => {
+  event.preventDefault();
+  stopLoop();
+  state.error = 'WebGL context lost';
+}, false);
+canvas.addEventListener('webglcontextrestored', () => window.location.reload(), false);
 
 canvas.addEventListener('pointerdown', handlePointerDown);
 canvas.addEventListener('pointermove', handlePointerMove, { passive: true });
 canvas.addEventListener('pointerup', event => finishPointer(event));
+canvas.addEventListener('pointerleave', () => { if (!state.pointer) endHover(); });
 canvas.addEventListener('pointercancel', event => finishPointer(event));
 
 function status() {
@@ -1129,6 +1323,10 @@ function status() {
     sceneWeights: sceneWeightsAt(elapsed),
     sceneLayerOpacities: sourceOverOpacities(sceneWeightsAt(elapsed), [...state.sceneElements.keys()]),
     bounds: state.bounds ? { ...state.bounds } : null,
+    pinnedAnchor: state.pinnedAnchor,
+    sceneSlotSeconds: state.sceneSlotSeconds,
+    thinking: state.thinking,
+    hover: state.hover ? state.hover.zone : null,
     grounding: grounding?.status() ?? null,
     reaction: state.reaction ? state.reaction.type : null,
     emotion: state.emotion,
@@ -1149,7 +1347,11 @@ window.mikuCompanion = Object.freeze({
   setInteractive(enabled) {
     state.interactive = showsCharacter && Boolean(enabled);
     document.body.classList.toggle('interaction-enabled', state.interactive);
-    if (!state.interactive) state.pointer = null;
+    if (!state.interactive) endHover();
+    if (!state.interactive && state.pointer) {
+      state.pointer = null;
+      postNative({ type: 'drag', active: false });
+    }
     updateCharacterBounds(performance.now());
     return status();
   },
@@ -1168,6 +1370,37 @@ window.mikuCompanion = Object.freeze({
     if (action === 'wave' || action === 'stretch' || action === 'rest') startReaction(action);
     else if (action === 'nod') startReaction('hello');
     else state.reaction = null;
+    renderState(performance.now());
+    return status();
+  },
+  hitTest,
+  endHover() {
+    endHover();
+    return true;
+  },
+  setLanguage(language) {
+    state.language = HOVER_PHRASES[language] ? language : 'zh-Hant';
+    return true;
+  },
+  setThinking(thinking) {
+    setThinking(thinking);
+    return true;
+  },
+  setPinnedAnchor(anchor = null) {
+    const value = anchor === null ? null : Number(anchor);
+    state.pinnedAnchor = value === null || !Number.isFinite(value) ? null : THREE.MathUtils.clamp(value, 0.16, 0.68);
+    state.anchorHold = null;
+    renderState(performance.now());
+    return status();
+  },
+  setRotationInterval(seconds) {
+    const value = Number(seconds);
+    if (!Number.isFinite(value) || value < 30) return false;
+    // Keep the current scene on screen when the interval changes.
+    const ids = state.loadedScenes;
+    const currentIndex = Math.max(0, ids.indexOf(state.activeScene));
+    state.sceneSlotSeconds = value;
+    if (state.previewElapsed === null) state.activeElapsed = currentIndex * value;
     renderState(performance.now());
     return status();
   },

@@ -26,6 +26,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.chatController?.refreshLocalization()
                 self?.settingsController?.refreshLocalization()
                 self?.desktopControlsController?.refreshLocalization()
+                self?.settingsController?.refreshInteraction()
+                self?.wallpaperController?.setLanguage(AppLanguage.resolved.rawValue)
             }
         }
 
@@ -41,6 +43,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 switch result {
                 case .success(let url):
                     let controller = WallpaperWindowController(url: url)
+                    controller.onPinnedAnchorChanged = { [weak self] in
+                        Task { @MainActor in
+                            self?.settingsController?.refreshPosition()
+                            self?.rebuildMenu()
+                        }
+                    }
                     self.wallpaperController = controller
                     let controls = DesktopControlsWindowController()
                     controls.onOpenChat = { [weak self] in self?.openChat(nil) }
@@ -101,6 +109,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         scene.submenu = sceneMenu
         menu.addItem(scene)
 
+        if UserDefaults.standard.object(forKey: WallpaperWindowController.pinnedAnchorKey) != nil {
+            let roam = NSMenuItem(title: L10n.text("resetPositionMenu"), action: #selector(resetPosition(_:)), keyEquivalent: "")
+            roam.target = self
+            menu.addItem(roam)
+        }
+
         menu.addItem(.separator())
         let settings = NSMenuItem(title: L10n.text("settings"), action: #selector(openSettings(_:)), keyEquivalent: ",")
         settings.target = self
@@ -154,16 +168,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             controller.onReply = { [weak self] reply in
                 self?.wallpaperController?.receiveReply(reply)
             }
+            controller.onThinking = { [weak self] thinking in
+                self?.wallpaperController?.setThinking(thinking)
+            }
+            controller.onOpenSettings = { [weak self] in
+                self?.openSettings(nil)
+            }
             chatController = controller
         }
         chatController?.present()
     }
 
     @objc private func toggleInteraction(_ sender: NSMenuItem) {
-        let enabled = sender.state != .on
-        sender.state = enabled ? .on : .off
-        wallpaperController?.setInteractive(enabled)
+        applyInteractive(sender.state != .on)
+    }
+
+    private func applyInteractive(_ enabled: Bool) {
         UserDefaults.standard.set(enabled, forKey: "interactiveMode")
+        wallpaperController?.setInteractive(enabled)
+        settingsController?.refreshInteraction()
+        rebuildMenu()
+    }
+
+    @objc private func resetPosition(_ sender: Any?) {
+        wallpaperController?.resetPinnedPosition()
     }
 
     @objc private func selectScene(_ sender: NSMenuItem) {
@@ -183,6 +211,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if settingsController == nil {
             let controller = SettingsWindowController()
             controller.onSceneChanged = { [weak self] scene in self?.applyScene(scene) }
+            controller.onRotationChanged = { [weak self] seconds in self?.wallpaperController?.setRotationInterval(seconds) }
+            controller.onResetPosition = { [weak self] in self?.wallpaperController?.resetPinnedPosition() }
+            controller.onInteractiveChanged = { [weak self] enabled in self?.applyInteractive(enabled) }
             settingsController = controller
         }
         settingsController?.present()

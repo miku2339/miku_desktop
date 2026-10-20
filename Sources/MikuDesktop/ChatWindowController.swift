@@ -1,35 +1,62 @@
 import AppKit
 
 @MainActor
-final class ChatWindowController: NSWindowController, NSTextFieldDelegate {
+final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFieldDelegate {
     var onReply: ((CompanionReply) -> Void)?
+    var onThinking: ((Bool) -> Void)?
+    var onOpenSettings: (() -> Void)?
 
     private let ai: LocalAI
     private var messages: [ChatMessage] = []
     private var failedText: String?
     private var isSending = false
+    private var connectionTask: Task<Void, Never>?
+    private var hasPositionedWindow = false
 
-    private let messageStack = NSStackView()
+    // Header
+    private let headerAvatar = MikuAvatarView(size: 40)
+    private let nameLabel = NSTextField.mikuLabel("Miku", size: 16, weight: .bold)
+    private let statusDot = StatusDotView()
+    private let statusLabel = NSTextField.mikuLabel("", size: 11.5, color: MikuTheme.secondaryText)
+    private let clearButton = MikuPillButton(frame: .zero)
+    private let settingsButton = MikuPillButton(frame: .zero)
+
+    // Conversation
     private let scrollView = NSScrollView()
+    private let messageStack = NSStackView()
+    private let emptyState = NSStackView()
+    private let greetingTitle = NSTextField.mikuLabel("", size: 18, weight: .bold, color: MikuTheme.deepTeal)
+    private let greetingBody = NSTextField.mikuLabel("", size: 13, color: MikuTheme.secondaryText)
+    private var suggestionButtons: [MikuPillButton] = []
+    private var bubbleLabels: [NSTextField] = []
+    private var typingRow: NSView?
+    private var errorRow: NSView?
+
+    // Input
+    private let inputCard = MikuCardView()
     private let inputField = NSTextField()
-    private let sendButton = NSButton()
-    private let progressIndicator = NSProgressIndicator()
-    private let statusLabel = NSTextField(labelWithString: "")
-    private let retryButton = NSButton()
+    private let sendButton = MikuPillButton(frame: .zero)
 
     init(ai: LocalAI? = nil) {
         self.ai = ai ?? LocalAI(configuration: AIConfiguration.shared)
         let window = NSWindow(
-            contentRect: CGRect(x: 0, y: 0, width: 440, height: 560),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            contentRect: CGRect(x: 0, y: 0, width: 420, height: 620),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
         window.title = "Miku"
-        window.minSize = NSSize(width: 360, height: 420)
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
+        window.isMovableByWindowBackground = true
+        window.minSize = NSSize(width: 380, height: 460)
         window.isReleasedWhenClosed = false
+        window.contentView = MikuBackgroundView()
         super.init(window: window)
+        window.delegate = self
+        hasPositionedWindow = window.setFrameAutosaveName("MikuChatWindow") && UserDefaults.standard.string(forKey: "NSWindow Frame MikuChatWindow") != nil
         buildUI()
+        showEmptyState()
     }
 
     required init?(coder: NSCoder) {
@@ -38,32 +65,91 @@ final class ChatWindowController: NSWindowController, NSTextFieldDelegate {
 
     func present() {
         refreshLocalization()
+        if !hasPositionedWindow {
+            window?.center()
+            hasPositionedWindow = true
+        }
         showWindow(nil)
-        window?.center()
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
         window?.makeFirstResponder(inputField)
+        refreshConnectionStatus()
     }
 
     func refreshLocalization() {
         window?.title = "Miku"
-        inputField.placeholderString = L10n.text("messagePlaceholder")
-        sendButton.title = L10n.text("send")
-        retryButton.title = L10n.text("retry")
-        setSending(isSending, failed: failedText != nil && !isSending)
+        setPlaceholder()
+        clearButton.toolTip = L10n.text("clearChat")
+        clearButton.setAccessibilityLabel(L10n.text("clearChat"))
+        settingsButton.toolTip = L10n.text("settingsButton")
+        settingsButton.setAccessibilityLabel(L10n.text("settingsButton"))
+        sendButton.toolTip = L10n.text("send")
+        sendButton.setAccessibilityLabel(L10n.text("send"))
+        greetingTitle.stringValue = L10n.text("chatGreetingTitle")
+        greetingBody.stringValue = L10n.text("chatGreetingBody")
+        for (index, button) in suggestionButtons.enumerated() {
+            button.title = L10n.text("suggestion\(index + 1)")
+        }
+        refreshConnectionStatus()
     }
 
-    func controlTextDidEndEditing(_ notification: Notification) {
-        guard let movement = notification.userInfo?["NSTextMovement"] as? Int,
-              movement == NSReturnTextMovement else { return }
+    // MARK: - Connection status
+
+    private func refreshConnectionStatus() {
+        connectionTask?.cancel()
+        setStatus(color: MikuTheme.checking, text: L10n.text("statusChecking"))
+        connectionTask = Task { [weak self] in
+            guard let self else { return }
+            let result = await ai.checkConnection()
+            guard !Task.isCancelled else { return }
+            applyConnection(result)
+        }
+    }
+
+    private func applyConnection(_ result: LocalAI.ConnectionCheck) {
+        if result.reachable {
+            let model = AIConfiguration.shared.model
+            let verified = result.modelAvailable == true
+            let color = verified ? MikuTheme.online : MikuTheme.checking
+            let text = verified ? "\(L10n.text("statusOnline")) · \(model)" : result.message
+            setStatus(color: color, text: text)
+        } else {
+            setStatus(color: MikuTheme.offline, text: L10n.text("statusOffline"))
+            statusLabel.toolTip = result.message
+        }
+    }
+
+    private func setStatus(color: NSColor, text: String) {
+        statusDot.color = color
+        statusLabel.stringValue = text
+        statusLabel.toolTip = text
+    }
+
+    // MARK: - Sending
+
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+        guard commandSelector == #selector(NSResponder.insertNewline(_:)) else { return false }
+        // Let input methods (Chinese / Japanese) commit their candidate first.
+        if textView.hasMarkedText() { return false }
         sendCurrentMessage()
+        return true
+    }
+
+    func controlTextDidChange(_ notification: Notification) {
+        updateSendButton()
     }
 
     @objc private func sendCurrentMessage() {
         let text = inputField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, !isSending else { return }
         inputField.stringValue = ""
+        updateSendButton()
         send(text)
+    }
+
+    @objc private func suggestionTapped(_ sender: MikuPillButton) {
+        guard !isSending else { return }
+        send(sender.title)
     }
 
     @objc private func retry() {
@@ -71,159 +157,479 @@ final class ChatWindowController: NSWindowController, NSTextFieldDelegate {
         send(failedText, appendUser: false)
     }
 
+    @objc private func clearChat() {
+        guard !isSending else { return }
+        messages.removeAll()
+        failedText = nil
+        showEmptyState()
+    }
+
+    @objc private func openSettings() {
+        onOpenSettings?()
+    }
+
     private func send(_ text: String, appendUser: Bool = true) {
         guard !isSending else { return }
         failedText = nil
-        setSending(true)
-        let history = messages
+        removeErrorRow()
+        hideEmptyState()
         if appendUser {
             let userMessage = ChatMessage(role: .user, text: text)
             messages.append(userMessage)
             appendBubble(userMessage)
         }
+        let history = completedHistory()
+        setSending(true)
 
         Task { [weak self] in
             guard let self else { return }
             do {
                 let reply = try await ai.reply(to: text, history: history)
                 let assistantMessage = ChatMessage(role: .assistant, text: reply.text)
+                setSending(false)
                 messages.append(assistantMessage)
                 appendBubble(assistantMessage)
-                setSending(false)
                 onReply?(reply)
+                if statusDot.color != MikuTheme.online { refreshConnectionStatus() }
             } catch {
+                setSending(false)
                 failedText = text
-                setSending(false, failed: true)
+                let configuration = AIConfiguration.shared
+                showError(LocalAI.message(for: error, endpoint: configuration.endpoint, model: configuration.model))
+                refreshConnectionStatus()
             }
         }
     }
 
+    /// Only user turns that received an answer are sent back as context, so a failed
+    /// message never shows up as two consecutive user turns.
+    private func completedHistory() -> [ChatMessage] {
+        var result: [ChatMessage] = []
+        for (index, message) in messages.enumerated() {
+            if message.role == .assistant {
+                result.append(message)
+            } else if index + 1 < messages.count, messages[index + 1].role == .assistant {
+                result.append(message)
+            }
+        }
+        return result
+    }
+
+    private func setSending(_ sending: Bool) {
+        isSending = sending
+        inputField.isEnabled = !sending
+        updateSendButton()
+        suggestionButtons.forEach { $0.isEnabled = !sending }
+        clearButton.isEnabled = !sending
+        onThinking?(sending)
+        if sending { showTypingIndicator() } else { removeTypingIndicator() }
+        if !sending { window?.makeFirstResponder(inputField) }
+    }
+
+    private func updateSendButton() {
+        let hasText = !inputField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        sendButton.isEnabled = hasText && !isSending
+    }
+
+    // MARK: - Layout
+
     private func buildUI() {
         guard let contentView = window?.contentView else { return }
 
-        let root = NSStackView()
-        root.orientation = .vertical
-        root.spacing = 10
-        root.edgeInsets = NSEdgeInsets(top: 14, left: 14, bottom: 14, right: 14)
-        root.translatesAutoresizingMaskIntoConstraints = false
-        contentView.addSubview(root)
+        // Header
+        let header = NSView()
+        header.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(header)
 
+        statusDot.translatesAutoresizingMaskIntoConstraints = false
+        statusLabel.lineBreakMode = .byTruncatingTail
+        statusLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        let statusRow = NSStackView(views: [statusDot, statusLabel])
+        statusRow.orientation = .horizontal
+        statusRow.spacing = 5
+        statusRow.alignment = .centerY
+        let titleStack = NSStackView(views: [nameLabel, statusRow])
+        titleStack.orientation = .vertical
+        titleStack.alignment = .leading
+        titleStack.spacing = 1
+        titleStack.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        configureIconButton(clearButton, symbol: "sparkles", action: #selector(clearChat))
+        configureIconButton(settingsButton, symbol: "gearshape.fill", action: #selector(openSettings))
+
+        let spacer = NSView()
+        spacer.setContentHuggingPriority(NSLayoutConstraint.Priority(1), for: .horizontal)
+        spacer.setContentCompressionResistancePriority(NSLayoutConstraint.Priority(1), for: .horizontal)
+        let headerStack = NSStackView(views: [headerAvatar, titleStack, spacer, clearButton, settingsButton])
+        headerStack.orientation = .horizontal
+        headerStack.distribution = .fill
+        headerStack.alignment = .centerY
+        headerStack.spacing = 10
+        headerStack.translatesAutoresizingMaskIntoConstraints = false
+        header.addSubview(headerStack)
+
+        let divider = MikuCardView()
+        divider.fillColor = MikuTheme.cardBorder
+        divider.borderColor = nil
+        divider.cornerRadius = 0
+        divider.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(divider)
+
+        // Messages
         messageStack.orientation = .vertical
         messageStack.alignment = .leading
         messageStack.spacing = 10
-        messageStack.edgeInsets = NSEdgeInsets(top: 8, left: 8, bottom: 8, right: 8)
+        messageStack.edgeInsets = NSEdgeInsets(top: 14, left: 16, bottom: 14, right: 16)
         messageStack.translatesAutoresizingMaskIntoConstraints = false
 
-        let documentView = NSView()
+        let documentView = FlippedView()
         documentView.translatesAutoresizingMaskIntoConstraints = false
         documentView.addSubview(messageStack)
         scrollView.documentView = documentView
+        scrollView.hasVerticalScroller = true
+        scrollView.autohidesScrollers = true
+        scrollView.drawsBackground = false
+        scrollView.borderType = .noBorder
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(scrollView)
+
+        buildEmptyState()
+
+        // Input
+        inputCard.fillColor = MikuTheme.inputBackground
+        inputCard.cornerRadius = 23
+        inputCard.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(inputCard)
+
+        inputField.isBordered = false
+        inputField.drawsBackground = false
+        inputField.focusRingType = .none
+        inputField.font = MikuTheme.font(14)
+        inputField.textColor = MikuTheme.primaryText
+        inputField.usesSingleLineMode = true
+        inputField.cell?.wraps = false
+        inputField.cell?.isScrollable = true
+        inputField.delegate = self
+        inputField.translatesAutoresizingMaskIntoConstraints = false
+        inputCard.addSubview(inputField)
+
+        sendButton.symbolName = "arrow.up"
+        sendButton.iconOnly = true
+        sendButton.controlHeight = 34
+        sendButton.style = .primary
+        sendButton.target = self
+        sendButton.action = #selector(sendCurrentMessage)
+        sendButton.translatesAutoresizingMaskIntoConstraints = false
+        inputCard.addSubview(sendButton)
+
         NSLayoutConstraint.activate([
+            header.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 30),
+            header.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            header.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+            header.heightAnchor.constraint(equalToConstant: 50),
+            headerStack.leadingAnchor.constraint(equalTo: header.leadingAnchor),
+            headerStack.trailingAnchor.constraint(equalTo: header.trailingAnchor),
+            headerStack.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+            statusDot.widthAnchor.constraint(equalToConstant: 8),
+            statusDot.heightAnchor.constraint(equalToConstant: 8),
+
+            divider.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 8),
+            divider.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            divider.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            divider.heightAnchor.constraint(equalToConstant: 1),
+
+            scrollView.topAnchor.constraint(equalTo: divider.bottomAnchor),
+            scrollView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: inputCard.topAnchor, constant: -10),
+
             messageStack.leadingAnchor.constraint(equalTo: documentView.leadingAnchor),
             messageStack.trailingAnchor.constraint(equalTo: documentView.trailingAnchor),
             messageStack.topAnchor.constraint(equalTo: documentView.topAnchor),
             messageStack.bottomAnchor.constraint(equalTo: documentView.bottomAnchor),
-            documentView.widthAnchor.constraint(equalTo: scrollView.contentView.widthAnchor)
+            documentView.widthAnchor.constraint(equalTo: scrollView.contentView.widthAnchor),
+
+            inputCard.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 14),
+            inputCard.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -14),
+            inputCard.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -14),
+            inputCard.heightAnchor.constraint(equalToConstant: 46),
+            inputField.leadingAnchor.constraint(equalTo: inputCard.leadingAnchor, constant: 18),
+            inputField.centerYAnchor.constraint(equalTo: inputCard.centerYAnchor),
+            inputField.trailingAnchor.constraint(equalTo: sendButton.leadingAnchor, constant: -8),
+            sendButton.trailingAnchor.constraint(equalTo: inputCard.trailingAnchor, constant: -6),
+            sendButton.centerYAnchor.constraint(equalTo: inputCard.centerYAnchor),
+            sendButton.widthAnchor.constraint(equalToConstant: 34),
+            sendButton.heightAnchor.constraint(equalToConstant: 34)
         ])
 
-        scrollView.hasVerticalScroller = true
-        scrollView.drawsBackground = false
-        scrollView.borderType = .noBorder
-        root.addArrangedSubview(scrollView)
+        refreshLocalization()
+        updateSendButton()
+    }
 
-        let statusRow = NSStackView()
-        statusRow.orientation = .horizontal
-        statusRow.spacing = 8
-        progressIndicator.style = .spinning
-        progressIndicator.controlSize = .small
-        progressIndicator.isDisplayedWhenStopped = false
-        statusLabel.textColor = .secondaryLabelColor
-        statusLabel.lineBreakMode = .byTruncatingTail
-        retryButton.title = L10n.text("retry")
-        retryButton.bezelStyle = .inline
-        retryButton.target = self
-        retryButton.action = #selector(retry)
-        retryButton.isHidden = true
-        statusRow.addArrangedSubview(progressIndicator)
-        statusRow.addArrangedSubview(statusLabel)
-        statusRow.addArrangedSubview(retryButton)
-        root.addArrangedSubview(statusRow)
-
-        let inputRow = NSStackView()
-        inputRow.orientation = .horizontal
-        inputRow.spacing = 8
-        inputField.placeholderString = L10n.text("messagePlaceholder")
-        inputField.delegate = self
-        inputField.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        sendButton.title = L10n.text("send")
-        sendButton.keyEquivalent = "\r"
-        sendButton.bezelStyle = .rounded
-        sendButton.target = self
-        sendButton.action = #selector(sendCurrentMessage)
-        inputRow.addArrangedSubview(inputField)
-        inputRow.addArrangedSubview(sendButton)
-        root.addArrangedSubview(inputRow)
-
+    private func configureIconButton(_ button: MikuPillButton, symbol: String, action: Selector) {
+        button.symbolName = symbol
+        button.iconOnly = true
+        button.style = .soft
+        button.controlHeight = 30
+        button.target = self
+        button.action = action
+        button.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
-            root.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
-            root.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
-            root.topAnchor.constraint(equalTo: contentView.topAnchor),
-            root.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
-            scrollView.heightAnchor.constraint(greaterThanOrEqualToConstant: 260),
-            sendButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 72)
+            button.widthAnchor.constraint(equalToConstant: 30),
+            button.heightAnchor.constraint(equalToConstant: 30)
         ])
     }
 
-    private func appendBubble(_ message: ChatMessage) {
-        let label = NSTextField(wrappingLabelWithString: message.text)
-        label.font = .systemFont(ofSize: 14)
-        label.textColor = .labelColor
-        label.backgroundColor = message.role == .user
-            ? NSColor.controlAccentColor.withAlphaComponent(0.16)
-            : NSColor.secondaryLabelColor.withAlphaComponent(0.10)
-        label.drawsBackground = true
-        label.isBezeled = false
-        label.isEditable = false
-        label.maximumNumberOfLines = 0
-        label.preferredMaxLayoutWidth = 330
-        label.alignment = message.role == .user ? .right : .left
-        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-
-        let row = NSStackView()
-        row.orientation = .horizontal
-        row.alignment = .top
-        if message.role == .user {
-            row.addArrangedSubview(NSView())
-            row.addArrangedSubview(label)
-        } else {
-            row.addArrangedSubview(label)
-            row.addArrangedSubview(NSView())
-        }
-        row.translatesAutoresizingMaskIntoConstraints = false
-        messageStack.addArrangedSubview(row)
-        NSLayoutConstraint.activate([
-            row.widthAnchor.constraint(equalTo: messageStack.widthAnchor, constant: -16),
-            label.widthAnchor.constraint(lessThanOrEqualTo: row.widthAnchor, multiplier: 0.82)
+    private func setPlaceholder() {
+        inputField.placeholderAttributedString = NSAttributedString(string: L10n.text("messagePlaceholder"), attributes: [
+            .font: MikuTheme.font(14),
+            .foregroundColor: MikuTheme.secondaryText
         ])
+    }
+
+    private func buildEmptyState() {
+        emptyState.orientation = .vertical
+        emptyState.alignment = .centerX
+        emptyState.spacing = 8
+        emptyState.translatesAutoresizingMaskIntoConstraints = false
+
+        let bigAvatar = MikuAvatarView(size: 84)
+        greetingTitle.alignment = .center
+        greetingBody.alignment = .center
+        greetingBody.maximumNumberOfLines = 0
+        greetingBody.lineBreakMode = .byWordWrapping
+        greetingBody.preferredMaxLayoutWidth = 280
+
+        let chips = NSStackView()
+        chips.orientation = .vertical
+        chips.alignment = .centerX
+        chips.spacing = 8
+        for index in 1...3 {
+            let chip = MikuPillButton(title: L10n.text("suggestion\(index)"), symbolName: nil, style: .soft, target: self, action: #selector(suggestionTapped(_:)))
+            chip.font = MikuTheme.font(13, .medium)
+            chip.controlHeight = 30
+            suggestionButtons.append(chip)
+            chips.addArrangedSubview(chip)
+        }
+
+        let topSpacer = NSView()
+        topSpacer.translatesAutoresizingMaskIntoConstraints = false
+        topSpacer.heightAnchor.constraint(equalToConstant: 28).isActive = true
+        emptyState.addArrangedSubview(topSpacer)
+        emptyState.addArrangedSubview(bigAvatar)
+        emptyState.setCustomSpacing(14, after: bigAvatar)
+        emptyState.addArrangedSubview(greetingTitle)
+        emptyState.addArrangedSubview(greetingBody)
+        emptyState.setCustomSpacing(18, after: greetingBody)
+        emptyState.addArrangedSubview(chips)
+    }
+
+    private func showEmptyState() {
+        for view in messageStack.arrangedSubviews {
+            messageStack.removeArrangedSubview(view)
+            view.removeFromSuperview()
+        }
+        bubbleLabels.removeAll()
+        typingRow = nil
+        errorRow = nil
+        messageStack.addArrangedSubview(emptyState)
+        emptyState.widthAnchor.constraint(equalTo: messageStack.widthAnchor, constant: -32).isActive = true
+    }
+
+    private func hideEmptyState() {
+        guard emptyState.superview != nil else { return }
+        messageStack.removeArrangedSubview(emptyState)
+        emptyState.removeFromSuperview()
+    }
+
+    // MARK: - Rows
+
+    private func appendBubble(_ message: ChatMessage) {
+        let isUser = message.role == .user
+        let label = NSTextField(wrappingLabelWithString: message.text)
+        label.font = MikuTheme.font(14)
+        label.textColor = isUser ? .white : MikuTheme.primaryText
+        label.isSelectable = true
+        label.drawsBackground = false
+        label.preferredMaxLayoutWidth = bubbleTextWidth()
+        label.translatesAutoresizingMaskIntoConstraints = false
+        bubbleLabels.append(label)
+
+        let bubble = MikuCardView()
+        bubble.fillColor = isUser ? MikuTheme.userBubble : MikuTheme.mikuBubble
+        bubble.borderColor = nil
+        bubble.cornerRadius = 16
+        bubble.translatesAutoresizingMaskIntoConstraints = false
+        bubble.addSubview(label)
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: bubble.leadingAnchor, constant: 13),
+            label.trailingAnchor.constraint(equalTo: bubble.trailingAnchor, constant: -13),
+            label.topAnchor.constraint(equalTo: bubble.topAnchor, constant: 9),
+            label.bottomAnchor.constraint(equalTo: bubble.bottomAnchor, constant: -9)
+        ])
+
+        addRow(content: bubble, fromMiku: !isUser)
+    }
+
+    private func addRow(content: NSView, fromMiku: Bool) {
+        let row = NSView()
+        row.translatesAutoresizingMaskIntoConstraints = false
+        row.addSubview(content)
+        var constraints = [
+            content.topAnchor.constraint(equalTo: row.topAnchor),
+            row.bottomAnchor.constraint(equalTo: content.bottomAnchor)
+        ]
+        if fromMiku {
+            let avatar = MikuAvatarView(size: 26)
+            row.addSubview(avatar)
+            constraints += [
+                avatar.leadingAnchor.constraint(equalTo: row.leadingAnchor),
+                avatar.topAnchor.constraint(equalTo: row.topAnchor),
+                row.bottomAnchor.constraint(greaterThanOrEqualTo: avatar.bottomAnchor),
+                content.leadingAnchor.constraint(equalTo: avatar.trailingAnchor, constant: 8),
+                content.trailingAnchor.constraint(lessThanOrEqualTo: row.trailingAnchor, constant: -36)
+            ]
+        } else {
+            constraints += [
+                content.trailingAnchor.constraint(equalTo: row.trailingAnchor),
+                content.leadingAnchor.constraint(greaterThanOrEqualTo: row.leadingAnchor, constant: 56)
+            ]
+        }
+        NSLayoutConstraint.activate(constraints)
+        if let typingRow, typingRow.superview != nil, row !== typingRow {
+            // Keep the typing indicator last.
+            let index = messageStack.arrangedSubviews.firstIndex(of: typingRow) ?? messageStack.arrangedSubviews.count
+            messageStack.insertArrangedSubview(row, at: index)
+        } else {
+            messageStack.addArrangedSubview(row)
+        }
+        row.widthAnchor.constraint(equalTo: messageStack.widthAnchor, constant: -32).isActive = true
         scrollToBottom()
     }
 
-    private func setSending(_ sending: Bool, failed: Bool = false) {
-        isSending = sending
-        inputField.isEnabled = !sending
-        sendButton.isEnabled = !sending
-        retryButton.isHidden = !failed
-        statusLabel.stringValue = failed ? L10n.text("replyFailed") : (sending ? L10n.text("sending") : "")
-        statusLabel.textColor = failed ? .systemRed : .secondaryLabelColor
-        if sending { progressIndicator.startAnimation(nil) } else { progressIndicator.stopAnimation(nil) }
+    private func showTypingIndicator() {
+        removeTypingIndicator()
+        let bubble = MikuCardView()
+        bubble.fillColor = MikuTheme.mikuBubble
+        bubble.borderColor = nil
+        bubble.cornerRadius = 16
+        bubble.translatesAutoresizingMaskIntoConstraints = false
+
+        let notes = NSStackView()
+        notes.orientation = .horizontal
+        notes.spacing = 5
+        notes.translatesAutoresizingMaskIntoConstraints = false
+        let start = CACurrentMediaTime()
+        for (index, symbol) in ["♪", "♫", "♪"].enumerated() {
+            let note = NSTextField.mikuLabel(symbol, size: 15, weight: .bold, color: MikuTheme.teal)
+            note.wantsLayer = true
+            let pulse = CABasicAnimation(keyPath: "opacity")
+            pulse.fromValue = 0.25
+            pulse.toValue = 1
+            pulse.duration = 0.5
+            pulse.autoreverses = true
+            pulse.repeatCount = .infinity
+            pulse.beginTime = start + Double(index) * 0.18
+            pulse.fillMode = .backwards
+            note.layer?.add(pulse, forKey: "pulse")
+            notes.addArrangedSubview(note)
+        }
+        bubble.addSubview(notes)
+        NSLayoutConstraint.activate([
+            notes.leadingAnchor.constraint(equalTo: bubble.leadingAnchor, constant: 14),
+            notes.trailingAnchor.constraint(equalTo: bubble.trailingAnchor, constant: -14),
+            notes.topAnchor.constraint(equalTo: bubble.topAnchor, constant: 7),
+            notes.bottomAnchor.constraint(equalTo: bubble.bottomAnchor, constant: -7)
+        ])
+        bubble.setAccessibilityLabel(L10n.text("sending"))
+        bubble.setAccessibilityRole(.staticText)
+        typingRow = nil
+        addRow(content: bubble, fromMiku: true)
+        typingRow = messageStack.arrangedSubviews.last
+    }
+
+    private func removeTypingIndicator() {
+        guard let typingRow else { return }
+        messageStack.removeArrangedSubview(typingRow)
+        typingRow.removeFromSuperview()
+        self.typingRow = nil
+    }
+
+    private func showError(_ message: String) {
+        removeErrorRow()
+        let card = MikuCardView()
+        card.fillColor = MikuTheme.errorBackground
+        card.borderColor = MikuTheme.pink.withAlphaComponent(0.35)
+        card.cornerRadius = 14
+        card.translatesAutoresizingMaskIntoConstraints = false
+
+        let icon = NSImageView(image: NSImage(systemSymbolName: "exclamationmark.bubble.fill", accessibilityDescription: nil) ?? NSImage())
+        icon.contentTintColor = MikuTheme.pink
+        icon.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 15, weight: .semibold)
+        icon.setContentHuggingPriority(.required, for: .horizontal)
+
+        let label = NSTextField(wrappingLabelWithString: message)
+        label.font = MikuTheme.font(12.5)
+        label.textColor = MikuTheme.primaryText
+        label.isSelectable = true
+        label.preferredMaxLayoutWidth = bubbleTextWidth() - 30
+        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        bubbleLabels.append(label)
+
+        let retryButton = MikuPillButton(title: L10n.text("retry"), symbolName: "arrow.clockwise", style: .accent, target: self, action: #selector(retry))
+        retryButton.controlHeight = 26
+        retryButton.font = MikuTheme.font(12, .semibold)
+        retryButton.horizontalPadding = 10
+
+        let textColumn = NSStackView(views: [label, retryButton])
+        textColumn.orientation = .vertical
+        textColumn.alignment = .leading
+        textColumn.spacing = 8
+
+        let content = NSStackView(views: [icon, textColumn])
+        content.orientation = .horizontal
+        content.alignment = .top
+        content.spacing = 8
+        content.translatesAutoresizingMaskIntoConstraints = false
+        card.addSubview(content)
+        NSLayoutConstraint.activate([
+            content.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 12),
+            content.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -12),
+            content.topAnchor.constraint(equalTo: card.topAnchor, constant: 10),
+            content.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -10)
+        ])
+        addRow(content: card, fromMiku: true)
+        errorRow = messageStack.arrangedSubviews.last
+    }
+
+    private func removeErrorRow() {
+        guard let errorRow else { return }
+        messageStack.removeArrangedSubview(errorRow)
+        errorRow.removeFromSuperview()
+        self.errorRow = nil
+    }
+
+    private func bubbleTextWidth() -> CGFloat {
+        let width = window?.contentView?.bounds.width ?? 420
+        return max(200, min(460, width - 32 - 34 - 36 - 26))
+    }
+
+    func windowDidResize(_ notification: Notification) {
+        let width = bubbleTextWidth()
+        for label in bubbleLabels { label.preferredMaxLayoutWidth = width }
     }
 
     private func scrollToBottom() {
         DispatchQueue.main.async { [weak self] in
             guard let self, let documentView = scrollView.documentView else { return }
             documentView.layoutSubtreeIfNeeded()
-            scrollView.contentView.scroll(to: .zero)
-            scrollView.reflectScrolledClipView(scrollView.contentView)
+            let clip = scrollView.contentView
+            let target = NSPoint(x: 0, y: max(0, documentView.frame.height - clip.bounds.height))
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.18
+                clip.animator().setBoundsOrigin(target)
+            }
+            scrollView.reflectScrolledClipView(clip)
         }
     }
 }

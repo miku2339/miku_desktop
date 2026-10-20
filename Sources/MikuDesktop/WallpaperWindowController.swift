@@ -14,11 +14,31 @@ final class DesktopPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
+/// WKUserContentController retains its handlers strongly; this proxy breaks the cycle.
+private final class WeakScriptMessageHandler: NSObject, WKScriptMessageHandler {
+    weak var target: WKScriptMessageHandler?
+
+    init(_ target: WKScriptMessageHandler) {
+        self.target = target
+    }
+
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        target?.userContentController(userContentController, didReceive: message)
+    }
+}
+
 final class WallpaperWindowController: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
+    static let pinnedAnchorKey = "pinnedAnchor"
+
+    /// Called when the user drags Miku to a new spot (or the pin is cleared).
+    var onPinnedAnchorChanged: (() -> Void)?
+
     private(set) var panel: NSPanel!
     private(set) var webView: WKWebView!
     private var backgroundPanel: NSPanel!
     private var backgroundWebView: WKWebView!
+    private let characterURL: URL
+    private let backgroundURL: URL
 
     private var characterRect: CGRect = .zero
     private var pointerTimer: Timer?
@@ -27,14 +47,25 @@ final class WallpaperWindowController: NSObject, WKNavigationDelegate, WKScriptM
     private var pageReady = false
     private var backgroundReady = false
     private var screenObserver: NSObjectProtocol?
+    private var wakeObserver: NSObjectProtocol?
+
+    // Pixel-accurate mouse pass-through state.
+    private var hitTestInFlight = false
+    private var lastHitPoint: CGPoint?
+    private var lastHitResult = false
+    private var lastHitTime: TimeInterval = 0
+    private var dragActive = false
+    private var hoverZone: String?
 
     init(url: URL) {
         interactiveMode = UserDefaults.standard.object(forKey: "interactiveMode") as? Bool ?? true
         selectedScene = UserDefaults.standard.string(forKey: "selectedScene") ?? "auto"
+        characterURL = Self.layerURL(url, layer: "character")
+        backgroundURL = Self.layerURL(url, layer: "background")
         super.init()
 
         let characterContentController = WKUserContentController()
-        characterContentController.add(self, name: "miku")
+        characterContentController.add(WeakScriptMessageHandler(self), name: "miku")
         let characterConfiguration = WKWebViewConfiguration()
         characterConfiguration.userContentController = characterContentController
         characterConfiguration.defaultWebpagePreferences.allowsContentJavaScript = true
@@ -51,7 +82,7 @@ final class WallpaperWindowController: NSObject, WKNavigationDelegate, WKScriptM
         backgroundWebView = WKWebView(frame: .zero, configuration: backgroundConfiguration)
         backgroundWebView.navigationDelegate = self
 
-        let screenFrame = NSScreen.main?.frame ?? CGRect(x: 0, y: 0, width: 1440, height: 900)
+        let screenFrame = Self.targetScreenFrame()
         backgroundPanel = makePanel(
             frame: screenFrame,
             contentView: backgroundWebView,
@@ -72,11 +103,18 @@ final class WallpaperWindowController: NSObject, WKNavigationDelegate, WKScriptM
         panel.ignoresMouseEvents = true
         panel.orderFrontRegardless()
 
-        backgroundWebView.load(URLRequest(url: layerURL(url, layer: "background"), cachePolicy: .reloadIgnoringLocalCacheData))
-        webView.load(URLRequest(url: layerURL(url, layer: "character"), cachePolicy: .reloadIgnoringLocalCacheData))
+        backgroundWebView.load(URLRequest(url: backgroundURL, cachePolicy: .reloadIgnoringLocalCacheData))
+        webView.load(URLRequest(url: characterURL, cachePolicy: .reloadIgnoringLocalCacheData))
         startPointerPolling()
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.updateScreenFrame()
+        }
+        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification,
             object: nil,
             queue: .main
         ) { [weak self] _ in
@@ -87,8 +125,11 @@ final class WallpaperWindowController: NSObject, WKNavigationDelegate, WKScriptM
     deinit {
         pointerTimer?.invalidate()
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
+        if let wakeObserver { NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver) }
         webView?.configuration.userContentController.removeScriptMessageHandler(forName: "miku")
     }
+
+    // MARK: - Public API
 
     func setInteractive(_ enabled: Bool) {
         interactiveMode = enabled
@@ -105,11 +146,20 @@ final class WallpaperWindowController: NSObject, WKNavigationDelegate, WKScriptM
         if pageReady { call(webView: webView, function: "setScene", payload: scene) }
     }
 
-    func interact(type: String, x: Double? = nil, y: Double? = nil) {
-        var payload: [String: Any] = ["type": type]
-        if let x { payload["x"] = x }
-        if let y { payload["y"] = y }
-        call(webView: webView, function: "interact", payload: payload)
+    func setRotationInterval(_ seconds: Int) {
+        if backgroundReady { call(webView: backgroundWebView, function: "setRotationInterval", payload: seconds) }
+        if pageReady { call(webView: webView, function: "setRotationInterval", payload: seconds) }
+    }
+
+    func resetPinnedPosition() {
+        UserDefaults.standard.removeObject(forKey: Self.pinnedAnchorKey)
+        if pageReady { evaluate("window.mikuCompanion?.setPinnedAnchor(null)") }
+        onPinnedAnchorChanged?()
+    }
+
+    func setThinking(_ thinking: Bool) {
+        guard pageReady else { return }
+        evaluate("window.mikuCompanion?.setThinking(\(thinking ? "true" : "false"))")
     }
 
     func receiveReply(_ reply: CompanionReply) {
@@ -120,6 +170,8 @@ final class WallpaperWindowController: NSObject, WKNavigationDelegate, WKScriptM
         ])
     }
 
+    // MARK: - WKNavigationDelegate
+
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         if webView === backgroundWebView {
             backgroundReady = true
@@ -129,6 +181,23 @@ final class WallpaperWindowController: NSObject, WKNavigationDelegate, WKScriptM
             configurePage(self.webView, interactive: interactiveMode)
         }
     }
+
+    /// WebGL pages can be killed under memory pressure; reload instead of leaving a blank desktop.
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        NSLog("Miku web content process terminated; reloading %@", webView === backgroundWebView ? "background" : "character")
+        if webView === backgroundWebView {
+            backgroundReady = false
+            backgroundWebView.load(URLRequest(url: backgroundURL, cachePolicy: .reloadIgnoringLocalCacheData))
+        } else {
+            pageReady = false
+            dragActive = false
+            characterRect = .zero
+            panel.ignoresMouseEvents = true
+            self.webView.load(URLRequest(url: characterURL, cachePolicy: .reloadIgnoringLocalCacheData))
+        }
+    }
+
+    // MARK: - Messages from the page
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard message.name == "miku", let payload = message.body as? [String: Any],
@@ -147,6 +216,19 @@ final class WallpaperWindowController: NSObject, WKNavigationDelegate, WKScriptM
             )
         case "haptic":
             NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+        case "hover-haptic":
+            // A lighter tap when the cursor first touches her (felt only with a finger on the trackpad).
+            NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+        case "drag":
+            dragActive = (payload["active"] as? Bool) ?? false
+            if dragActive { panel.ignoresMouseEvents = false }
+        case "pin":
+            if let x = number(payload["x"]), x.isFinite {
+                UserDefaults.standard.set(max(0, min(1, x)), forKey: Self.pinnedAnchorKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: Self.pinnedAnchorKey)
+            }
+            onPinnedAnchorChanged?()
         default:
             break
         }
@@ -158,35 +240,120 @@ final class WallpaperWindowController: NSObject, WKNavigationDelegate, WKScriptM
         return nil
     }
 
+    // MARK: - Mouse pass-through
+
     private func startPointerPolling() {
         pointerTimer?.invalidate()
-        pointerTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 25.0, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
             self?.updateMousePassthrough()
         }
-        RunLoop.main.add(pointerTimer!, forMode: .common)
+        RunLoop.main.add(timer, forMode: .common)
+        pointerTimer = timer
     }
 
+    /// The bounding box only tells us the mouse is *near* Miku. The page then raycasts
+    /// against the model so the transparent space around her stays clickable for the desktop.
     private func updateMousePassthrough() {
-        guard interactiveMode, characterRect.width > 0, characterRect.height > 0 else {
+        guard interactiveMode, pageReady, characterRect.width > 0, characterRect.height > 0 else {
             panel.ignoresMouseEvents = true
+            leaveHover()
+            return
+        }
+        if dragActive {
+            // Keep receiving events while Miku is being dragged, even if the cursor outruns her.
+            panel.ignoresMouseEvents = false
             return
         }
         let mouse = NSEvent.mouseLocation
         let frame = panel.frame
         guard frame.contains(mouse), frame.width > 0, frame.height > 0 else {
             panel.ignoresMouseEvents = true
+            lastHitPoint = nil
+            leaveHover()
             return
         }
         let point = CGPoint(
             x: (mouse.x - frame.minX) / frame.width,
             y: 1 - ((mouse.y - frame.minY) / frame.height)
         )
-        panel.ignoresMouseEvents = !characterRect.contains(point)
+        guard characterRect.insetBy(dx: -0.01, dy: -0.01).contains(point) else {
+            panel.ignoresMouseEvents = true
+            lastHitPoint = nil
+            leaveHover()
+            return
+        }
+
+        let now = ProcessInfo.processInfo.systemUptime
+        let moved = lastHitPoint.map { hypot($0.x - point.x, ($0.y - point.y)) > 0.0008 } ?? true
+        guard !hitTestInFlight, moved || now - lastHitTime > 0.25 else { return }
+        hitTestInFlight = true
+        lastHitPoint = point
+        lastHitTime = now
+        let script = "window.mikuCompanion?.hitTest(\(point.x), \(point.y)) ?? false"
+        webView.evaluateJavaScript(script) { [weak self] result, _ in
+            guard let self else { return }
+            hitTestInFlight = false
+            guard interactiveMode, pageReady else {
+                panel.ignoresMouseEvents = true
+                lastHitPoint = nil
+                leaveHover(force: true)
+                return
+            }
+            if dragActive {
+                panel.ignoresMouseEvents = false
+                return
+            }
+            let currentMouse = NSEvent.mouseLocation
+            let currentFrame = panel.frame
+            let currentPoint = CGPoint(
+                x: (currentMouse.x - currentFrame.minX) / currentFrame.width,
+                y: 1 - ((currentMouse.y - currentFrame.minY) / currentFrame.height)
+            )
+            guard currentFrame == frame, currentFrame.contains(currentMouse),
+                  hypot(currentPoint.x - point.x, currentPoint.y - point.y) <= 0.0008,
+                  characterRect.insetBy(dx: -0.01, dy: -0.01).contains(currentPoint) else {
+                panel.ignoresMouseEvents = true
+                lastHitPoint = nil
+                leaveHover(force: true)
+                return
+            }
+            // The page answers with the body zone it hit ("head", "hand", "body") or false.
+            let zone = result as? String
+            lastHitResult = zone != nil || (result as? Bool) == true
+            panel.ignoresMouseEvents = !lastHitResult
+            if lastHitResult {
+                hoverZone = zone ?? "body"
+                (hoverZone == "head" ? NSCursor.openHand : NSCursor.pointingHand).set()
+            } else if hoverZone != nil {
+                hoverZone = nil
+                NSCursor.arrow.set()
+            }
+        }
+    }
+
+    /// The cursor moved off Miku without a final hit test (e.g. it left her bounding box).
+    private func leaveHover(force: Bool = false) {
+        guard hoverZone != nil || force else { return }
+        hoverZone = nil
+        NSCursor.arrow.set()
+        if pageReady { evaluate("window.mikuCompanion?.endHover?.()") }
+    }
+
+    func setLanguage(_ language: String) {
+        guard pageReady else { return }
+        call(webView: webView, function: "setLanguage", payload: language)
+    }
+
+    // MARK: - Windows
+
+    /// Always use the primary display (the one with the menu bar) so the wallpaper,
+    /// character and floating controls stay together.
+    private static func targetScreenFrame() -> CGRect {
+        (NSScreen.screens.first ?? NSScreen.main)?.frame ?? CGRect(x: 0, y: 0, width: 1440, height: 900)
     }
 
     private func updateScreenFrame() {
-        let mouseScreen = NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) }
-        let frame = (mouseScreen ?? NSScreen.main)?.frame ?? panel.frame
+        let frame = Self.targetScreenFrame()
         backgroundPanel.setFrame(frame, display: true)
         panel.setFrame(frame, display: true)
     }
@@ -213,7 +380,7 @@ final class WallpaperWindowController: NSObject, WKNavigationDelegate, WKScriptM
         return result
     }
 
-    private func layerURL(_ url: URL, layer: String) -> URL {
+    private static func layerURL(_ url: URL, layer: String) -> URL {
         var components = URLComponents(url: url, resolvingAgainstBaseURL: false)!
         var items = components.queryItems ?? []
         items.append(URLQueryItem(name: "layer", value: layer))
@@ -230,11 +397,15 @@ final class WallpaperWindowController: NSObject, WKNavigationDelegate, WKScriptM
     private func configurePage(_ webView: WKWebView, interactive: Bool) {
         guard let data = try? JSONSerialization.data(withJSONObject: selectedScene, options: .fragmentsAllowed),
               let sceneJSON = String(data: data, encoding: .utf8) else { return }
+        let pinned = (UserDefaults.standard.object(forKey: Self.pinnedAnchorKey) as? Double).map { String($0) } ?? "null"
         let script = """
         (function waitForMiku(attempt) {
           const companion = window.mikuCompanion;
           if (companion) {
             companion.setInteractive(\(interactive ? "true" : "false"));
+            companion.setRotationInterval?.(\(SceneRotation.seconds));
+            companion.setPinnedAnchor?.(\(pinned));
+            companion.setLanguage?.("\(AppLanguage.resolved.rawValue)");
             if (companion.setScene(\(sceneJSON)) !== false) return;
           }
           if (attempt < 100) setTimeout(() => waitForMiku(attempt + 1), 100);

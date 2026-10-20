@@ -62,7 +62,7 @@ actor LocalAI {
         case japanese = "ja"
     }
 
-    private enum LocalAIError: LocalizedError {
+    enum LocalAIError: LocalizedError {
         case invalidEndpoint
         case invalidResponse
         case invalidReply
@@ -197,6 +197,100 @@ actor LocalAI {
             }
         }
         throw LocalAIError.invalidReply
+    }
+
+    struct ConnectionCheck: Sendable {
+        let reachable: Bool
+        let modelAvailable: Bool?
+        let message: String
+    }
+
+    private struct ModelList: Decodable {
+        struct Entry: Decodable {
+            let id: String
+        }
+
+        let data: [Entry]
+    }
+
+    /// Lightweight GET /models probe used by the chat header and the settings "Test connection" button.
+    func checkConnection() async -> ConnectionCheck {
+        let snapshot = await configurationSnapshot()
+        let base: URL
+        do {
+            base = try chatCompletionsURL(from: snapshot.endpoint)
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+        } catch {
+            return ConnectionCheck(
+                reachable: false,
+                modelAvailable: nil,
+                message: Self.message(for: error, endpoint: snapshot.endpoint, model: snapshot.model)
+            )
+        }
+
+        var request = URLRequest(url: base.appendingPathComponent("models"))
+        request.timeoutInterval = 5
+        if let apiKey = omlxAPIKey(matching: base), !apiKey.isEmpty {
+            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        }
+        do {
+            let (data, response) = try await session.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse else { throw LocalAIError.invalidResponse }
+            guard (200..<300).contains(httpResponse.statusCode) else {
+                if httpResponse.statusCode == 404 || httpResponse.statusCode == 405 {
+                    return ConnectionCheck(reachable: true, modelAvailable: nil, message: L10n.text("connectionOKNoList"))
+                }
+                throw LocalAIError.serverResponse(httpResponse.statusCode)
+            }
+            guard let list = try? JSONDecoder().decode(ModelList.self, from: data) else {
+                return ConnectionCheck(reachable: true, modelAvailable: nil, message: L10n.text("connectionOKNoList"))
+            }
+            let wanted = snapshot.model.lowercased()
+            let found = list.data.contains { entry in
+                let id = entry.id.lowercased()
+                return id == wanted || id.hasSuffix("/" + wanted)
+            }
+            return ConnectionCheck(
+                reachable: true,
+                modelAvailable: found,
+                message: found ? L10n.text("connectionOK") : L10n.format("connectionModelMissing", snapshot.model)
+            )
+        } catch {
+            return ConnectionCheck(
+                reachable: false,
+                modelAvailable: nil,
+                message: Self.message(for: error, endpoint: snapshot.endpoint, model: snapshot.model)
+            )
+        }
+    }
+
+    /// Human-readable, localised reason for a failed request.
+    static func message(for error: Error, endpoint: String, model: String) -> String {
+        if let error = error as? LocalAIError {
+            switch error {
+            case .invalidEndpoint:
+                return L10n.text("errorEndpoint")
+            case let .serverResponse(status):
+                if status == 401 || status == 403 { return L10n.text("errorAuth") }
+                if status == 404 { return L10n.format("errorNotFound", model) }
+                return L10n.format("errorHTTP", String(status))
+            case .invalidResponse, .invalidReply, .emptyReply, .unsupportedReply:
+                return L10n.text("errorReply")
+            }
+        }
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .timedOut:
+                return L10n.text("errorTimeout")
+            case .cannotConnectToHost, .cannotFindHost, .networkConnectionLost, .notConnectedToInternet, .dnsLookupFailed:
+                return L10n.format("errorConnect", endpoint)
+            default:
+                break
+            }
+        }
+        if error is DecodingError { return L10n.text("errorReply") }
+        return L10n.format("errorUnknown", error.localizedDescription)
     }
 
     private func decodeReply(_ content: String) throws -> CompanionReply {

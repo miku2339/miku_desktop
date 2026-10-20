@@ -9,8 +9,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var chatController: ChatWindowController?
     private var settingsController: SettingsWindowController?
     private var settingsObserver: NSObjectProtocol?
+    private let weatherService = WeatherService()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        replaceOtherInstances()
         NSApp.setActivationPolicy(.accessory)
         statusItem.button?.title = "♪"
         statusItem.button?.toolTip = "Miku Desktop"
@@ -50,6 +52,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         }
                     }
                     self.wallpaperController = controller
+                    self.weatherService.onUpdate = { [weak self] snapshot in
+                        guard let self else { return }
+                        wallpaperController?.setWeather(snapshot)
+                        settingsController?.updateWeather(snapshot, failed: weatherService.lastError != nil)
+                    }
+                    self.weatherService.start()
                     let controls = DesktopControlsWindowController()
                     controls.onOpenChat = { [weak self] in self?.openChat(nil) }
                     controls.onOpenSettings = { [weak self] in self?.openSettings(nil) }
@@ -58,6 +66,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.presentStartupError()
                 }
             }
+        }
+    }
+
+    /// Only one Miku at a time: a fresh launch replaces any copy that is already running
+    /// (for example an older build in /Applications started by the login item).
+    private func replaceOtherInstances() {
+        let current = NSRunningApplication.current
+        let identifier = Bundle.main.bundleIdentifier ?? "com.qimake.MikuDesktop"
+        let others = NSRunningApplication.runningApplications(withBundleIdentifier: identifier)
+            .filter { $0.processIdentifier != current.processIdentifier }
+        guard !others.isEmpty else { return }
+        others.forEach { $0.terminate() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            others.filter { !$0.isTerminated }.forEach { $0.forceTerminate() }
         }
     }
 
@@ -214,6 +236,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             controller.onRotationChanged = { [weak self] seconds in self?.wallpaperController?.setRotationInterval(seconds) }
             controller.onResetPosition = { [weak self] in self?.wallpaperController?.resetPinnedPosition() }
             controller.onInteractiveChanged = { [weak self] enabled in self?.applyInteractive(enabled) }
+            controller.onAmbientChanged = { [weak self] enabled in self?.wallpaperController?.setAmbientEnabled(enabled) }
+            controller.onWeatherSettingsChanged = { [weak self] in self?.weatherService.refresh() }
+            controller.updateWeather(weatherService.latest, failed: weatherService.lastError != nil)
             settingsController = controller
         }
         settingsController?.present()

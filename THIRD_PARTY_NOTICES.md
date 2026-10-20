@@ -2,7 +2,7 @@
 
 ## three.js and MMD runtime
 
-Vendored from [three.js r171](https://github.com/mrdoob/three.js/tree/r171), including its MMD loader, shader, parser and TGA loader. See `Wallpaper/companion/vendor/THREE-LICENSE.txt` and the individual file headers for attribution and license terms.
+Vendored from [three.js r171](https://github.com/mrdoob/three.js/tree/r171), including its MMD loader, shader, parser, TGA loader and OutlineEffect. See `Wallpaper/companion/vendor/THREE-LICENSE.txt` and the individual file headers for attribution and license terms.
 
 ## Hatsune Miku model
 
@@ -21,3 +21,11 @@ The other Tokyo and school backgrounds are generated recreations inspired by rea
 ## AI backend and model
 
 [oMLX](https://github.com/jundot/omlx) and [Qwen3.5-0.8B](https://huggingface.co/Qwen/Qwen3.5-0.8B) are separate components and are not bundled. The default MLX conversion is [mlx-community/Qwen3.5-0.8B-MLX-4bit](https://huggingface.co/mlx-community/Qwen3.5-0.8B-MLX-4bit). Their respective licenses apply.
+
+## Anime background conversion
+
+The scene backgrounds were converted with [AnimeGANv2](https://github.com/TachibanaYoshino/AnimeGANv2) (Shinkai style, by Xin Chen), followed by this project's finishing pass in `scripts/anime-backgrounds.py`. AnimeGANv2 is available for non-commercial use only; the model itself is not included in this repository. Do not use the converted backgrounds commercially without the AnimeGANv2 author's permission.
+
+## Weather data
+
+Live weather and sunrise / sunset times come from [Open-Meteo](https://open-meteo.com/) (CC BY 4.0). Only the chosen city's coordinates are sent; no other data leaves the Mac.

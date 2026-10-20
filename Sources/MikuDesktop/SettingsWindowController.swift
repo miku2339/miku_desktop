@@ -22,6 +22,8 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
     var onRotationChanged: ((Int) -> Void)?
     var onResetPosition: (() -> Void)?
     var onInteractiveChanged: ((Bool) -> Void)?
+    var onAmbientChanged: ((Bool) -> Void)?
+    var onWeatherSettingsChanged: (() -> Void)?
 
     private let configuration: AIConfiguration
     private let ai: LocalAI
@@ -50,6 +52,13 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
     private let connectionDot = StatusDotView()
     private let connectionLabel = NSTextField.mikuLabel("", size: 12, color: MikuTheme.secondaryText)
     private let interactionSwitch = NSSwitch()
+    private let ambientSwitch = NSSwitch()
+    private let ambientHint = NSTextField.mikuLabel("", size: 11.5, color: MikuTheme.secondaryText)
+    private let weatherPopup = NSPopUpButton()
+    private let cityPopup = NSPopUpButton()
+    private let weatherStatusLabel = NSTextField.mikuLabel("", size: 11.5, color: MikuTheme.secondaryText)
+    private var lastWeather: WeatherSnapshot?
+    private var lastWeatherError = false
     private let interactionHint = NSTextField.mikuLabel("", size: 11.5, color: MikuTheme.secondaryText)
     private let launchSwitch = NSSwitch()
     private let loginStatusLabel = NSTextField.mikuLabel("", size: 11.5, color: MikuTheme.pink)
@@ -116,21 +125,10 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         testButton.title = L10n.text("testConnection")
         openLoginSettingsButton.title = L10n.text("openSystemSettings")
         interactionHint.stringValue = L10n.text("interactionHint")
-        scenePopup.setAccessibilityLabel(L10n.text("background"))
-        automaticSceneSwitch.setAccessibilityLabel(L10n.text("autoSceneRotation"))
-        rotationPopup.setAccessibilityLabel(L10n.text("rotationInterval"))
-        resetPositionButton.setAccessibilityLabel(L10n.text("resetPosition"))
-        personalitySegment.setAccessibilityLabel(L10n.text("personality"))
-        customField.setAccessibilityLabel(L10n.text("customPersonality"))
-        nicknameField.setAccessibilityLabel(L10n.text("nickname"))
-        replyLanguagePopup.setAccessibilityLabel(L10n.text("replyLanguage"))
-        interfaceLanguagePopup.setAccessibilityLabel(L10n.text("interfaceLanguage"))
-        endpointField.setAccessibilityLabel(L10n.text("aiEndpoint"))
-        modelField.setAccessibilityLabel(L10n.text("aiModel"))
-        testButton.setAccessibilityLabel(L10n.text("testConnection"))
-        interactionSwitch.setAccessibilityLabel(L10n.text("interaction"))
-        launchSwitch.setAccessibilityLabel(L10n.text("launchAtLogin"))
-        openLoginSettingsButton.setAccessibilityLabel(L10n.text("openSystemSettings"))
+        ambientHint.stringValue = L10n.text("ambientHint")
+        updatePopupTitles(weatherPopup, keys: WeatherService.modes.map { "weather\($0)" })
+        updatePopupTitles(cityPopup, keys: WeatherService.cities.map { "city\($0.key)" })
+        refreshWeatherStatus()
         refreshSceneSelection()
         refreshPosition()
         refreshLoginState()
@@ -153,6 +151,28 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         let pinned = UserDefaults.standard.object(forKey: "pinnedAnchor") != nil
         positionLabel.stringValue = L10n.text(pinned ? "positionPinned" : "positionFree")
         resetPositionButton.isHidden = !pinned
+    }
+
+    func updateWeather(_ snapshot: WeatherSnapshot, failed: Bool) {
+        lastWeather = snapshot
+        lastWeatherError = failed
+        refreshWeatherStatus()
+    }
+
+    private func refreshWeatherStatus() {
+        let city = L10n.text("city\(WeatherService.city.key)")
+        if WeatherService.mode != "auto" {
+            weatherStatusLabel.stringValue = "\(L10n.text("weatherFixed")) · \(L10n.text("weather\(WeatherService.mode)"))"
+        } else if let weather = lastWeather, weather.isLive {
+            var parts = [city, L10n.text("weather\(weather.kind)")]
+            if let temperature = weather.temperature { parts.append("\(Int(temperature.rounded()))°C") }
+            weatherStatusLabel.stringValue = parts.joined(separator: " · ")
+        } else if lastWeatherError {
+            weatherStatusLabel.stringValue = L10n.text("weatherUnavailable")
+        } else {
+            weatherStatusLabel.stringValue = "\(city) · \(L10n.text("statusChecking"))"
+        }
+        cityPopup.isEnabled = true
     }
 
     func refreshInteraction() {
@@ -184,6 +204,13 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         configurePopup(interfaceLanguagePopup, titles: languageKeys.map(L10n.text), values: languageValues, action: #selector(interfaceLanguageChanged))
         automaticSceneSwitch.target = self
         automaticSceneSwitch.action = #selector(automaticSceneChanged)
+        configurePopup(weatherPopup, titles: WeatherService.modes.map { L10n.text("weather\($0)") }, values: WeatherService.modes, action: #selector(weatherModeChanged))
+        configurePopup(cityPopup, titles: WeatherService.cities.map { L10n.text("city\($0.key)") }, values: WeatherService.cities.map { $0.key }, action: #selector(cityChanged))
+        ambientSwitch.target = self
+        ambientSwitch.action = #selector(ambientChanged)
+        weatherStatusLabel.lineBreakMode = .byWordWrapping
+        weatherStatusLabel.maximumNumberOfLines = 2
+        weatherStatusLabel.preferredMaxLayoutWidth = 280
 
         personalitySegment.segmentCount = personalityKeys.count
         personalitySegment.trackingMode = .selectOne
@@ -257,10 +284,21 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         positionStack.alignment = .leading
         positionStack.spacing = 6
 
+        let ambientStack = NSStackView(views: [ambientSwitch, ambientHint])
+        ambientStack.orientation = .horizontal
+        ambientStack.alignment = .centerY
+        ambientStack.spacing = 10
+        let weatherStack = NSStackView(views: [weatherPopup, weatherStatusLabel])
+        weatherStack.orientation = .vertical
+        weatherStack.alignment = .leading
+        weatherStack.spacing = 6
         let sceneCard = card("sectionScene", symbol: "photo.on.rectangle.angled", rows: [
             row("autoSceneRotation", automaticSceneSwitch),
             row("rotationInterval", rotationPopup),
             row("background", scenePopup),
+            row("ambientBackground", ambientStack),
+            row("weather", weatherStack),
+            row("weatherCity", cityPopup),
             row("position", positionStack)
         ])
 
@@ -418,6 +456,9 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
 
     private func loadValues() {
         refreshSceneSelection()
+        select(WeatherService.mode, in: weatherPopup)
+        select(WeatherService.city.key, in: cityPopup)
+        ambientSwitch.state = WeatherService.ambientEnabled ? .on : .off
         refreshPosition()
         refreshInteraction()
         personalitySegment.selectedSegment = personalityKeys.firstIndex(of: configuration.personalityPreset) ?? 0
@@ -464,6 +505,28 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         onRotationChanged?(seconds)
     }
 
+    @objc private func weatherModeChanged() {
+        guard let mode = weatherPopup.selectedItem?.representedObject as? String else { return }
+        UserDefaults.standard.set(mode, forKey: WeatherService.modeKey)
+        refreshWeatherStatus()
+        onWeatherSettingsChanged?()
+    }
+
+    @objc private func cityChanged() {
+        guard let city = cityPopup.selectedItem?.representedObject as? String else { return }
+        UserDefaults.standard.set(city, forKey: WeatherService.cityKey)
+        lastWeather = nil
+        lastWeatherError = false
+        refreshWeatherStatus()
+        onWeatherSettingsChanged?()
+    }
+
+    @objc private func ambientChanged() {
+        let enabled = ambientSwitch.state == .on
+        UserDefaults.standard.set(enabled, forKey: WeatherService.ambientKey)
+        onAmbientChanged?(enabled)
+    }
+
     @objc private func resetPosition() {
         onResetPosition?()
         refreshPosition()
@@ -505,9 +568,6 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
                 connectionDot.color = MikuTheme.offline
                 connectionLabel.textColor = MikuTheme.pink
             } else if result.modelAvailable == false {
-                connectionDot.color = MikuTheme.checking
-                connectionLabel.textColor = MikuTheme.primaryText
-            } else if result.modelAvailable == nil {
                 connectionDot.color = MikuTheme.checking
                 connectionLabel.textColor = MikuTheme.primaryText
             } else {

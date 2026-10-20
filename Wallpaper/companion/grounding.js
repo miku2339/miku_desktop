@@ -79,7 +79,7 @@ export function createGrounding(scene) {
     return feet.some(foot => foot.samples.length > 0);
   }
 
-  function update(groundY, opacity) {
+  function update(groundY, opacity, elevation = 0) {
     if (!model || !Number.isFinite(groundY) || !feet.some(foot => foot.samples.length > 0)) return;
     // Sample the soles after the pose, then move the body once; raised feet keep their relative height.
     model.position.y = 0;
@@ -100,7 +100,8 @@ export function createGrounding(scene) {
       floorY = Math.min(floorY, foot.minY);
     }
     if (!Number.isFinite(floorY)) return;
-    model.position.y = groundY - floorY;
+    const lift = Number.isFinite(elevation) ? Math.max(0, elevation) : 0;
+    model.position.y = groundY - floorY + lift;
     model.updateMatrixWorld(true);
     lastGroundY = groundY;
     lowestSoleY = Infinity;
@@ -120,9 +121,11 @@ export function createGrounding(scene) {
       if (!shadow.visible) continue;
       const gap = soleGaps[side];
       const contact = 1 - THREE.MathUtils.smoothstep(gap, 0.1, 0.35);
-      shadow.material.uniforms.opacity.value = THREE.MathUtils.clamp(Number.isFinite(opacity) ? opacity : 0, 0, 1) * contact;
+      const airborne = lift > 0 ? 0.22 * Math.exp(-lift * 0.22) : 0;
+      shadow.material.uniforms.opacity.value = THREE.MathUtils.clamp(Number.isFinite(opacity) ? opacity : 0, 0, 1)
+        * (contact + airborne * (1 - contact));
       shadow.position.set(foot.centerX / foot.samples.length, groundY - 0.025, -4);
-      shadow.scale.set(THREE.MathUtils.clamp((foot.maxX - foot.minX) * 1.7 + 0.35, 1.1, 2.8), 0.45, 1);
+      shadow.scale.set(THREE.MathUtils.clamp((foot.maxX - foot.minX) * 1.7 + 0.35, 1.1, 2.8) + lift * 0.16, 0.45 + lift * 0.07, 1);
     }
   }
 

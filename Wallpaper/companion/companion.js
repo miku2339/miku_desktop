@@ -1,10 +1,18 @@
 import * as THREE from 'three';
 import { createGrounding } from './grounding.js';
+import { createWalking } from './walking.js';
+import { createCarry } from './carry.js';
+import { createTouchGestures } from './touch-gestures.js';
+import { createRoutine, createVariety } from './variety.js';
+import { characterEnvironment, defaultWeather, normalizeWeather, timeAnchors } from './environment.js';
+import { createAmbient } from './ambient.js';
+import { OutlineEffect } from './vendor/effects/OutlineEffect.js';
 
 const canvas = document.querySelector('#webglCanvas');
 const sceneRoot = document.querySelector('#sceneRoot');
 const fallbackPortrait = document.querySelector('#fallbackPortrait');
 const speechBubble = document.querySelector('#speechBubble');
+const ambientCanvas = document.querySelector('#ambientCanvas');
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 const hasNativeBridge = () => Boolean(window.webkit?.messageHandlers?.miku?.postMessage);
 const requestedLayer = new URLSearchParams(window.location.search).get('layer');
@@ -48,15 +56,7 @@ const PERIOD_THEMES = {
   }
 };
 
-const TIME_ANCHORS = [
-  { hour: 0, weights: { day: 0, dusk: 0, night: 1 } },
-  { hour: 5.5, weights: { day: 0, dusk: 0, night: 1 } },
-  { hour: 8, weights: { day: 1, dusk: 0, night: 0 } },
-  { hour: 15.5, weights: { day: 1, dusk: 0, night: 0 } },
-  { hour: 18, weights: { day: 0, dusk: 1, night: 0 } },
-  { hour: 20, weights: { day: 0, dusk: 0, night: 1 } },
-  { hour: 24, weights: { day: 0, dusk: 0, night: 1 } }
-];
+let TIME_ANCHORS = timeAnchors();
 
 const SCENE_CONFIGS = [
   {
@@ -104,7 +104,7 @@ const POSITION_ANCHORS = [0.22, 0.43, 0.62];
 const CYCLE_SECONDS = 150;
 const ALLOWED_EMOTIONS = new Set(['happy', 'curious', 'sleepy', 'calm']);
 const ALLOWED_REPLY_ACTIONS = new Set(['wave', 'stretch', 'rest', 'idle', 'nod']);
-const INTERACTION_TYPES = new Set(['headPat', 'wave', 'stretch', 'rest', 'hello', 'look', 'move']);
+const INTERACTION_TYPES = new Set(['headPat', 'headStroke', 'poke', 'wave', 'stretch', 'rest', 'hello', 'look', 'move']);
 const CONTROLLED_BONES = [
   'センター', '上半身', '下半身', '首', '頭', '両目',
   '左肩', '左腕', '左腕捩', '左ひじ', '左手捩', '左手首',
@@ -151,36 +151,95 @@ const state = {
   pinnedAnchor: null,
   sceneSlotSeconds: 300,
   thinking: false,
+  weather: defaultWeather(),
+  sunrise: 6,
+  sunset: 17.75,
+  ambientEnabled: true,
   hover: null,
   hoverBlend: 0,
+  motionSource: null,
+  motionTransition: null,
   lastModelElapsed: null,
   nextHoverGreeting: 0,
   nextHoverHaptic: 0,
+  nextTouchSpeech: 0,
   language: 'zh-Hant'
 };
 
 const HOVER_PHRASES = {
   'zh-Hant': {
-    head: ['要摸摸頭嗎？♪', '嘿嘿～', '頭髮今天也很順喔！'],
-    hand: ['要擊掌嗎？', '嗨～♪', '牽手？'],
-    body: ['嗯？找我嗎？', '♪～', '在這裡喔！']
+    head: ['要摸摸頭嗎？♪', '嘿嘿～', '頭髮今天也很順喔！', '想摸就摸吧♪', '咦，在看我的雙馬尾？'],
+    hand: ['要擊掌嗎？', '嗨～♪', '牽手？', '來，伸手♪', '要一起去哪裡嗎？'],
+    body: ['嗯？找我嗎？', '♪～', '在這裡喔！', '在忙什麼呀？', '要聽我唱歌嗎？♪']
   },
   en: {
-    head: ['Head pats? ♪', 'Hehe~', 'Careful with the twintails!'],
-    hand: ['High five?', 'Hi~ ♪', 'Hold hands?'],
-    body: ['Hm? Need me?', '♪~', "I'm right here!"]
+    head: ['Head pats? ♪', 'Hehe~', 'Careful with the twintails!', 'Go on, I don\'t mind ♪', 'Looking at my twintails?'],
+    hand: ['High five?', 'Hi~ ♪', 'Hold hands?', 'Here, give me your hand ♪', 'Going somewhere together?'],
+    body: ['Hm? Need me?', '♪~', "I'm right here!", "What are you working on?", 'Want me to sing for you? ♪']
   },
   ja: {
-    head: ['なでなでする？♪', 'えへへ～', 'ツインテ、崩さないでね！'],
-    hand: ['ハイタッチする？', 'やっほー♪', '手、つなぐ？'],
-    body: ['ん？呼んだ？', '♪～', 'ここにいるよ！']
+    head: ['なでなでする？♪', 'えへへ～', 'ツインテ、崩さないでね！', 'なでてもいいよ♪', 'ツインテ見てるの？'],
+    hand: ['ハイタッチする？', 'やっほー♪', '手、つなぐ？', 'ほら、手出して♪', 'どこか一緒に行く？'],
+    body: ['ん？呼んだ？', '♪～', 'ここにいるよ！', '何してるの？', '歌ってあげようか？♪']
   }
 };
 const HOVER_NOTE_SYMBOLS = ['♪', '♫', '♬', '♪'];
+const TOUCH_PHRASES = {
+  'zh-Hant': {
+    headStroke: ['嘿嘿～再摸一下♪', '頭髮要輕輕摸喔。', '好舒服…♪', '這樣摸會上癮的啦～', '呼嚕呼嚕～♪', '嗯…今天特別溫柔呢。'],
+    handHold: ['牽好囉♪', '一起待一會吧。', '你的手好暖。', '不要放開喔～', '嘿嘿，有點害羞…'],
+    poke: ['嗯？是你呀♪', '嘿，別鬧啦～♪', '戳什麼戳～', '好癢！', '哼，偷襲！', '要我陪你玩嗎？'],
+    carry: ['哇！要帶我去哪？', '好、好高！', '放我下來啦～', '飛起來囉♪', '小心不要摔到我喔！'],
+    teased: ['今天好黏人呢～♪', '再摸下去我會害羞的…', '你是不是很閒呀？♪', '好啦好啦，我知道你喜歡我♪', '休息一下吧，我又不會跑掉。']
+  },
+  en: {
+    headStroke: ['Hehe~ one more pat? ♪', 'Gentle with the twintails!', 'That feels nice… ♪', 'I could get used to this~', 'Mmm~ ♪', "You're extra gentle today."],
+    handHold: ["I've got your hand! ♪", "Let's stay like this a little.", 'Your hand is warm.', "Don't let go, okay?", 'Hehe, this is a bit embarrassing…'],
+    poke: ['Hm? Oh, you! ♪', 'Hey, that tickles~ ♪', 'Poke poke~', 'Eek! Sneak attack!', 'Want me to play with you?', 'Hmph!'],
+    carry: ['Whoa! Where are we going?', "S-so high!", 'Put me down~', "I'm flying! ♪", "Don't drop me!"],
+    teased: ["You're so clingy today~ ♪", "If you keep that up I'll get shy…", "Haven't you got work to do? ♪", 'Okay okay, I know you like me ♪', "Take a break — I'm not going anywhere."]
+  },
+  ja: {
+    headStroke: ['えへへ、もう一回♪', '髪は優しくなでてね。', 'きもちいい…♪', 'くせになっちゃうよ～', 'ふにゃ～♪', '今日はとっても優しいね。'],
+    handHold: ['手、つないだね♪', 'もう少しこのままでいよう。', 'きみの手、あったかい。', '離さないでね？', 'えへへ、ちょっと照れる…'],
+    poke: ['ん？きみかぁ♪', 'もう、くすぐったいよ～♪', 'つんつん～', 'ひゃっ！不意打ち！', '遊んでほしいの？', 'むー！'],
+    carry: ['わっ！どこ行くの？', 'た、高い！', 'おろして～', '飛んでる～♪', '落とさないでね！'],
+    teased: ['今日は甘えんぼさんだね～♪', 'そんなにされたら照れちゃう…', 'ひまなの？♪', 'はいはい、わたしのこと好きなんだね♪', '少し休もう？わたしはどこにも行かないよ。']
+  }
+};
+
+const CONTEXT_PHRASES = {
+  'zh-Hant': {
+    morning: ['早安！今天也一起加油♪', '早上好～吃早餐了沒？'],
+    night: ['這麼晚了，要早點休息喔。', '夜深了，我陪你多一會吧。'],
+    rain: ['外面在下雨呢，記得帶傘。', '雨聲好好聽…'],
+    storm: ['打雷了…有點可怕。', '外面風雨好大，留在室內吧。'],
+    snow: ['下雪了！好漂亮♪', '好冷～要穿暖一點喔。'],
+    fog: ['外面霧好大呢。']
+  },
+  en: {
+    morning: ["Morning! Let's do our best today ♪", 'Good morning~ had breakfast yet?'],
+    night: ["It's late — don't stay up too long.", "It's late… I'll keep you company a bit longer."],
+    rain: ["It's raining — remember your umbrella.", 'I love the sound of rain…'],
+    storm: ["Thunder… that's a bit scary.", "It's wild out there — stay inside."],
+    snow: ["It's snowing! So pretty ♪", 'Brr~ wrap up warm!'],
+    fog: ["It's so foggy outside."]
+  },
+  ja: {
+    morning: ['おはよう！今日もがんばろ♪', 'おはよ～、朝ごはん食べた？'],
+    night: ['もう遅いよ、早めに休んでね。', '夜更かしさんだね…もう少しだけ一緒にいるよ。'],
+    rain: ['雨降ってるね、傘忘れないで。', '雨の音、すき…'],
+    storm: ['雷…ちょっと怖いね。', '外は大荒れだね、おうちにいよう。'],
+    snow: ['雪だ！きれい♪', 'さむ～い、あったかくしてね。'],
+    fog: ['外、霧がすごいね。']
+  }
+};
 const HOVER_GREETING_COOLDOWN = 40;
 const HOVER_DWELL_SECONDS = 2.2;
 
 const SCENE_FADE_SECONDS = 8;
+const ambient = showsBackground && ambientCanvas ? createAmbient(ambientCanvas) : null;
+ambient?.resize();
 const BACKGROUND_IDLE_INTERVAL = 1000;
 
 const smoothstep = value => {
@@ -312,7 +371,9 @@ function sceneWeightsAt(elapsed) {
   const slot = Math.max(30, state.sceneSlotSeconds);
   const fadeStart = slot - SCENE_FADE_SECONDS;
   const cycle = slot * ids.length;
-  const time = ((elapsed % cycle) + cycle) % cycle;
+  // Wall-clock based so the background and character pages always agree on the scene.
+  const clock = state.previewElapsed !== null ? elapsed : Date.now() / 1000;
+  const time = ((clock % cycle) + cycle) % cycle;
   const index = Math.floor(time / slot);
   const within = time - index * slot;
   const next = (index + 1) % ids.length;
@@ -419,6 +480,8 @@ function startReaction(type, options = {}) {
   const elapsed = currentElapsed();
   const durations = {
     headPat: 2.8,
+    headStroke: 2.2,
+    poke: 1.5,
     wave: 4.8,
     stretch: 5.2,
     rest: 5.5,
@@ -432,10 +495,21 @@ function startReaction(type, options = {}) {
   const distance = Math.abs(targetAnchor - state.currentAnchor);
   const duration = type === 'move'
     ? THREE.MathUtils.clamp(2.8 + distance * 10, 2.8, 6.2)
-    : durations[type];
+    : durations[type] * variety.range(0.88, 1.14);
+  if (options.touch) variety.noteTouch(elapsed);
+
+  if (type === 'headStroke' && state.reaction?.type === type && elapsed < state.reaction.end) {
+    state.reaction.end = elapsed + duration * 0.65;
+    state.reaction.duration = state.reaction.end - state.reaction.start;
+    holdAnchor(state.currentAnchor, elapsed, duration + 8);
+    return true;
+  }
 
   state.reaction = {
     type,
+    touch: Boolean(options.touch),
+    side: options.side === '右' ? '右' : '左',
+    variant: options.variant ?? chooseVariant(type),
     start: elapsed,
     end: elapsed + duration,
     duration,
@@ -444,7 +518,7 @@ function startReaction(type, options = {}) {
   };
   holdAnchor(type === 'move' ? targetAnchor : state.currentAnchor, elapsed, duration + 8);
 
-  if ((type === 'look' || type === 'headPat') && Number.isFinite(Number(options.x))) {
+  if ((type === 'look' || type === 'headPat' || type === 'headStroke') && Number.isFinite(Number(options.x))) {
     state.lookTarget = {
       x: THREE.MathUtils.clamp(Number(options.x), 0, 1),
       y: THREE.MathUtils.clamp(Number(options.y ?? 0.35), 0, 1),
@@ -485,9 +559,49 @@ let camera;
 let hemisphereLight;
 let directionalLight;
 let fillLight;
+let rimLight;
+let outline;
+const lightningColor = new THREE.Color(0xdfe8ff);
+const EMISSIVE_DUSK = [1.08, 0.86, 0.8];
+const WAVE_POSE = { armRaise: 1.32, armForward: -0.32, elbow: 1.15, swing: 0.32, palmTwist: -0.9 };
+const EMISSIVE_NIGHT = [0.78, 0.88, 1.08];
 let grounding;
+let walking;
+const carry = createCarry({ maxHeight: 6 });
+const touchGestures = createTouchGestures();
+// Separate detector for rubbing her head while the button is held.
+const rubGestures = createTouchGestures();
+// Every reaction, idle moment and line is drawn fresh, so she never plays the same clip twice in a row.
+const variety = createVariety();
+const routine = createRoutine({ seed: (Date.now() ^ Math.floor(Math.random() * 1e9)) >>> 0, startAnchor: POSITION_ANCHORS[0] });
+
+const REACTION_STYLES = {
+  wave: ['big', 'small', 'tilt'],
+  headPat: ['melt', 'shy', 'giggle', 'proud'],
+  headStroke: ['melt', 'shy', 'giggle', 'proud'],
+  poke: ['wink', 'surprised', 'pout', 'flustered'],
+  hello: ['nod', 'curious', 'bounce'],
+  stretch: ['plain', 'yawn', 'side'],
+  handHold: ['swing', 'shy', 'happy'],
+  carry: ['surprised', 'wheee', 'shy']
+};
+
+function chooseVariant(type) {
+  // The more often she's been touched recently, the shyer (and cheekier) she gets.
+  const mood = variety.mood(currentElapsed());
+  const weights = mood > 0.45 ? { shy: 2.6, flustered: 2.3, pout: 1.8, giggle: 1.4 } : {};
+  const styles = REACTION_STYLES[type];
+  return {
+    style: styles ? variety.pick(type, styles, weights) : null,
+    speed: variety.range(0.86, 1.16),
+    amplitude: variety.range(0.82, 1.18),
+    flip: variety.chance(0.5) ? 1 : -1
+  };
+}
+let carryPose = carry.status();
 const raycaster = new THREE.Raycaster();
 const pointerNdc = new THREE.Vector2();
+const hitLocalPosition = new THREE.Vector3();
 const modelBox = new THREE.Box3();
 const projectedPoint = new THREE.Vector3();
 
@@ -520,7 +634,23 @@ function setupRenderer() {
   fillLight.castShadow = false;
   scene.add(fillLight);
 
+  // Back light that picks out her silhouette at dusk and under neon.
+  rimLight = new THREE.DirectionalLight(0xbfe6ff, 0);
+  rimLight.position.set(6, 12, -18);
+  scene.add(rimLight);
+
   grounding = createGrounding(scene);
+  // Contact shadows are not part of the character: no ink lines for them.
+  scene.traverse(object => {
+    if (object.material) object.material.userData.outlineParameters = { visible: false };
+  });
+  // MMD-style ink outlines, using each material's own edge size and colour from the model.
+  outline = new OutlineEffect(renderer, {
+    defaultThickness: 0.0028,
+    defaultColor: [0.12, 0.16, 0.22],
+    defaultAlpha: 0.85,
+    defaultKeepAlive: true
+  });
 
   resize();
 }
@@ -607,11 +737,14 @@ function raycastCharacter(clientX, clientY) {
   if (normalizedHeight >= 0.73) zone = 'head';
   else if (normalizedHeight >= 0.43 && lateral >= 0.19) zone = 'hand';
   else if (normalizedHeight >= 0.4) zone = 'torso';
-  return { hit, zone, normalizedHeight, lateral };
+  state.model.worldToLocal(hitLocalPosition.copy(hit.point));
+  return { hit, zone, normalizedHeight, lateral, side: hitLocalPosition.x >= 0 ? '左' : '右' };
 }
 
 const euler = new THREE.Euler();
 const quaternion = new THREE.Quaternion();
+const twistAxis = new THREE.Vector3();
+const twistRotation = new THREE.Quaternion();
 
 function resetSkeleton() {
   for (const [bone, rest] of state.restPose) {
@@ -621,12 +754,85 @@ function resetSkeleton() {
   }
 }
 
+function captureRenderedPose() {
+  const bones = new Map();
+  for (const bone of state.restPose.keys()) {
+    bones.set(bone, {
+      position: bone.position.clone(),
+      quaternion: bone.quaternion.clone()
+    });
+  }
+  return {
+    bones,
+    morphs: state.model?.morphTargetInfluences?.slice() ?? null,
+    rootQuaternion: state.model.quaternion.clone()
+  };
+}
+
+const blendPosition = new THREE.Vector3();
+const blendQuaternion = new THREE.Quaternion();
+
+function updateMotionSource(source, elapsed) {
+  if (reducedMotion.matches) {
+    state.motionSource = source;
+    state.motionTransition = null;
+    return;
+  }
+  if (state.motionSource !== null && state.motionSource !== source) {
+    state.motionTransition = { ...captureRenderedPose(), start: elapsed };
+  }
+  state.motionSource = source;
+}
+
+function blendMotionTransition(elapsed) {
+  const transition = state.motionTransition;
+  if (!transition) return;
+  const weight = smoothstep((elapsed - transition.start) / 0.27);
+  for (const [bone, from] of transition.bones) {
+    blendPosition.copy(bone.position);
+    bone.position.lerpVectors(from.position, blendPosition, weight);
+    blendQuaternion.copy(bone.quaternion);
+    bone.quaternion.slerpQuaternions(from.quaternion, blendQuaternion, weight);
+  }
+  const influences = state.model?.morphTargetInfluences;
+  if (influences && transition.morphs) {
+    for (let index = 0; index < influences.length; index += 1) {
+      influences[index] = THREE.MathUtils.lerp(transition.morphs[index] ?? 0, influences[index], weight);
+    }
+  }
+  blendQuaternion.copy(state.model.quaternion);
+  state.model.quaternion.slerpQuaternions(transition.rootQuaternion, blendQuaternion, weight);
+  if (weight >= 1) state.motionTransition = null;
+}
+
 function rotateBone(name, x = 0, y = 0, z = 0, weight = 1) {
   const bone = state.bones.get(name);
   if (!bone || weight === 0) return;
   euler.set(x * weight, y * weight, z * weight, 'XYZ');
   quaternion.setFromEuler(euler);
   bone.quaternion.multiply(quaternion);
+}
+
+function twistBone(name, childName, angle, weight = 1) {
+  const bone = state.bones.get(name);
+  const child = state.bones.get(childName);
+  if (!bone || !child || weight === 0) return;
+
+  const childRest = state.restPose.get(child);
+  if (!childRest) return;
+  twistAxis.copy(childRest.position);
+
+  let parent = child.parent;
+  while (parent && parent !== bone) {
+    const parentRest = state.restPose.get(parent);
+    if (!parentRest) return;
+    twistAxis.multiply(parentRest.scale).applyQuaternion(parentRest.quaternion).add(parentRest.position);
+    parent = parent.parent;
+  }
+  if (parent !== bone || twistAxis.lengthSq() < 1e-8) return;
+
+  twistRotation.setFromAxisAngle(twistAxis.normalize(), angle * weight);
+  bone.quaternion.multiply(twistRotation);
 }
 
 function offsetBone(name, x = 0, y = 0, z = 0, weight = 1) {
@@ -684,35 +890,23 @@ function blinkAmount(elapsed) {
 }
 
 function behaviorAt(elapsed) {
-  const time = ((elapsed % CYCLE_SECONDS) + CYCLE_SECONDS) % CYCLE_SECONDS;
-  const segment = (name, start, end, from = null, to = null) => ({
-    name,
-    progress: THREE.MathUtils.clamp((time - start) / (end - start), 0, 1),
-    from,
-    to
-  });
-
-  if (time >= 15 && time < 22) return segment('wave', 15, 22);
-  if (time >= 38 && time < 46) return segment('stretch', 38, 46);
-  if (time >= 58 && time < 68) return segment('walk', 58, 68, 0, 1);
-  if (time >= 84 && time < 96) return segment('rest-standing', 84, 96);
-  if (time >= 112 && time < 122) return segment('walk', 112, 122, 1, 2);
-  if (time >= 125 && time < 132) return segment('wave', 125, 132);
-  if (time >= 138 && time < 150) return segment('walk', 138, 150, 2, 0);
-  return segment('idle', 0, 1);
+  // Open-ended, seeded routine: different every launch, never a fixed loop.
+  return routine.behaviorAt(elapsed);
 }
 
 function anchorAt(elapsed, behavior) {
-  const time = ((elapsed % CYCLE_SECONDS) + CYCLE_SECONDS) % CYCLE_SECONDS;
   if (behavior.name === 'walk') {
-    const from = POSITION_ANCHORS[behavior.from];
-    const to = POSITION_ANCHORS[behavior.to];
-    return THREE.MathUtils.lerp(from, to, smoothstep(behavior.progress));
+    const from = behavior.fromAnchor;
+    const to = behavior.toAnchor;
+    return THREE.MathUtils.lerp(from, to, walkingProgress(from, to, behavior.progress, behavior.duration));
   }
-  if (time < 58) return POSITION_ANCHORS[0];
-  if (time < 112) return POSITION_ANCHORS[1];
-  if (time < 138) return POSITION_ANCHORS[2];
-  return POSITION_ANCHORS[2];
+  return routine.restingAnchorAt(elapsed);
+}
+
+function walkingProgress(fromAnchor, toAnchor, progress, duration) {
+  const distance = Math.abs(screenAnchorToWorld(toAnchor) - screenAnchorToWorld(fromAnchor));
+  const travelDuration = Math.min(duration, Math.max(1.2, distance / 3.1));
+  return smoothstep(progress * duration / travelDuration);
 }
 
 const facePosition = new THREE.Vector3();
@@ -747,13 +941,20 @@ function applyBasePose(elapsed) {
     ? state.lookTarget
     : null;
   const faceAnchor = trackedLook ? projectedFaceAnchor() : null;
-  const lookX = faceAnchor ? THREE.MathUtils.clamp((trackedLook.x - faceAnchor.x) * 0.24, -0.12, 0.12) : 0;
-  const lookY = faceAnchor ? THREE.MathUtils.clamp((trackedLook.y - faceAnchor.y) * 0.16, -0.08, 0.08) : 0;
-  offsetBone('センター', 0, 0.035 * breath, 0);
-  rotateBone('上半身', 0.018 * breath, 0, 0.018 * Math.sin(elapsed * 0.42));
-  rotateBone('首', 0.018 + lookY * 0.25, 0.035 * gaze + lookX * 0.25, -0.018 * gaze);
-  rotateBone('頭', -0.015 + lookY * 0.4, 0.045 * gaze + lookX * 0.42, 0.035 * Math.sin(elapsed * 0.23));
-  rotateBone('両目', 0.006 * Math.sin(elapsed * 0.37) + lookY, 0.025 * gaze + lookX, 0);
+  const lookXTarget = faceAnchor ? THREE.MathUtils.clamp((trackedLook.x - faceAnchor.x) * 0.3, -0.16, 0.16) : 0;
+  const lookYTarget = faceAnchor ? THREE.MathUtils.clamp((trackedLook.y - faceAnchor.y) * 0.2, -0.1, 0.1) : 0;
+  // Eyes lead, the head follows a moment later and settles softly.
+  const eyeX = springTo(springs.eyeX, lookXTarget, 7, 0.9);
+  const eyeY = springTo(springs.eyeY, lookYTarget, 7, 0.9);
+  const lookX = springTo(springs.lookX, lookXTarget, 2.2, 0.75);
+  const lookY = springTo(springs.lookY, lookYTarget, 2.2, 0.75);
+  const bob = springTo(springs.bob, 0, 3.2, 0.32);
+  const jolt = springTo(springs.jolt, 0, 2.6, 0.38);
+  offsetBone('センター', 0, 0.035 * breath + bob * 0.09, 0);
+  rotateBone('上半身', 0.018 * breath - bob * 0.05, 0, 0.018 * Math.sin(elapsed * 0.42) + jolt * 0.04);
+  rotateBone('首', 0.018 + lookY * 0.3, 0.035 * gaze + lookX * 0.3, -0.018 * gaze + jolt * 0.05);
+  rotateBone('頭', -0.015 + lookY * 0.45 - bob * 0.06, 0.045 * gaze + lookX * 0.5, 0.035 * Math.sin(elapsed * 0.23) + jolt * 0.09);
+  rotateBone('両目', 0.006 * Math.sin(elapsed * 0.37) + eyeY, 0.025 * gaze + eyeX, 0);
 
   rotateBone('左腕', 0.03, 0, -0.50);
   rotateBone('右腕', -0.03, 0, 0.50);
@@ -762,12 +963,14 @@ function applyBasePose(elapsed) {
   rotateBone('左手首', 0.03, 0, -0.06);
   rotateBone('右手首', -0.03, 0, 0.06);
 
+  const hairTrail = THREE.MathUtils.clamp(springs.hair.x, -0.055, 0.055);
   const sway = Math.sin(elapsed * 0.72) * 0.018;
+  const swayWeights = [1, 0.65, 0.4];
   ['左髪１', '左髪２', '左髪３'].forEach((name, index) => {
-    rotateBone(name, 0.012 + index * 0.006, 0, sway * (1 + index * 0.28));
+    rotateBone(name, 0.012 + index * 0.006, 0, sway * swayWeights[index] + (index === 0 ? hairTrail : 0));
   });
   ['右髪１', '右髪２', '右髪３'].forEach((name, index) => {
-    rotateBone(name, 0.012 + index * 0.006, 0, -sway * (1 + index * 0.28));
+    rotateBone(name, 0.012 + index * 0.006, 0, -sway * swayWeights[index] + (index === 0 ? hairTrail : 0));
   });
   rotateBone('前髪１', 0.008 * breath, 0, 0.006 * gaze);
   rotateBone('前髪２', 0.009 * breath, 0, 0);
@@ -788,24 +991,50 @@ function applyBasePose(elapsed) {
     rotateBone('頭', -0.025 * hover, 0.02 * tilt * hover, 0.07 * tilt * hover);
     rotateBone('上半身', -0.012 * hover, 0, 0.012 * tilt * hover);
   }
+  // A light blush when she's happy or you're paying her attention.
+  const blush = Math.max(state.emotion === 'happy' ? 0.22 : 0, hover * (state.hover?.zone === 'head' ? 0.55 : 0.38));
+  if (blush > 0.001) setMorph('照れ', blush);
 }
 
-function applyWave(progress, elapsed) {
-  const weight = gestureEnvelope(progress);
-  const wave = Math.sin(progress * Math.PI * 9);
-  rotateBone('左肩', 0, 0, 0.16, weight);
-  rotateBone('左腕', -0.08, -0.1, 1.05, weight);
-  rotateBone('左ひじ', 0.06, -0.06, 1.34 + 0.08 * wave, weight);
-  rotateBone('左手首', 0.04, 0.1 * wave, 0.22 * wave, weight);
-  rotateBone('頭', 0, -0.08, -0.09, weight);
-  setSmile(Math.max(0.12, 0.67 * weight));
-  setMorph('ω', 0.16 * weight);
-  setMorph('笑い', 0.08 * weight * Math.max(0, Math.sin(elapsed * 1.7)));
+function applyWave(progress, elapsed, side = '左', variant = null) {
+  const style = variant?.style ?? 'big';
+  const amplitude = variant?.amplitude ?? 1;
+  const cycles = 5.6 * (variant?.speed ?? 1) + (style === 'small' ? 1.6 : 0);
+  // Staged: raise the arm, bend the elbow, wave from the elbow, then lower.
+  const bend = easeBetween(progress, 0, 0.13) * (1 - easeBetween(progress, 0.89, 1));
+  const raise = easeBetween(progress, 0.035, 0.18) * (1 - easeBetween(progress, 0.78, 0.94));
+  const swingAmount = easeBetween(progress, 0.12, 0.22) * (1 - easeBetween(progress, 0.72, 0.84));
+  const swing = Math.sin((progress - 0.12) * Math.PI * 2 * cycles) * swingAmount
+    * amplitude * (style === 'small' ? 0.62 : 1);
+  const lift = style === 'small' ? 0.78 : 1;
+  const sign = side === '右' ? -1 : 1;
+  rotateBone(`${side}肩`, 0, 0, sign * 0.12, raise);
+  rotateBone(`${side}腕`, 0, sign * WAVE_POSE.armForward, sign * WAVE_POSE.armRaise * lift, raise);
+  rotateBone(`${side}ひじ`, 0, 0, sign * (WAVE_POSE.elbow + (style === 'small' ? 0.18 : 0) + WAVE_POSE.swing * swing), bend);
+  // Rotate the sleeve and hand together to keep the cuff aligned.
+  twistBone(`${side}ひじ`, `${side}手首`, sign * WAVE_POSE.palmTwist, bend);
+  // The body follows the arm a little.
+  rotateBone('上半身', 0, sign * 0.03 * raise, sign * (-0.035 * raise + 0.014 * swing));
+  rotateBone('頭', 0.02 * raise, -sign * 0.09 * raise, sign * (-0.1 * raise + 0.025 * swing));
+  if (style === 'tilt') {
+    rotateBone('頭', 0, 0, -sign * 0.09 * raise);
+    setMorph(side === '右' ? 'ウィンク右' : 'ウィンク', 0.75 * swingAmount);
+  }
+  setSmile(Math.max(0.12, (style === 'small' ? 0.8 : 0.67) * raise));
+  setMorph('ω', 0.16 * raise);
+  setMorph('照れ', (style === 'small' ? 0.45 : 0.28) * raise);
+  setMorph('笑い', 0.08 * raise * Math.max(0, Math.sin(elapsed * 1.7)));
 }
 
-function applyStretch(progress) {
+function applyStretch(progress, variant = null) {
   const weight = gestureEnvelope(progress);
   const rise = Math.sin(Math.PI * progress);
+  if (variant?.style === 'yawn') {
+    setMorph('あ', 0.55 * rise * weight);
+    setMorph('まばたき', 0.75 * rise * weight);
+  } else if (variant?.style === 'side') {
+    rotateBone('上半身', 0, 0, 0.12 * (variant.flip ?? 1) * rise * weight);
+  }
   offsetBone('センター', 0, 0.24 * rise, 0, weight);
   rotateBone('上半身', -0.12, 0, 0, weight);
   rotateBone('首', 0.08, 0, 0, weight);
@@ -819,6 +1048,19 @@ function applyStretch(progress) {
   rotateBone('左手首', 0, 0, 0.1, weight);
   rotateBone('右手首', 0, 0, -0.1, weight);
   setMorph('なごみ', 0.28 * weight);
+}
+
+/** Sideways skirt trail from horizontal motion (models with a full skirt rig). */
+function applySkirtTrail(amount) {
+  const trail = THREE.MathUtils.clamp(amount, -0.045, 0.045);
+  if (Math.abs(trail) < 0.001) return;
+  if (state.bones.has('スカート_0_0')) {
+    for (let index = 0; index < 8; index += 1) {
+      rotateBone(`スカート_0_${index}`, 0, 0, trail);
+    }
+    return;
+  }
+  for (const name of ['左ｽｶｰﾄ前', '左ｽｶｰﾄ後', '右ｽｶｰﾄ前', '右ｽｶｰﾄ後']) rotateBone(name, 0, 0, trail);
 }
 
 function applySkirtFollow(leftSwing, rightSwing, weight = 1) {
@@ -862,44 +1104,170 @@ function applyRest(progress) {
   setMorph('なごみ', 0.52 * weight);
 }
 
-function applyHeadPat(progress) {
+function applyHeadPat(progress, variant = null) {
   const weight = gestureEnvelope(progress);
-  const nuzzle = Math.sin(progress * Math.PI * 3) * weight;
-  rotateBone('首', 0.035, -0.025, 0.1, weight);
-  rotateBone('頭', 0.05 + 0.025 * nuzzle, -0.04, 0.12, weight);
+  const style = variant?.style ?? 'melt';
+  const flip = variant?.flip ?? 1;
+  const nuzzle = Math.sin(progress * Math.PI * 3 * (variant?.speed ?? 1)) * weight;
+  rotateBone('首', 0.035, -0.025 * flip, 0.1 * flip, weight);
+  rotateBone('頭', 0.05 + 0.025 * nuzzle, -0.04 * flip, 0.12 * flip, weight);
   rotateBone('左髪１', 0.025, 0, 0.035 * nuzzle, weight);
   rotateBone('右髪１', 0.025, 0, -0.035 * nuzzle, weight);
-  setMorph('まばたき', Math.max(blinkAmount(state.previewElapsed ?? state.activeElapsed), 0.72 * weight));
-  setSmile(Math.max(0.12, 0.74 * weight));
-  setMorph('ω', 0.12 * weight);
+  const blink = blinkAmount(state.previewElapsed ?? state.activeElapsed);
+  switch (style) {
+    case 'shy':
+      // Looks down and away, eyes open, very red.
+      rotateBone('頭', 0.1 * weight, 0.1 * flip * weight, 0);
+      setMorph('まばたき', Math.max(blink, 0.25 * weight));
+      setMorph('照れ', 0.95 * weight);
+      setSmile(Math.max(0.12, 0.45 * weight));
+      break;
+    case 'giggle':
+      rotateBone('頭', 0, 0, 0.03 * Math.sin(progress * Math.PI * 12) * weight);
+      setMorph('まばたき', Math.max(blink, 0.6 * weight));
+      setMorph('笑い', 0.55 * weight * (0.5 + 0.5 * Math.sin(progress * Math.PI * 10)));
+      setMorph('照れ', 0.5 * weight);
+      setSmile(Math.max(0.12, 0.8 * weight));
+      break;
+    case 'proud':
+      // Chin up, a pleased little smirk.
+      rotateBone('頭', -0.08 * weight, 0, 0);
+      setMorph('まばたき', blink);
+      setMorph('にやり', 0.6 * weight);
+      setMorph('照れ', 0.3 * weight);
+      setSmile(Math.max(0.12, 0.5 * weight));
+      break;
+    default:
+      setMorph('まばたき', Math.max(blink, 0.72 * weight));
+      setMorph('なごみ', 0.35 * weight);
+      setSmile(Math.max(0.12, 0.74 * weight));
+      setMorph('ω', 0.12 * weight);
+      setMorph('照れ', 0.7 * weight);
+  }
 }
 
-function applyNod(progress, curious = false) {
+function applyHandHold(progress, elapsed, side, variant = null) {
+  const weight = smoothstep(progress);
+  const style = variant?.style ?? 'swing';
+  const sign = side === '右' ? -1 : 1;
+  const sway = Math.sin(elapsed * 2.8 * (variant?.speed ?? 1)) * (style === 'swing' ? 0.07 : 0.03);
+  rotateBone(`${side}肩`, 0, 0, sign * 0.06, weight);
+  rotateBone(`${side}腕`, 0, -sign * 0.14, sign * 0.72, weight);
+  rotateBone(`${side}ひじ`, 0, 0, sign * (0.45 + sway), weight);
+  twistBone(`${side}ひじ`, `${side}手首`, -sign * 0.45, weight);
+  if (style === 'shy') {
+    rotateBone('頭', 0.07 * weight, sign * 0.15 * weight, sign * 0.04 * weight);
+    setMorph('照れ', 0.9 * weight);
+    setSmile(0.4 * weight);
+  } else if (style === 'happy') {
+    offsetBone('センター', 0, 0.07 * Math.abs(Math.sin(elapsed * 5.2)) * weight, 0);
+    rotateBone('頭', 0.015 * weight, -sign * 0.04 * weight, -sign * 0.08 * weight);
+    setMorph('にっこり', 0.5 * weight);
+    setSmile(0.85 * weight);
+    setMorph('照れ', 0.35 * weight);
+  } else {
+    rotateBone('頭', 0.015 * weight, -sign * 0.04 * weight, -sign * 0.06 * weight);
+    setSmile(0.64 * weight);
+    setMorph('照れ', 0.48 * weight);
+  }
+}
+
+function applyPoke(progress, elapsed, side, variant = null) {
   const weight = gestureEnvelope(progress);
-  const nod = Math.sin(progress * Math.PI * 4) * weight;
-  rotateBone('首', 0.07 * nod, curious ? 0.06 * weight : 0, 0.025 * weight);
-  rotateBone('頭', 0.13 * nod, curious ? 0.1 * weight : 0, 0.045 * weight);
+  const style = variant?.style ?? 'wink';
+  const sign = side === '右' ? -1 : 1;
+  const recoil = Math.sin(progress * Math.PI * 2) * weight;
+  rotateBone('頭', -0.035 * weight, sign * 0.06 * weight, sign * 0.09 * recoil);
+  rotateBone('上半身', 0, 0, sign * 0.025 * recoil);
+  switch (style) {
+    case 'surprised': {
+      // Startled first, then breaks into a smile.
+      const startle = easeBetween(progress, 0, 0.08) * (1 - easeBetween(progress, 0.3, 0.5));
+      rotateBone('頭', -0.09 * startle, 0, 0);
+      offsetBone('センター', 0, 0.08 * startle, 0);
+      setMorph('びっくり', 0.9 * startle);
+      setMorph('まばたき', blinkAmount(elapsed) * (1 - weight));
+      setSmile(Math.max(0.12, 0.7 * weight * (1 - startle)));
+      break;
+    }
+    case 'pout':
+      rotateBone('頭', 0.03 * weight, sign * 0.12 * weight, 0);
+      setMorph('じと目', 0.6 * weight);
+      setMorph('口角下げ', 0.35 * weight);
+      setMorph('ω', 0.3 * weight);
+      setMorph('照れ', 0.35 * weight);
+      break;
+    case 'flustered':
+      rotateBone('頭', 0, 0, 0.05 * Math.sin(progress * Math.PI * 9) * weight);
+      setMorph('はぅ', 0.8 * weight);
+      setMorph('照れ', 0.9 * weight);
+      setSmile(Math.max(0.12, 0.35 * weight));
+      break;
+    default:
+      setMorph(side === '右' ? 'ウィンク右' : 'ウィンク', 0.7 * weight);
+      setMorph('まばたき', blinkAmount(elapsed) * (1 - weight));
+      setMorph('照れ', 0.4 * weight);
+      setSmile(Math.max(0.12, 0.66 * weight));
+  }
+}
+
+function applyLookAround(progress, variant = null) {
+  // Glances one way, then the other, then back; eyes lead the head.
+  const flip = variant?.flip ?? 1;
+  const first = easeBetween(progress, 0.05, 0.22) * (1 - easeBetween(progress, 0.42, 0.58));
+  const second = easeBetween(progress, 0.48, 0.64) * (1 - easeBetween(progress, 0.82, 0.97));
+  const yaw = (first - second) * 0.32 * flip * (variant?.amplitude ?? 1);
+  const up = Math.sin(progress * Math.PI) * 0.04;
+  rotateBone('首', -up * 0.5, yaw * 0.4, 0);
+  rotateBone('頭', -up, yaw * 0.6, -yaw * 0.12);
+  rotateBone('両目', 0, yaw * 0.5, 0);
+  rotateBone('上半身', 0, yaw * 0.15, 0);
+}
+
+function applyHum(progress, elapsed, variant = null) {
+  // Eyes closed, swaying to a tune only she can hear; little notes drift up.
+  const weight = gestureEnvelope(progress);
+  const tempo = 0.55 * (variant?.speed ?? 1);
+  const sway = Math.sin(elapsed * Math.PI * 2 * tempo) * weight;
+  offsetBone('センター', 0.05 * sway, 0.02 * Math.abs(sway), 0);
+  rotateBone('上半身', 0, 0, 0.04 * sway);
+  rotateBone('頭', 0, 0, 0.08 * sway);
+  rotateBone('左髪１', 0, 0, -0.03 * sway);
+  rotateBone('右髪１', 0, 0, -0.03 * sway);
+  setMorph('まばたき', Math.max(blinkAmount(elapsed), 0.7 * weight));
+  setMorph('なごみ', 0.55 * weight);
+  setMorph('う', 0.22 * weight * (0.5 + 0.5 * Math.sin(elapsed * 7.3)));
+  setSmile(Math.max(0.12, 0.35 * weight));
+  if (weight > 0.5 && elapsed - (state.lastHumNote ?? -Infinity) > 0.85) {
+    const face = projectedFaceAnchor();
+    if (face) spawnHoverNote(face.x + (variant?.flip ?? 1) * 0.03, face.y - 0.03, 'hum');
+    state.lastHumNote = elapsed;
+  }
+}
+
+function applyNod(progress, curious = false, variant = null) {
+  const weight = gestureEnvelope(progress);
+  const style = variant?.style ?? (curious ? 'curious' : 'nod');
+  const flip = variant?.flip ?? 1;
+  const nod = Math.sin(progress * Math.PI * 4 * (variant?.speed ?? 1)) * weight;
+  if (style === 'bounce') {
+    offsetBone('センター', 0, 0.12 * Math.abs(Math.sin(progress * Math.PI * 4)) * weight, 0);
+    rotateBone('頭', 0.04 * nod, 0, 0.06 * flip * weight);
+    setSmile(Math.max(0.12, 0.7 * weight));
+    setMorph('にっこり', 0.35 * weight);
+    return;
+  }
+  const tilt = style === 'curious';
+  rotateBone('首', 0.07 * nod, tilt ? 0.06 * flip * weight : 0, 0.025 * flip * weight);
+  rotateBone('頭', 0.13 * nod, tilt ? 0.1 * flip * weight : 0, 0.045 * flip * weight);
   setSmile(Math.max(0.12, 0.46 * weight));
 }
 
-function applyWalk(behavior, elapsed) {
-  const weight = gestureEnvelope(behavior.progress);
-  const stride = Math.sin(behavior.progress * Math.PI * 8);
-  const fromAnchor = behavior.fromAnchor ?? POSITION_ANCHORS[behavior.from];
-  const toAnchor = behavior.toAnchor ?? POSITION_ANCHORS[behavior.to];
-  const direction = Math.sign(toAnchor - fromAnchor) || 1;
-  const turnIn = easeBetween(behavior.progress, 0, 0.14);
-  const turnOut = 1 - easeBetween(behavior.progress, 0.84, 1);
-  state.model.rotation.y = direction * 1.22 * turnIn * turnOut;
+function applyWalk(pose) {
+  const { direction, stride, weight } = pose;
+  state.model.rotation.y = direction * 1.22 * pose.turn;
   offsetBone('センター', 0, Math.abs(stride) * 0.06 * weight, 0);
   rotateBone('上半身', 0.025, -0.05 * stride, 0, weight);
-  rotateBone('左足', 0.20 * stride, 0, 0, weight);
-  rotateBone('右足', -0.20 * stride, 0, 0, weight);
-  rotateBone('左ひざ', Math.max(0, -stride) * 0.30, 0, 0, weight);
-  rotateBone('右ひざ', Math.max(0, stride) * 0.30, 0, 0, weight);
-  rotateBone('左足首', -0.08 * stride, 0, 0, weight);
-  rotateBone('右足首', 0.08 * stride, 0, 0, weight);
-  // The skirt has no physics, so each panel follows the thigh moving towards it.
   applySkirtFollow(0.20 * stride, -0.20 * stride, weight);
   rotateBone('左腕', -0.16 * stride, 0, 0, weight);
   rotateBone('右腕', 0.16 * stride, 0, 0, weight);
@@ -927,6 +1295,7 @@ function applyGrantRotations() {
 
 function applyHairClearance() {
   let pitch = 0;
+  let yaw = 0;
   let roll = 0;
   for (const name of ['上半身', '上半身2', '首', '頭']) {
     const bone = state.bones.get(name);
@@ -935,32 +1304,69 @@ function applyHairClearance() {
     quaternion.copy(rest.quaternion).invert().multiply(bone.quaternion);
     euler.setFromQuaternion(quaternion, 'XYZ');
     pitch += euler.x;
+    yaw += euler.y;
     roll += euler.z;
   }
   // Long tails hang behind the body instead of swinging through it when the head tilts.
   const bias = state.bones.has('腰パーツ親') ? 0 : 0.04;
   const counterPitch = THREE.MathUtils.clamp(Math.max(0, -pitch) + bias, 0, 0.25);
+  const counterYaw = THREE.MathUtils.clamp(-yaw * 0.65, -0.12, 0.12);
   const counterRoll = THREE.MathUtils.clamp(-roll * 0.8, -0.20, 0.20);
-  rotateBone('左髪１', counterPitch, 0, counterRoll);
-  rotateBone('右髪１', counterPitch, 0, counterRoll);
+  rotateBone('左髪１', counterPitch, counterYaw, counterRoll);
+  rotateBone('右髪１', counterPitch, counterYaw, counterRoll);
 }
 
-function updateHoverBlend(elapsed) {
+// ---- Springs: every interactive motion eases in, overshoots a little and settles ----
+
+const springs = {
+  lookX: { x: 0, v: 0 },
+  lookY: { x: 0, v: 0 },
+  eyeX: { x: 0, v: 0 },
+  eyeY: { x: 0, v: 0 },
+  anchor: { x: null, v: 0 },
+  bob: { x: 0, v: 0 },
+  jolt: { x: 0, v: 0 },
+  hair: { x: 0, v: 0 },
+  skirt: { x: 0, v: 0 }
+};
+let springDelta = 0;
+
+/** Damped spring (implicit Euler, stable at any frame rate). */
+function springTo(spring, target, frequency, damping = 1) {
+  const delta = springDelta;
+  if (delta <= 0) return spring.x;
+  const omega = 2 * Math.PI * frequency;
+  const f = 1 + 2 * delta * damping * omega;
+  const oo = omega * omega;
+  const hoo = delta * oo;
+  const hhoo = delta * hoo;
+  const inverse = 1 / (f + hhoo);
+  const x = (f * spring.x + delta * spring.v + hhoo * target) * inverse;
+  const v = (spring.v + hoo * (target - spring.x)) * inverse;
+  spring.x = x;
+  spring.v = v;
+  return x;
+}
+
+function kick(spring, velocity) {
+  spring.v += velocity;
+}
+
+function updateHoverBlend(elapsed, motionActive) {
   const previous = state.lastModelElapsed ?? elapsed;
   const delta = THREE.MathUtils.clamp(elapsed - previous, 0, 0.1);
+  springDelta = delta;
   state.lastModelElapsed = elapsed;
-  const target = state.hover ? 1 : 0;
+  const target = state.hover && !motionActive ? 1 : 0;
   state.hoverBlend += (target - state.hoverBlend) * Math.min(1, delta * 7);
   if (Math.abs(target - state.hoverBlend) < 0.002) state.hoverBlend = target;
 }
 
 function updateModel(elapsed) {
   if (!state.model) return;
-  updateHoverBlend(elapsed);
-  resetSkeleton();
-  resetMorphs();
-  state.model.rotation.y = 0;
-
+  carryPose = carry.update({ time: elapsed, reducedMotion: reducedMotion.matches });
+  const carrying = carryPose.phase !== 'idle';
+  if (carryPose.impact) postNative({ type: 'haptic' });
   let routineBehavior = behaviorAt(elapsed);
   let routineAnchor = anchorAt(elapsed, routineBehavior);
   if (state.pinnedAnchor !== null) {
@@ -968,24 +1374,78 @@ function updateModel(elapsed) {
     if (routineBehavior.name === 'walk') routineBehavior = { name: 'idle', progress: 0 };
     routineAnchor = state.pinnedAnchor;
   }
+  const handHeld = state.pointer && !state.pointer.dragging && state.pointer.zone === 'hand';
   const pointerReaction = state.pointer?.dragging
     ? { type: 'drag', progress: 0.5, fromAnchor: state.currentAnchor, toAnchor: state.currentAnchor }
-    : null;
-  const reaction = reducedMotion.matches ? null : pointerReaction || activeReactionAt(elapsed);
+    : handHeld ? { type: 'handHold', side: state.pointer.side, variant: state.pointer.variant, progress: Math.min(1, (elapsed - state.pointer.started) / 0.35) } : null;
+  if (handHeld && !carrying && !state.pointer.greeted && elapsed - state.pointer.started >= 0.6) {
+    state.pointer.greeted = true;
+    showTouchPhrase('handHold');
+  }
+  const carryReaction = carrying ? { type: carryPose.phase, progress: carryPose.landingProgress ?? 0.5 } : null;
+  const reaction = reducedMotion.matches ? null : carryReaction || pointerReaction || activeReactionAt(elapsed);
   const behavior = reaction || (reducedMotion.matches ? { name: 'idle', progress: 0 } : routineBehavior);
+  const source = reducedMotion.matches
+    ? 'reduced'
+    : carrying ? 'carry' : pointerReaction ? state.pointer : state.reaction || routineBehavior.name;
+  updateHoverBlend(elapsed, Boolean(state.pointer || reaction || behavior.name === 'wave'));
+  updateMotionSource(source, elapsed);
+  resetSkeleton();
+  resetMorphs();
+  state.model.rotation.y = 0;
   let anchor = reducedMotion.matches
     ? (state.pinnedAnchor ?? POSITION_ANCHORS[1])
     : heldAnchorAt(routineAnchor, elapsed);
   if (reaction?.type === 'move') {
-    anchor = THREE.MathUtils.lerp(reaction.fromAnchor, reaction.toAnchor, smoothstep(reaction.progress));
+    anchor = THREE.MathUtils.lerp(
+      reaction.fromAnchor,
+      reaction.toAnchor,
+      walkingProgress(reaction.fromAnchor, reaction.toAnchor, reaction.progress, reaction.duration)
+    );
   }
+  const dragging = Boolean(state.pointer?.dragging);
+  if (dragging) anchor = state.anchorHold?.anchor ?? anchor;
+  // Follow the target position with a soft spring: she trails the cursor while
+  // dragged and sways to a stop when released.
+  if (springs.anchor.x === null) springs.anchor.x = anchor;
+  if (reducedMotion.matches && dragging) {
+    springs.anchor.x = anchor;
+    springs.anchor.v = 0;
+  } else anchor = springTo(springs.anchor, anchor, dragging ? 2.6 : 3.4, dragging ? 0.62 : 0.9);
+  const velocity = springs.anchor.v; // screen widths per second
+  springTo(springs.hair, carrying || dragging ? THREE.MathUtils.clamp(-velocity * 0.28 + carryPose.velocity * 0.002, -0.055, 0.055) : 0, 1.6, 0.48);
+  springTo(springs.skirt, dragging ? THREE.MathUtils.clamp(-velocity * 0.22, -0.045, 0.045) : 0, 2.2, 0.52);
   state.model.position.x = screenAnchorToWorld(anchor);
   state.currentAnchor = anchor;
   state.behavior = reducedMotion.matches
     ? 'idle-reduced'
     : reaction ? `interactive-${reaction.type}` : behavior.name;
 
-  if (!reducedMotion.matches) applyBasePose(elapsed);
+  const behaviorName = reaction?.type || behavior.name;
+  const walkingBehavior = behaviorName === 'walk' || behaviorName === 'move';
+  const destinationAnchor = behavior.toAnchor ?? POSITION_ANCHORS[behavior.to] ?? anchor;
+  const gaitDisabled = reducedMotion.matches || dragging || carrying;
+  if (gaitDisabled) walking?.reset();
+  const gaitPose = gaitDisabled
+    ? { active: false, weight: 0, direction: 1, turn: 0, stride: 0 }
+    : walking?.update({
+      walking: walkingBehavior,
+      rootX: state.model.position.x,
+      destinationX: screenAnchorToWorld(destinationAnchor),
+      delta: springDelta
+    }) ?? { active: false, weight: 0, direction: 1, turn: 0, stride: 0 };
+
+  if (!reducedMotion.matches) {
+    applyBasePose(elapsed);
+    // Lean into the motion while being carried, with the skirt trailing behind.
+    const lean = THREE.MathUtils.clamp(velocity * 0.35, -0.16, 0.16);
+    rotateBone('上半身', 0, 0, -lean);
+    rotateBone('下半身', 0, 0, lean * 0.4);
+    if (carrying) {
+      applyCarryPose(carryPose, elapsed);
+      applyCarryStyle(carryPose, elapsed);
+    }
+  }
   else {
     rotateBone('左腕', 0.03, 0, -0.50);
     rotateBone('右腕', -0.03, 0, 0.50);
@@ -994,29 +1454,140 @@ function updateModel(elapsed) {
     setSmile(0.12);
   }
 
-  const behaviorName = reaction?.type || behavior.name;
-  if (behaviorName === 'wave') applyWave(behavior.progress, elapsed);
-  if (behaviorName === 'stretch') applyStretch(behavior.progress);
+  if (behaviorName === 'wave') applyWave(behavior.progress, elapsed, behavior.side ?? behavior.variant?.side, behavior.variant);
+  if (behaviorName === 'handHold') applyHandHold(behavior.progress, elapsed, behavior.side, behavior.variant);
+  if (behaviorName === 'poke') applyPoke(behavior.progress, elapsed, behavior.side, behavior.variant);
+  if (behaviorName === 'stretch') applyStretch(behavior.progress, behavior.variant);
+  if (behaviorName === 'lookAround') applyLookAround(behavior.progress, behavior.variant);
+  if (behaviorName === 'hum') applyHum(behavior.progress, elapsed, behavior.variant);
   if (behaviorName === 'rest-standing' || behaviorName === 'rest') applyRest(behavior.progress);
-  if (behaviorName === 'walk' || behaviorName === 'move') applyWalk(behavior, elapsed);
-  if (behaviorName === 'headPat') applyHeadPat(behavior.progress);
-  if (behaviorName === 'hello') applyNod(behavior.progress, true);
+  if (gaitPose.active) applyWalk(gaitPose);
+  if (behaviorName === 'headPat' || behaviorName === 'headStroke') applyHeadPat(behavior.progress, behavior.variant);
+  if (behaviorName === 'headStroke') rotateBone('頭', 0, 0, Math.sin(elapsed * 3.6) * 0.02 * gestureEnvelope(behavior.progress));
+  if (behaviorName === 'hello') applyNod(behavior.progress, true, behavior.variant);
+
+  if (behaviorName !== 'walk' && behaviorName !== 'move') applySkirtTrail(springs.skirt.x);
 
   normalizeEyeMorphs();
   applyGrantRotations();
   applyHairClearance();
+  blendMotionTransition(elapsed);
+  if (!gaitDisabled) walking?.solve();
   state.model.updateMatrixWorld(true);
 }
 
-function applyLighting(weights) {
+function applyCarryStyle(pose, elapsed) {
+  // Each pick-up gets its own personality: startled, delighted or embarrassed.
+  const airborne = Math.min(1, pose.height / 0.45);
+  if (airborne <= 0.01 || pose.phase === 'landing') return;
+  // Legs dangle: thighs drift forward, knees bend, toes point down, and the two legs
+  // kick out of step with a little sideways swing so it reads even from the front.
+  const legSwing = Math.sin(elapsed * 4.6);
+  const pendulum = Math.sin(elapsed * 2.3 + 0.6);
+  for (const [index, side] of ['左', '右'].entries()) {
+    const phase = index === 0 ? legSwing : -legSwing;
+    const outward = index === 0 ? 1 : -1;
+    rotateBone(`${side}足`, (-0.22 - 0.12 * phase) * airborne, 0, outward * (0.05 + 0.04 * pendulum) * airborne);
+    rotateBone(`${side}ひざ`, (0.5 + Math.max(0, phase) * 0.3) * airborne, 0, 0);
+    rotateBone(`${side}足首`, 0.32 * airborne, 0, 0);
+  }
+  rotateBone('下半身', 0, 0, 0.05 * pendulum * airborne);
+  applySkirtFollow(-0.18 * airborne, -0.18 * airborne);
+  switch (state.carryStyle) {
+    case 'wheee': {
+      const bounce = Math.sin(elapsed * 6) * 0.08;
+      rotateBone('左腕', 0, -0.1 * airborne, (1.15 + bounce) * airborne);
+      rotateBone('右腕', 0, 0.1 * airborne, -(1.15 - bounce) * airborne);
+      rotateBone('左ひじ', 0, 0, 0.25 * airborne);
+      rotateBone('右ひじ', 0, 0, -0.25 * airborne);
+      setMorph('びっくり', 0);
+      setMorph('笑い', 0.5 * airborne);
+      setSmile(0.85 * airborne);
+      break;
+    }
+    case 'shy':
+      rotateBone('左腕', 0.2 * airborne, 0.25 * airborne, 0.15 * airborne);
+      rotateBone('右腕', 0.2 * airborne, -0.25 * airborne, -0.15 * airborne);
+      rotateBone('左ひじ', -0.5 * airborne, 0, 0.3 * airborne);
+      rotateBone('右ひじ', -0.5 * airborne, 0, -0.3 * airborne);
+      rotateBone('頭', 0.1 * airborne, 0, 0);
+      setMorph('びっくり', 0);
+      setMorph('照れ', 0.9 * airborne);
+      setSmile(0.3 * airborne);
+      break;
+    default: {
+      // Startled: arms out for balance, flailing a little.
+      const flail = Math.sin(elapsed * 9) * 0.12;
+      rotateBone('左腕', 0, -0.15 * airborne, (0.55 + flail) * airborne);
+      rotateBone('右腕', 0, 0.15 * airborne, -(0.55 - flail) * airborne);
+      rotateBone('左ひじ', 0, 0, (0.45 - flail) * airborne);
+      rotateBone('右ひじ', 0, 0, -(0.45 + flail) * airborne);
+      rotateBone('左手首', 0, 0, 0.2 * airborne);
+      rotateBone('右手首', 0, 0, -0.2 * airborne);
+      setMorph('びっくり', 0.6 * airborne);
+    }
+  }
+}
+
+function applyCarryPose(pose, elapsed) {
+  const airborne = Math.min(1, pose.height / 0.45);
+  const compression = pose.compression ?? 0;
+  const sway = (Math.sin(elapsed * 3.4) * 0.022 + pose.sway * 0.025) * airborne;
+  rotateBone('上半身', 0.14 * compression, 0, sway);
+  rotateBone('頭', 0.035 * airborne - 0.06 * compression, 0, -sway * 0.5);
+  for (const side of ['左', '右']) {
+    const kick = pose.phase === 'held' ? Math.sin(elapsed * 3.8 + (side === '右' ? Math.PI : 0)) * 0.05 * airborne : 0;
+    rotateBone(`${side}足`, -0.04 * airborne - 0.28 * compression + kick, 0, 0);
+    rotateBone(`${side}ひざ`, 0.08 * airborne + 0.56 * compression + Math.max(0, -kick) * 1.5, 0, 0);
+    rotateBone(`${side}足首`, -0.04 * airborne - 0.28 * compression - kick * 0.5, 0, 0);
+  }
+  rotateBone('左腕', 0, 0, -0.12 * airborne - 0.08 * compression);
+  rotateBone('右腕', 0, 0, 0.12 * airborne + 0.08 * compression);
+  applySkirtFollow(-0.04 * airborne - 0.28 * compression, -0.04 * airborne - 0.28 * compression);
+  setMorph('びっくり', (pose.phase === 'falling' ? 0.35 : 0.22) * airborne);
+  if (compression > 0) setMorph('まばたき', Math.max(blinkAmount(elapsed), compression * 0.55));
+  setSmile(0.18);
+}
+
+function applyLighting(weights, env) {
   const intensityScale = state.model?.geometry.userData.MMD?.format === 'pmx' ? 0.65 : 1;
   mixColor(hemisphereLight.color, weights, 'sky');
   mixColor(hemisphereLight.groundColor, weights, 'ground');
   mixColor(directionalLight.color, weights, 'key');
   mixColor(fillLight.color, weights, 'fill');
-  hemisphereLight.intensity = mixNumber(weights, 'ambientIntensity') * intensityScale;
-  directionalLight.intensity = mixNumber(weights, 'keyIntensity') * intensityScale;
-  fillLight.intensity = mixNumber(weights, 'fillIntensity') * intensityScale;
+  // Same sky, weather and scene colour cast as the background.
+  for (const light of [hemisphereLight, directionalLight, fillLight]) {
+    light.color.setRGB(light.color.r * env.tint[0], light.color.g * env.tint[1], light.color.b * env.tint[2], THREE.LinearSRGBColorSpace);
+  }
+  hemisphereLight.groundColor.setRGB(
+    hemisphereLight.groundColor.r * env.tint[0],
+    hemisphereLight.groundColor.g * env.tint[1],
+    hemisphereLight.groundColor.b * env.tint[2],
+    THREE.LinearSRGBColorSpace
+  );
+  const flash = env.flash;
+  hemisphereLight.intensity = (mixNumber(weights, 'ambientIntensity') * env.ambientScale + flash * 1.6) * intensityScale;
+  directionalLight.intensity = (mixNumber(weights, 'keyIntensity') * env.keyScale + flash * 1.4) * intensityScale;
+  fillLight.intensity = mixNumber(weights, 'fillIntensity') * env.fillScale * intensityScale;
+  if (flash > 0) directionalLight.color.lerp(lightningColor, Math.min(1, flash));
+  directionalLight.position.set(env.keyDirection.x, env.keyDirection.y, env.keyDirection.z);
+  rimLight.color.setRGB(env.rimColor[0], env.rimColor[1], env.rimColor[2], THREE.LinearSRGBColorSpace);
+  rimLight.intensity = env.rimStrength * 0.95 * intensityScale;
+  rimLight.position.set(-env.keyDirection.x * 0.6, 12, -18);
+
+  // Grade the materials' built-in ambient with the same time of day / weather / scene light.
+  const level = (weights.day + weights.dusk * 0.8 + weights.night * 0.58) * env.ambientScale + flash * 0.45;
+  const periodTint = [0, 1, 2].map(index => (
+    weights.day + EMISSIVE_DUSK[index] * weights.dusk + EMISSIVE_NIGHT[index] * weights.night
+  ));
+  for (const material of state.materials || []) {
+    const base = material.userData.mikuBaseEmissive;
+    material.emissive.setRGB(
+      base.r * level * periodTint[0] * env.tint[0],
+      base.g * level * periodTint[1] * env.tint[1],
+      base.b * level * periodTint[2] * env.tint[2]
+    );
+  }
 }
 
 async function loadModel() {
@@ -1031,10 +1602,23 @@ async function loadModel() {
     state.model.castShadow = true;
     state.model.receiveShadow = false;
     state.model.frustumCulled = false;
+    state.materials = [];
     state.model.traverse(object => {
       if (object.isMesh) {
         object.castShadow = true;
         object.frustumCulled = false;
+        for (const material of [object.material].flat()) {
+          const ink = material?.userData?.outlineParameters;
+          if (ink && ink.thickness && !ink.mikuScaled) {
+            ink.thickness *= 1.5;
+            ink.mikuScaled = true;
+          }
+          if (material?.emissive && !material.userData.mikuBaseEmissive) {
+            // MMD materials carry their own ambient (as emissive), which ignores scene lights.
+            material.userData.mikuBaseEmissive = material.emissive.clone();
+            state.materials.push(material);
+          }
+        }
       }
     });
     scene.add(state.model);
@@ -1048,6 +1632,7 @@ async function loadModel() {
         scale: bone.scale.clone()
       });
     }
+    walking = createWalking({ model: state.model, bones: state.bones, restPose: state.restPose });
     state.morphs = { ...(state.model.morphTargetDictionary || {}) };
     state.ready = true;
     state.mode = 'webgl-mmd';
@@ -1071,14 +1656,34 @@ function renderState(timestamp) {
   const elapsed = currentElapsed();
   const hour = currentHour();
   const background = applyBackground(hour, elapsed);
+  if (ambient) {
+    ambient.update(timestamp, {
+      hour,
+      periodWeights: background.periodWeights,
+      sceneWeights: background.sceneWeights,
+      weather: state.weather,
+      sunrise: state.sunrise,
+      sunset: state.sunset
+    });
+  }
   if (showsCharacter && state.ready) {
-    applyLighting(background.periodWeights);
+    const env = characterEnvironment({
+      hour,
+      periodWeights: background.periodWeights,
+      sceneWeights: background.sceneWeights,
+      weather: state.weather,
+      nowMs: Date.now(),
+      sunrise: state.sunrise,
+      sunset: state.sunset
+    });
+    applyLighting(background.periodWeights, env);
     updateModel(elapsed);
     grounding.update(
       camera.position.y + CAMERA_HEIGHT * (0.5 - GROUND_SCREEN_Y),
-      mixNumber(background.periodWeights, 'shadowOpacity') * 1.5
+      mixNumber(background.periodWeights, 'shadowOpacity') * 1.5 * env.shadowScale,
+      carryPose.height
     );
-    renderer.render(scene, camera);
+    (outline || renderer).render(scene, camera);
     updateCharacterBounds(timestamp);
   }
   state.renderedAt = timestamp;
@@ -1091,7 +1696,10 @@ function sceneIsCrossfading(elapsed) {
 function frameInterval() {
   if (reducedMotion.matches) return 1000;
   // The background is mostly static images; only animate smoothly while scenes crossfade.
-  if (!showsCharacter) return sceneIsCrossfading(currentElapsed()) ? 1000 / FPS_CAP : BACKGROUND_IDLE_INTERVAL;
+  if (!showsCharacter) {
+    const crossfade = sceneIsCrossfading(currentElapsed()) ? 1000 / FPS_CAP : BACKGROUND_IDLE_INTERVAL;
+    return Math.min(crossfade, ambient ? ambient.desiredInterval() : BACKGROUND_IDLE_INTERVAL);
+  }
   return 1000 / FPS_CAP;
 }
 
@@ -1132,27 +1740,65 @@ function browserReactionText(zone) {
   return ['你好呀！', '想和我聊聊嗎？'];
 }
 
+function contextLine() {
+  const lines = CONTEXT_PHRASES[state.language] || CONTEXT_PHRASES['zh-Hant'];
+  const hour = currentHour();
+  const weather = state.weather?.kind;
+  if (weather && weather !== 'clear' && weather !== 'cloudy' && lines[weather]) return variety.line(`context-${weather}`, lines[weather]);
+  if (hour >= 5 && hour < 10) return variety.line('context-morning', lines.morning);
+  if (hour >= 22 || hour < 4) return variety.line('context-night', lines.night);
+  return null;
+}
+
+function showTouchPhrase(type) {
+  const elapsed = currentElapsed();
+  if (state.thinking || speechBubble.classList.contains('visible') || elapsed < state.nextTouchSpeech) return;
+  const language = TOUCH_PHRASES[state.language] ? state.language : 'zh-Hant';
+  const teased = variety.mood(elapsed) > 0.6 && type !== 'carry';
+  const key = teased ? 'teased' : type;
+  const phrases = TOUCH_PHRASES[language][key];
+  if (!phrases?.length) return;
+  state.nextTouchSpeech = elapsed + variety.range(2.5, 5);
+  const context = !teased && variety.chance(0.2) ? contextLine() : null;
+  showBubble(context || variety.line(`${language}-${key}`, phrases), teased ? 'curious' : 'happy', 2600);
+}
+
 function handlePointerDown(event) {
   if (!showsCharacter || !state.interactive || event.button !== 0) return;
   const result = raycastCharacter(event.clientX, event.clientY);
   if (!result || result.zone === 'none') return;
   const point = normalizedPointer(event);
+  touchGestures.reset();
+  const cheek = result.zone === 'head' && result.normalizedHeight < 0.88 && result.lateral < 0.13;
   state.pointer = {
     id: event.pointerId,
     startX: event.clientX,
     startY: event.clientY,
+    startPointX: point.x,
+    startWorldY: -point.y * CAMERA_HEIGHT,
+    startAnchor: state.currentAnchor,
+    started: currentElapsed(),
+    side: result.side,
+    cheek,
     zone: result.zone,
+    variant: result.zone === 'hand' ? chooseVariant('handHold') : null,
     dragging: false
   };
   canvas.setPointerCapture?.(event.pointerId);
   postNative({ type: 'drag', active: true });
+  // Squash and recoil where she was touched.
+  kick(springs.bob, -0.9);
+  const facePoint = projectedFaceAnchor();
+  kick(springs.jolt, (facePoint && point.x < facePoint.x ? -1 : 1) * (result.zone === 'head' ? 1.1 : 0.6));
   postNative({ type: 'haptic' });
 
-  if (result.zone === 'head') startReaction('headPat', point);
-  else if (result.zone === 'hand') startReaction('wave', point);
-  else startReaction('hello', point);
+  const touch = { ...point, touch: true, side: result.side };
+  if (cheek) state.reaction = null;
+  else if (result.zone === 'head') startReaction('headPat', touch);
+  else if (result.zone === 'hand') state.reaction = null;
+  else startReaction('hello', touch);
 
-  if (!hasNativeBridge()) {
+  if (!hasNativeBridge() && !cheek && result.zone !== 'hand' && !state.thinking && !speechBubble.classList.contains('visible')) {
     const [text, alternate] = browserReactionText(result.zone);
     showBubble(Math.random() > 0.5 ? text : alternate, result.zone === 'head' ? 'happy' : 'curious', 2600);
   }
@@ -1163,12 +1809,8 @@ function handlePointerMove(event) {
   const point = normalizedPointer(event);
   const elapsed = currentElapsed();
   if (state.pointer?.id === event.pointerId) {
-    const distance = Math.hypot(event.clientX - state.pointer.startX, event.clientY - state.pointer.startY);
-    if (distance > 7) {
-      state.pointer.dragging = true;
-      state.reaction = null;
-      holdAnchor(point.x, elapsed, 15);
-    }
+    moveGrabbedPointer(state.pointer, event, elapsed);
+    if (reducedMotion.matches) renderState(performance.now());
   }
 
   const now = performance.now();
@@ -1185,11 +1827,56 @@ function handlePointerMove(event) {
   }
 }
 
-function finishPointer(event) {
+function rubHead(pointer, point, elapsed) {
+  // Pressing on her head and moving side to side is petting, not picking her up.
+  state.lookTarget = { x: point.x, y: point.y, until: elapsed + 0.6 };
+  if (elapsed - (pointer.lastRubNote ?? -Infinity) > 0.35) {
+    spawnHoverNote(point.x, point.y, 'head');
+    pointer.lastRubNote = elapsed;
+  }
+  const stroke = reducedMotion.matches ? null : rubGestures.sample({ zone: 'head', x: point.x, y: point.y, time: elapsed });
+  if (stroke) {
+    startReaction('headStroke', { x: point.x, y: point.y, touch: true });
+    showTouchPhrase('headStroke');
+    postNative({ type: 'hover-haptic' });
+  }
+}
+
+function moveGrabbedPointer(pointer, event, elapsed) {
+  const distance = Math.hypot(event.clientX - pointer.startX, event.clientY - pointer.startY);
+  if (pointer.zone === 'head' && !pointer.cheek && !pointer.dragging) {
+    const dx = Math.abs(event.clientX - pointer.startX);
+    const dy = Math.abs(event.clientY - pointer.startY);
+    if (pointer.rubbing || (dx > 10 && dx > dy * 1.3)) {
+      if (!pointer.rubbing) rubGestures.reset();
+      pointer.rubbing = true;
+      rubHead(pointer, normalizedPointer(event), elapsed);
+      return;
+    }
+    // Wait until it's clear whether this is a rub (sideways) or a lift (mostly vertical).
+    if (distance <= 18) return;
+  }
+  if (!pointer.dragging && distance <= 7) return;
+  const point = normalizedPointer(event);
+  if (!pointer.dragging) {
+    pointer.dragging = true;
+    endHover();
+    if (!reducedMotion.matches) carry.begin({ pointerY: pointer.startWorldY, time: elapsed });
+    state.carryStyle = chooseVariant('carry').style;
+    variety.noteTouch(elapsed);
+    if (variety.chance(0.55)) showTouchPhrase('carry');
+  }
+  state.reaction = null;
+  holdAnchor(pointer.startAnchor + point.x - pointer.startPointX, elapsed, 15);
+  if (!reducedMotion.matches) carry.move({ pointerY: -point.y * CAMERA_HEIGHT, time: elapsed });
+}
+
+function finishPointer(event = null, { reset = false } = {}) {
   const pointer = state.pointer;
-  if (!pointer || pointer.id !== event.pointerId) return;
-  canvas.releasePointerCapture?.(event.pointerId);
+  if (!pointer || (event && pointer.id !== event.pointerId)) return;
+  if (event?.type === 'pointerup') moveGrabbedPointer(pointer, event, currentElapsed());
   state.pointer = null;
+  if (canvas.hasPointerCapture?.(pointer.id)) canvas.releasePointerCapture?.(pointer.id);
   postNative({ type: 'drag', active: false });
   if (pointer.dragging) {
     // Remember where she was dropped.
@@ -1197,7 +1884,14 @@ function finishPointer(event) {
     state.pinnedAnchor = THREE.MathUtils.clamp(anchor, 0.16, 0.68);
     state.anchorHold = null;
     postNative({ type: 'pin', x: state.pinnedAnchor });
+  } else if (event?.type === 'pointerup' && pointer.cheek) {
+    startReaction('poke', { touch: true, side: pointer.side });
+    showTouchPhrase('poke');
+  } else if (event?.type === 'pointerup' && pointer.zone === 'hand') {
+    startReaction('wave', { touch: true, side: pointer.side });
   }
+  if (reset || reducedMotion.matches) carry.reset();
+  else carry.release({ time: currentElapsed() });
 }
 
 function spawnHoverNote(x, y, zone) {
@@ -1214,8 +1908,10 @@ function spawnHoverNote(x, y, zone) {
 }
 
 function pickPhrase(zone) {
-  const phrases = (HOVER_PHRASES[state.language] || HOVER_PHRASES['zh-Hant'])[zone] || [];
-  return phrases[Math.floor(Math.random() * phrases.length)] || '';
+  const language = HOVER_PHRASES[state.language] ? state.language : 'zh-Hant';
+  const phrases = HOVER_PHRASES[language][zone] || [];
+  const context = variety.chance(0.3) ? contextLine() : null;
+  return context || variety.line(`${language}-hover-${zone}`, phrases) || '';
 }
 
 /** Called for every pointer position over (or near) Miku; drives the hover reaction. */
@@ -1225,12 +1921,26 @@ function updateHover(hit, x, y) {
     if (state.hover) endHover();
     return;
   }
+  if (state.pointer || carry.status().phase !== 'idle') {
+    touchGestures.reset();
+    return;
+  }
+  const stroke = reducedMotion.matches ? null : touchGestures.sample({ zone: hit.zone, x, y, time: elapsed });
+  if (stroke) {
+    startReaction('headStroke', { x, y, touch: true });
+    showTouchPhrase('headStroke');
+    spawnHoverNote(x, y, 'head');
+    postNative({ type: 'hover-haptic' });
+  }
   const faceX = projectedFaceAnchor()?.x ?? x;
   const side = x >= faceX ? 1 : -1;
   if (!state.hover) {
     state.hover = { zone: hit.zone, since: elapsed, lastNote: elapsed, dwellDone: false, side };
     document.body.classList.add('miku-hover');
     spawnHoverNote(x, y, hit.zone);
+    // A little "oh!" bounce when she notices the cursor.
+    kick(springs.bob, 0.55);
+    kick(springs.jolt, side * 0.5);
     if (elapsed >= state.nextHoverHaptic) {
       postNative({ type: 'hover-haptic' });
       state.nextHoverHaptic = elapsed + 1.2;
@@ -1260,6 +1970,7 @@ function updateHover(hit, x, y) {
 
 function endHover() {
   state.hover = null;
+  touchGestures.reset();
   document.body.classList.remove('miku-hover');
   delete document.body.dataset.hoverZone;
 }
@@ -1278,6 +1989,8 @@ function hitTest(x, y) {
 
 canvas.addEventListener('webglcontextlost', event => {
   event.preventDefault();
+  finishPointer(null, { reset: true });
+  carry.reset();
   stopLoop();
   state.error = 'WebGL context lost';
 }, false);
@@ -1288,6 +2001,7 @@ canvas.addEventListener('pointermove', handlePointerMove, { passive: true });
 canvas.addEventListener('pointerup', event => finishPointer(event));
 canvas.addEventListener('pointerleave', () => { if (!state.pointer) endHover(); });
 canvas.addEventListener('pointercancel', event => finishPointer(event));
+canvas.addEventListener('lostpointercapture', event => finishPointer(event));
 
 function status() {
   const elapsed = currentElapsed();
@@ -1325,8 +2039,14 @@ function status() {
     pinnedAnchor: state.pinnedAnchor,
     sceneSlotSeconds: state.sceneSlotSeconds,
     thinking: state.thinking,
+    weather: { ...state.weather },
+    sunrise: state.sunrise,
+    sunset: state.sunset,
+    ambientEnabled: state.ambientEnabled,
     hover: state.hover ? state.hover.zone : null,
     grounding: grounding?.status() ?? null,
+    carry: carry.status(),
+    walking: walking?.status() ?? null,
     reaction: state.reaction ? state.reaction.type : null,
     emotion: state.emotion,
     bones: requiredBones,
@@ -1348,9 +2068,9 @@ window.mikuCompanion = Object.freeze({
     document.body.classList.toggle('interaction-enabled', state.interactive);
     if (!state.interactive) endHover();
     if (!state.interactive && state.pointer) {
-      state.pointer = null;
-      postNative({ type: 'drag', active: false });
+      finishPointer(null, { reset: true });
     }
+    if (!state.interactive) carry.reset();
     updateCharacterBounds(performance.now());
     return status();
   },
@@ -1368,7 +2088,7 @@ window.mikuCompanion = Object.freeze({
     showBubble(typeof payload.text === 'string' ? payload.text : '', emotion);
     if (action === 'wave' || action === 'stretch' || action === 'rest') startReaction(action);
     else if (action === 'nod') startReaction('hello');
-    else state.reaction = null;
+    else if (!state.reaction?.touch) state.reaction = null;
     renderState(performance.now());
     return status();
   },
@@ -1392,14 +2112,31 @@ window.mikuCompanion = Object.freeze({
     renderState(performance.now());
     return status();
   },
+  setWeather(weather = {}) {
+    state.weather = normalizeWeather(weather);
+    renderState(performance.now());
+    return status();
+  },
+  setSunTimes(sunrise, sunset) {
+    const rise = Number(sunrise);
+    const set = Number(sunset);
+    if (!Number.isFinite(rise) || !Number.isFinite(set) || set <= rise) return false;
+    state.sunrise = rise;
+    state.sunset = set;
+    TIME_ANCHORS = timeAnchors(rise, set);
+    renderState(performance.now());
+    return status();
+  },
+  setAmbientEnabled(enabled) {
+    state.ambientEnabled = Boolean(enabled);
+    ambient?.setEnabled(state.ambientEnabled);
+    renderState(performance.now());
+    return status();
+  },
   setRotationInterval(seconds) {
     const value = Number(seconds);
     if (!Number.isFinite(value) || value < 30) return false;
-    // Keep the current scene on screen when the interval changes.
-    const ids = state.loadedScenes;
-    const currentIndex = Math.max(0, ids.indexOf(state.activeScene));
     state.sceneSlotSeconds = value;
-    if (state.previewElapsed === null) state.activeElapsed = currentIndex * value;
     renderState(performance.now());
     return status();
   },
@@ -1416,12 +2153,22 @@ window.mikuCompanion = Object.freeze({
 document.body.classList.toggle('interaction-enabled', state.interactive);
 
 window.addEventListener('resize', () => {
+  touchGestures.reset();
+  finishPointer(null, { reset: true });
+  carry.reset();
   resize();
+  walking?.reset();
+  ambient?.resize();
   renderState(performance.now());
 }, { passive: true });
 
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) stopLoop();
+  if (document.hidden) {
+    endHover();
+    finishPointer(null, { reset: true });
+    carry.reset();
+    stopLoop();
+  }
   else {
     renderState(performance.now());
     startLoop();
@@ -1429,7 +2176,14 @@ document.addEventListener('visibilitychange', () => {
 }, { passive: true });
 
 window.addEventListener('focus', () => renderState(performance.now()), { passive: true });
-reducedMotion.addEventListener('change', () => renderState(performance.now()));
+window.addEventListener('blur', () => {
+  finishPointer();
+  endHover();
+});
+reducedMotion.addEventListener('change', () => {
+  touchGestures.reset();
+  renderState(performance.now());
+});
 
 try {
   if (showsBackground) await prepareScenes();

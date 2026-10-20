@@ -37,6 +37,7 @@
     }
 
     html[data-layer="character"] #sceneRoot,
+    html[data-layer="character"] #ambientCanvas,
     html[data-layer="background"] #webglCanvas,
     html[data-layer="background"] #fallbackPortrait,
     html[data-layer="background"] #speechBubble {
@@ -51,6 +52,7 @@
     .scene,
     .scene-layer,
     .scene-mark,
+    #ambientCanvas,
     #webglCanvas,
     #fallbackPortrait,
     #speechBubble {
@@ -61,8 +63,15 @@
     .scene,
     .scene-layer,
     .scene-mark,
+    #ambientCanvas,
     #webglCanvas {
       inset: 0;
+    }
+
+    #ambientCanvas {
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
     }
 
     #sceneRoot {
@@ -297,6 +306,7 @@
 </head>
 <body>
   <div id="sceneRoot" aria-hidden="true"></div>
+  <canvas id="ambientCanvas" aria-hidden="true"></canvas>
   <canvas id="webglCanvas" aria-hidden="true"></canvas>
   <img id="fallbackPortrait" data-src="../assets/miku.png" alt="" draggable="false">
   <div id="speechBubble" role="status" aria-live="polite"></div>

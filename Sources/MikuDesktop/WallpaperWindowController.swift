@@ -56,6 +56,7 @@ final class WallpaperWindowController: NSObject, WKNavigationDelegate, WKScriptM
     private var lastHitTime: TimeInterval = 0
     private var dragActive = false
     private var hoverZone: String?
+    private var weather: WeatherSnapshot = .fallback
 
     init(url: URL) {
         interactiveMode = UserDefaults.standard.object(forKey: "interactiveMode") as? Bool ?? true
@@ -157,6 +158,26 @@ final class WallpaperWindowController: NSObject, WKNavigationDelegate, WKScriptM
         onPinnedAnchorChanged?()
     }
 
+    /// Same weather and sun for both layers, so Miku is lit like the scene behind her.
+    func setWeather(_ snapshot: WeatherSnapshot) {
+        weather = snapshot
+        for (view, ready) in [(backgroundWebView!, backgroundReady), (webView!, pageReady)] where ready {
+            applyWeather(to: view)
+        }
+    }
+
+    func setAmbientEnabled(_ enabled: Bool) {
+        guard backgroundReady else { return }
+        evaluate("window.mikuCompanion?.setAmbientEnabled?.(\(enabled ? "true" : "false"))", in: backgroundWebView)
+    }
+
+    private func applyWeather(to view: WKWebView) {
+        call(webView: view, function: "setWeather", payload: weather.payload)
+        if let sunrise = weather.sunrise, let sunset = weather.sunset {
+            evaluate("window.mikuCompanion?.setSunTimes?.(\(sunrise), \(sunset))", in: view)
+        }
+    }
+
     func setThinking(_ thinking: Bool) {
         guard pageReady else { return }
         evaluate("window.mikuCompanion?.setThinking(\(thinking ? "true" : "false"))")
@@ -179,6 +200,12 @@ final class WallpaperWindowController: NSObject, WKNavigationDelegate, WKScriptM
         } else {
             pageReady = true
             configurePage(self.webView, interactive: interactiveMode)
+        }
+        // The page module loads asynchronously; give it a moment before sending the environment.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self, weak webView] in
+            guard let self, let webView else { return }
+            applyWeather(to: webView)
+            if webView === backgroundWebView { setAmbientEnabled(WeatherService.ambientEnabled) }
         }
     }
 
@@ -293,30 +320,6 @@ final class WallpaperWindowController: NSObject, WKNavigationDelegate, WKScriptM
         webView.evaluateJavaScript(script) { [weak self] result, _ in
             guard let self else { return }
             hitTestInFlight = false
-            guard interactiveMode, pageReady else {
-                panel.ignoresMouseEvents = true
-                lastHitPoint = nil
-                leaveHover(force: true)
-                return
-            }
-            if dragActive {
-                panel.ignoresMouseEvents = false
-                return
-            }
-            let currentMouse = NSEvent.mouseLocation
-            let currentFrame = panel.frame
-            let currentPoint = CGPoint(
-                x: (currentMouse.x - currentFrame.minX) / currentFrame.width,
-                y: 1 - ((currentMouse.y - currentFrame.minY) / currentFrame.height)
-            )
-            guard currentFrame == frame, currentFrame.contains(currentMouse),
-                  hypot(currentPoint.x - point.x, currentPoint.y - point.y) <= 0.0008,
-                  characterRect.insetBy(dx: -0.01, dy: -0.01).contains(currentPoint) else {
-                panel.ignoresMouseEvents = true
-                lastHitPoint = nil
-                leaveHover(force: true)
-                return
-            }
             // The page answers with the body zone it hit ("head", "hand", "body") or false.
             let zone = result as? String
             lastHitResult = zone != nil || (result as? Bool) == true
@@ -332,8 +335,8 @@ final class WallpaperWindowController: NSObject, WKNavigationDelegate, WKScriptM
     }
 
     /// The cursor moved off Miku without a final hit test (e.g. it left her bounding box).
-    private func leaveHover(force: Bool = false) {
-        guard hoverZone != nil || force else { return }
+    private func leaveHover() {
+        guard hoverZone != nil else { return }
         hoverZone = nil
         NSCursor.arrow.set()
         if pageReady { evaluate("window.mikuCompanion?.endHover?.()") }

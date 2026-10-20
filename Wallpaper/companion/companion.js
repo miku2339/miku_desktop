@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { createGrounding } from './grounding.js';
 
 const canvas = document.querySelector('#webglCanvas');
 const sceneRoot = document.querySelector('#sceneRoot');
@@ -98,6 +99,7 @@ const SCENE_CONFIGS = [
 ];
 
 const CAMERA_HEIGHT = 29;
+const GROUND_SCREEN_Y = 0.915;
 const FPS_CAP = 30;
 const POSITION_ANCHORS = [0.22, 0.43, 0.62];
 const CYCLE_SECONDS = 150;
@@ -425,8 +427,7 @@ let camera;
 let hemisphereLight;
 let directionalLight;
 let fillLight;
-let shadowMaterial;
-let shadowPlane;
+let grounding;
 const raycaster = new THREE.Raycaster();
 const pointerNdc = new THREE.Vector2();
 const modelBox = new THREE.Box3();
@@ -443,8 +444,6 @@ function setupRenderer() {
   renderer.setSize(window.innerWidth, window.innerHeight, false);
   renderer.setClearColor(0x000000, 0);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
   scene = new THREE.Scene();
   camera = new THREE.OrthographicCamera();
@@ -456,14 +455,6 @@ function setupRenderer() {
 
   directionalLight = new THREE.DirectionalLight(0xfff4df, 2.35);
   directionalLight.position.set(-10, 22, 18);
-  directionalLight.castShadow = true;
-  directionalLight.shadow.mapSize.set(1024, 1024);
-  directionalLight.shadow.camera.left = -26;
-  directionalLight.shadow.camera.right = 26;
-  directionalLight.shadow.camera.top = 28;
-  directionalLight.shadow.camera.bottom = -5;
-  directionalLight.shadow.camera.near = 1;
-  directionalLight.shadow.camera.far = 70;
   scene.add(directionalLight);
 
   fillLight = new THREE.DirectionalLight(0xb9e4e7, 0.52);
@@ -471,12 +462,7 @@ function setupRenderer() {
   fillLight.castShadow = false;
   scene.add(fillLight);
 
-  shadowMaterial = new THREE.ShadowMaterial({ color: 0x071722, opacity: 0.18 });
-  shadowPlane = new THREE.Mesh(new THREE.PlaneGeometry(58, 20), shadowMaterial);
-  shadowPlane.rotation.x = -Math.PI / 2;
-  shadowPlane.position.set(0, 0.015, 1.3);
-  shadowPlane.receiveShadow = true;
-  scene.add(shadowPlane);
+  grounding = createGrounding(scene);
 
   resize();
 }
@@ -945,7 +931,6 @@ function applyLighting(weights) {
   hemisphereLight.intensity = mixNumber(weights, 'ambientIntensity') * intensityScale;
   directionalLight.intensity = mixNumber(weights, 'keyIntensity') * intensityScale;
   fillLight.intensity = mixNumber(weights, 'fillIntensity') * intensityScale;
-  shadowMaterial.opacity = mixNumber(weights, 'shadowOpacity');
 }
 
 async function loadModel() {
@@ -967,6 +952,7 @@ async function loadModel() {
       }
     });
     scene.add(state.model);
+    grounding.attach(state.model);
 
     for (const bone of state.model.skeleton?.bones || []) {
       state.bones.set(bone.name, bone);
@@ -1002,6 +988,10 @@ function renderState(timestamp) {
   if (showsCharacter && state.ready) {
     applyLighting(background.periodWeights);
     updateModel(elapsed);
+    grounding.update(
+      camera.position.y + CAMERA_HEIGHT * (0.5 - GROUND_SCREEN_Y),
+      mixNumber(background.periodWeights, 'shadowOpacity') * 1.5
+    );
     renderer.render(scene, camera);
     updateCharacterBounds(timestamp);
   }
@@ -1139,6 +1129,7 @@ function status() {
     sceneWeights: sceneWeightsAt(elapsed),
     sceneLayerOpacities: sourceOverOpacities(sceneWeightsAt(elapsed), [...state.sceneElements.keys()]),
     bounds: state.bounds ? { ...state.bounds } : null,
+    grounding: grounding?.status() ?? null,
     reaction: state.reaction ? state.reaction.type : null,
     emotion: state.emotion,
     bones: requiredBones,

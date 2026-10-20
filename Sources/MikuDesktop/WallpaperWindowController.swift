@@ -43,6 +43,8 @@ final class WallpaperWindowController: NSObject, WKNavigationDelegate, WKScriptM
         characterConfiguration.mediaTypesRequiringUserActionForPlayback = .all
         webView = WKWebView(frame: .zero, configuration: characterConfiguration)
         webView.navigationDelegate = self
+        // WebKit's macOS transparency SPI removes the native backdrop behind transparent HTML.
+        webView.setValue(false, forKey: "drawsBackground")
         webView.underPageBackgroundColor = .clear
 
         let backgroundConfiguration = WKWebViewConfiguration()

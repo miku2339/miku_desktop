@@ -48,6 +48,7 @@ final class WallpaperWindowController: NSObject, WKNavigationDelegate, WKScriptM
     private var backgroundReady = false
     private var screenObserver: NSObjectProtocol?
     private var wakeObserver: NSObjectProtocol?
+    private var memoryObserver: NSObjectProtocol?
 
     // Pixel-accurate mouse pass-through state.
     private var hitTestInFlight = false
@@ -107,6 +108,13 @@ final class WallpaperWindowController: NSObject, WKNavigationDelegate, WKScriptM
         backgroundWebView.load(URLRequest(url: backgroundURL, cachePolicy: .reloadIgnoringLocalCacheData))
         webView.load(URLRequest(url: characterURL, cachePolicy: .reloadIgnoringLocalCacheData))
         startPointerPolling()
+        memoryObserver = NotificationCenter.default.addObserver(
+            forName: .mikuMemoryChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.pushRelationship() }
+        }
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
             object: nil,
@@ -124,6 +132,7 @@ final class WallpaperWindowController: NSObject, WKNavigationDelegate, WKScriptM
     }
 
     deinit {
+        if let memoryObserver { NotificationCenter.default.removeObserver(memoryObserver) }
         pointerTimer?.invalidate()
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
         if let wakeObserver { NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver) }
@@ -183,6 +192,13 @@ final class WallpaperWindowController: NSObject, WKNavigationDelegate, WKScriptM
         evaluate("window.mikuCompanion?.setThinking(\(thinking ? "true" : "false"))")
     }
 
+    /// Friendship and whether she's upset, so her reactions match what she remembers.
+    @MainActor
+    func pushRelationship() {
+        guard pageReady else { return }
+        call(webView: webView, function: "setRelationship", payload: CompanionMemory.shared.relationshipPayload())
+    }
+
     func receiveReply(_ reply: CompanionReply) {
         call(webView: webView, function: "receiveReply", payload: [
             "text": reply.text,
@@ -206,6 +222,7 @@ final class WallpaperWindowController: NSObject, WKNavigationDelegate, WKScriptM
             guard let self, let webView else { return }
             applyWeather(to: webView)
             if webView === backgroundWebView { setAmbientEnabled(WeatherService.ambientEnabled) }
+            else { MainActor.assumeIsolated { self.pushRelationship() } }
         }
     }
 
@@ -249,6 +266,13 @@ final class WallpaperWindowController: NSObject, WKNavigationDelegate, WKScriptM
         case "drag":
             dragActive = (payload["active"] as? Bool) ?? false
             if dragActive { panel.ignoresMouseEvents = false }
+        case "touch":
+            guard let kind = payload["kind"] as? String, kind.count <= 24 else { return }
+            MainActor.assumeIsolated { CompanionMemory.shared.recordTouch(kind) }
+        case "diag":
+            // Only plain values from the page; nothing it sends is executed.
+            let entry = payload.filter { $0.value is String || $0.value is NSNumber || $0.value is NSNull }
+            MainActor.assumeIsolated { CompanionMemory.shared.logDiagnostic(entry) }
         case "pin":
             if let x = number(payload["x"]), x.isFinite {
                 UserDefaults.standard.set(max(0, min(1, x)), forKey: Self.pinnedAnchorKey)

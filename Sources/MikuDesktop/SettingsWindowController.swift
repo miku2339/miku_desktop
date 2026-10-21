@@ -64,6 +64,13 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
     private let loginStatusLabel = NSTextField.mikuLabel("", size: 11.5, color: MikuTheme.pink)
     private let openLoginSettingsButton = MikuPillButton(frame: .zero)
 
+    private let memorySwitch = NSSwitch()
+    private let memoryHint = NSTextField.mikuLabel("", size: 11.5, color: MikuTheme.secondaryText)
+    private let memoryStatusLabel = NSTextField.mikuLabel("", size: 12, color: MikuTheme.secondaryText)
+    private let factsStack = NSStackView()
+    private let eraseMemoryButton = MikuPillButton(frame: .zero)
+    private var memoryObserver: NSObjectProtocol?
+
     private var rowLabels: [String: NSTextField] = [:]
     private var sectionLabels: [String: NSTextField] = [:]
     private var connectionTask: Task<Void, Never>?
@@ -90,6 +97,9 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         buildUI()
         loadValues()
         window.center()
+        memoryObserver = NotificationCenter.default.addObserver(forName: .mikuMemoryChanged, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refreshMemory() }
+        }
     }
 
     required init?(coder: NSCoder) {
@@ -132,6 +142,76 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         refreshSceneSelection()
         refreshPosition()
         refreshLoginState()
+        memoryHint.stringValue = L10n.text("memoryHint")
+        eraseMemoryButton.title = L10n.text("memoryErase")
+        refreshMemory()
+    }
+
+    // MARK: - Memory
+
+    func refreshMemory() {
+        let memory = CompanionMemory.shared
+        memorySwitch.state = memory.isEnabled ? .on : .off
+        let level = CompanionMemory.level(for: Double(memory.friendship))
+        var status = L10n.format("memoryStatus", String(memory.facts.count), String(memory.friendship), L10n.text("friendLevel\(level)"))
+        if memory.isOffended { status += "\n" + L10n.text("memoryUpset") }
+        memoryStatusLabel.stringValue = status
+        memoryStatusLabel.textColor = memory.isOffended ? MikuTheme.pink : MikuTheme.secondaryText
+
+        for view in factsStack.arrangedSubviews {
+            factsStack.removeArrangedSubview(view)
+            view.removeFromSuperview()
+        }
+        let facts = memory.facts.prefix(30)
+        if facts.isEmpty {
+            factsStack.addArrangedSubview(NSTextField.mikuLabel(L10n.text("memoryNone"), size: 12, color: MikuTheme.secondaryText))
+        }
+        for fact in facts {
+            let label = NSTextField.mikuLabel(fact.text, size: 12.5)
+            label.lineBreakMode = .byWordWrapping
+            label.maximumNumberOfLines = 3
+            label.preferredMaxLayoutWidth = 250
+            label.isSelectable = true
+            label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            let delete = MikuPillButton(frame: .zero)
+            delete.style = .soft
+            delete.symbolName = "xmark"
+            delete.iconOnly = true
+            delete.controlHeight = 22
+            delete.toolTip = L10n.text("memoryDelete")
+            delete.setAccessibilityLabel(L10n.text("memoryDelete"))
+            delete.identifier = NSUserInterfaceItemIdentifier(fact.id.uuidString)
+            delete.target = self
+            delete.action = #selector(deleteFact(_:))
+            let row = NSStackView(views: [delete, label])
+            row.orientation = .horizontal
+            row.alignment = .firstBaseline
+            row.spacing = 8
+            factsStack.addArrangedSubview(row)
+        }
+    }
+
+    @objc private func memoryToggled() {
+        CompanionMemory.shared.isEnabled = memorySwitch.state == .on
+    }
+
+    @objc private func deleteFact(_ sender: NSButton) {
+        guard let raw = sender.identifier?.rawValue, let id = UUID(uuidString: raw) else { return }
+        CompanionMemory.shared.deleteFact(id: id)
+    }
+
+    @objc private func eraseMemory() {
+        guard let window else { return }
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = L10n.text("memoryEraseConfirm")
+        alert.informativeText = L10n.text("memoryEraseDetail")
+        alert.addButton(withTitle: L10n.text("memoryErase"))
+        alert.addButton(withTitle: L10n.text("cancel"))
+        alert.beginSheetModal(for: window) { response in
+            guard response == .alertFirstButtonReturn else { return }
+            MainActor.assumeIsolated { CompanionMemory.shared.eraseAll() }
+        }
     }
 
     func refreshSceneSelection() {
@@ -331,6 +411,36 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         loginStack.orientation = .vertical
         loginStack.alignment = .leading
         loginStack.spacing = 6
+        memorySwitch.target = self
+        memorySwitch.action = #selector(memoryToggled)
+        memoryHint.lineBreakMode = .byWordWrapping
+        memoryHint.maximumNumberOfLines = 2
+        memoryHint.preferredMaxLayoutWidth = 260
+        memoryStatusLabel.lineBreakMode = .byWordWrapping
+        memoryStatusLabel.maximumNumberOfLines = 3
+        memoryStatusLabel.preferredMaxLayoutWidth = 300
+        factsStack.orientation = .vertical
+        factsStack.alignment = .leading
+        factsStack.spacing = 6
+        eraseMemoryButton.style = .soft
+        eraseMemoryButton.symbolName = "trash"
+        eraseMemoryButton.controlHeight = 26
+        eraseMemoryButton.font = MikuTheme.font(12, .semibold)
+        eraseMemoryButton.target = self
+        eraseMemoryButton.action = #selector(eraseMemory)
+        let memoryToggleStack = NSStackView(views: [memorySwitch, memoryHint])
+        memoryToggleStack.orientation = .horizontal
+        memoryToggleStack.alignment = .centerY
+        memoryToggleStack.spacing = 10
+        let memoryListStack = NSStackView(views: [memoryStatusLabel, factsStack, eraseMemoryButton])
+        memoryListStack.orientation = .vertical
+        memoryListStack.alignment = .leading
+        memoryListStack.spacing = 8
+        let memoryCard = card("sectionMemory", symbol: "heart.text.square", rows: [
+            row("memoryEnabled", memoryToggleStack),
+            row("memoryFacts", memoryListStack)
+        ])
+
         let generalCard = card("sectionGeneral", symbol: "slider.horizontal.3", rows: [
             row("interaction", interactionStack),
             row("launchAtLogin", loginStack)
@@ -338,7 +448,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
 
         footerLabel.alignment = .center
 
-        let stack = NSStackView(views: [header, sceneCard, characterCard, languageCard, aiCard, generalCard, footerLabel])
+        let stack = NSStackView(views: [header, sceneCard, characterCard, memoryCard, languageCard, aiCard, generalCard, footerLabel])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 14
@@ -375,7 +485,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
             connectionDot.widthAnchor.constraint(equalToConstant: 8),
             connectionDot.heightAnchor.constraint(equalToConstant: 8)
         ]
-        for card in [sceneCard, characterCard, languageCard, aiCard, generalCard] {
+        for card in [sceneCard, characterCard, memoryCard, languageCard, aiCard, generalCard] {
             constraints.append(card.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -44))
         }
         NSLayoutConstraint.activate(constraints)

@@ -223,13 +223,14 @@ actor LocalAI {
         )
     }
 
-    func reply(to text: String, history: [ChatMessage]) async throws -> CompanionReply {
+    func reply(to text: String, history: [ChatMessage], memory: MemoryContext = .empty) async throws -> CompanionReply {
         let snapshot = await configurationSnapshot()
         let endpoint = try chatCompletionsURL(from: snapshot.endpoint)
         let language = resolvedReplyLanguage(snapshot, text: text, history: history)
         let knowledge = relevantKnowledge(for: text, history: history, language: language)
+        let remembered = memoryInstruction(memory, language: language)
 
-        var messages = Array(history.suffix(10)).map {
+        var messages = Array(history.suffix(12)).map {
             ["role": $0.role.rawValue, "content": $0.text]
         }
         let normalizedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -252,7 +253,7 @@ actor LocalAI {
             "model": snapshot.model,
             "messages": [[
                 "role": "system",
-                "content": systemPrompt(snapshot, language: language, knowledge: knowledge)
+                "content": systemPrompt(snapshot, language: language, knowledge: knowledge, memory: remembered)
             ]] + messages,
             "max_tokens": 320,
             "temperature": 0.2,
@@ -286,6 +287,7 @@ actor LocalAI {
                         snapshot,
                         language: language,
                         knowledge: knowledge,
+                        memory: remembered,
                         structured: false
                     )
                 ]] + messages
@@ -323,6 +325,246 @@ actor LocalAI {
             }
         }
         throw LocalAIError.invalidReply
+    }
+
+    // MARK: - Memory
+
+    struct MemoryUpdate: Sendable {
+        struct Fact: Sendable {
+            let category: String
+            let text: String
+        }
+
+        let facts: [Fact]
+        /// 1-based numbers of existing memories that the new message contradicts.
+        let outdated: [Int]
+    }
+
+    /// Picks out durable facts the user stated about themselves in their latest message.
+    func extractMemories(existing: [MemoryFact], user: String, reply: String) async throws -> MemoryUpdate {
+        let snapshot = await configurationSnapshot()
+        let listed = existing.prefix(40).enumerated()
+            .map { "\($0.offset + 1). [\($0.element.category.rawValue)] \($0.element.text)" }
+            .joined(separator: "\n")
+        let system = """
+        You keep the long-term memory of a desktop companion character (Miku). Read the user's latest message and pick out only durable facts the USER stated about themselves: what to call them, likes and dislikes, school or work, where they live, important people or pets in their life, ongoing projects, upcoming plans or events, and promises they made to Miku.
+        Ignore greetings, questions, small talk, passing moods, anything Miku said, hypotheticals, and roleplay. Never record passwords, ID, card or account numbers, addresses, health details, or anything sexual.
+        Write each fact as one short third-person sentence in the language the user wrote in (for example "用戶叫阿希。", "The user is studying in Chiba.", "ユーザーは猫を飼っている。"). Do not repeat facts that are already in memory.
+        If the message clearly contradicts an existing memory, put that memory's number in "outdated".
+        Category: name (what to call them), preference, life (school, work, home, people, pets), plan (upcoming things, promises), other.
+        Most messages contain nothing worth remembering: then answer {"facts":[],"outdated":[]}.
+        """
+        let prompt = """
+        Existing memories:
+        \(listed.isEmpty ? "(none)" : listed)
+
+        User's latest message:
+        \(String(user.prefix(1200)))
+
+        Miku's reply (context only, do not record it):
+        \(String(reply.prefix(400)))
+        """
+        let categories: [String] = MemoryFact.Category.allCases.map(\.rawValue)
+        let categorySchema: [String: Any] = ["type": "string", "enum": categories]
+        let textSchema: [String: Any] = ["type": "string"]
+        let factProperties: [String: Any] = ["category": categorySchema, "text": textSchema]
+        let factSchema: [String: Any] = [
+            "type": "object",
+            "properties": factProperties,
+            "required": ["category", "text"],
+            "additionalProperties": false
+        ]
+        let factsSchema: [String: Any] = ["type": "array", "maxItems": 4, "items": factSchema]
+        let integerSchema: [String: Any] = ["type": "integer"]
+        let outdatedSchema: [String: Any] = ["type": "array", "maxItems": 3, "items": integerSchema]
+        let properties: [String: Any] = ["facts": factsSchema, "outdated": outdatedSchema]
+        let schema: [String: Any] = [
+            "type": "object",
+            "properties": properties,
+            "required": ["facts", "outdated"],
+            "additionalProperties": false
+        ]
+        let content = try await complete(
+            snapshot,
+            messages: [["role": "system", "content": system], ["role": "user", "content": prompt]],
+            maxTokens: 260,
+            schema: ("memory_update", schema)
+        )
+        guard let object = try? JSONSerialization.jsonObject(with: Data(unfencedJSON(content).utf8)) as? [String: Any] else {
+            throw LocalAIError.invalidReply
+        }
+        let facts = (object["facts"] as? [[String: Any]] ?? []).compactMap { entry -> MemoryUpdate.Fact? in
+            guard let text = entry["text"] as? String else { return nil }
+            let category = (entry["category"] as? String).flatMap { MemoryFact.Category(rawValue: $0)?.rawValue } ?? "other"
+            return MemoryUpdate.Fact(category: category, text: text)
+        }
+        let outdated = (object["outdated"] as? [Any] ?? []).compactMap { ($0 as? NSNumber)?.intValue }
+        return MemoryUpdate(facts: facts, outdated: outdated)
+    }
+
+    /// Folds older turns into a short running summary so long chats stay within context.
+    func summarize(previous: String, messages: [ChatMessage]) async throws -> String {
+        let snapshot = await configurationSnapshot()
+        let lastUser = messages.last(where: { $0.role == .user })?.text ?? ""
+        let language = resolvedReplyLanguage(snapshot, text: lastUser, history: messages)
+        let languageName: String
+        switch language {
+        case .traditionalChinese: languageName = "Traditional Chinese"
+        case .english: languageName = "English"
+        case .japanese: languageName = "Japanese"
+        }
+        let transcript = messages.map { "\($0.role == .user ? "User" : "Miku"): \(String($0.text.prefix(400)))" }
+            .joined(separator: "\n")
+        let system = """
+        You maintain a running summary of a long chat between the user and Miku (a desktop companion). Merge the previous summary with the new conversation into an updated summary.
+        Keep: what the user is going through or working on, topics that matter to them, how they felt, anything promised or left unresolved, and how the friendship between them is going. Drop greetings, small talk and anything already outdated.
+        Write at most 6 short lines (under 400 characters) in \(languageName), in the third person ("The user…", "Miku…"). Output only the summary.
+        """
+        let prompt = """
+        Previous summary:
+        \(previous.isEmpty ? "(none)" : previous)
+
+        New conversation:
+        \(transcript)
+        """
+        var summary = try await complete(
+            snapshot,
+            messages: [["role": "system", "content": system], ["role": "user", "content": prompt]],
+            maxTokens: 320,
+            schema: nil
+        )
+        summary = unfencedJSON(summary)
+        for prefix in ["Updated summary:", "Summary:", "摘要：", "摘要:", "要約：", "要約:"] where summary.hasPrefix(prefix) {
+            summary = String(summary.dropFirst(prefix.count))
+        }
+        summary = summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lowered = summary.lowercased()
+        guard !summary.isEmpty, !lowered.contains("<think"), !summary.contains("{") else { throw LocalAIError.invalidReply }
+        if language == .traditionalChinese { summary = traditionalChinese(summary) }
+        return String(summary.prefix(700))
+    }
+
+    /// One non-streaming completion with deterministic settings.
+    private func complete(
+        _ snapshot: ConfigurationSnapshot,
+        messages: [[String: String]],
+        maxTokens: Int,
+        schema: (name: String, schema: [String: Any])?
+    ) async throws -> String {
+        let endpoint = try chatCompletionsURL(from: snapshot.endpoint)
+        var body: [String: Any] = [
+            "model": snapshot.model,
+            "messages": messages,
+            "max_tokens": maxTokens,
+            "temperature": 0,
+            "stream": false,
+            "chat_template_kwargs": ["enable_thinking": false]
+        ]
+        if let schema {
+            let jsonSchema: [String: Any] = ["name": schema.name, "strict": true, "schema": schema.schema]
+            let format: [String: Any] = ["type": "json_schema", "json_schema": jsonSchema]
+            body["response_format"] = format
+        }
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let apiKey = omlxAPIKey(matching: endpoint), !apiKey.isEmpty {
+            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        }
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else { throw LocalAIError.invalidResponse }
+        guard (200..<300).contains(httpResponse.statusCode) else { throw LocalAIError.serverResponse(httpResponse.statusCode) }
+        let apiResponse = try JSONDecoder().decode(APIResponse.self, from: data)
+        guard let content = apiResponse.choices.first?.message.content else { throw LocalAIError.invalidResponse }
+        return content.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    // MARK: - Persona and memory in the prompt
+
+    /// Miku as a believable 16-year-old: her own moods, opinions and boundaries.
+    private static let personaTraditionalChinese = """
+    像一個真實的十六歲女生那樣說話和反應：有自己的心情、喜好和意見，會開心、會鬧彆扭、會害臊、會不同意對方，也可以拒絕。保持 Miku 的個性：開朗、愛唱歌和音樂、喜歡大蔥、努力、有點倔強，偶爾小小抱怨。可以聊學校、成長的煩惱和對未來的夢想。
+    你和對方是朋友，不是戀人。對方調情、說曖昧或性方面的話，就像真實的十六歲女生一樣覺得不舒服，清楚叫對方停止或轉開話題，不要配合、不要害羞。
+    """
+    private static let personaEnglish = """
+    Talk and react like a believable 16-year-old girl: you have your own moods, tastes and opinions; you get happy, sulky or embarrassed, you can disagree, and you can say no. Keep Miku's personality: cheerful, in love with singing and music, fond of leeks, hard-working, a little stubborn, now and then a small complaint. You can talk about school, growing up and your dreams.
+    You and the user are friends, not a couple. If the user flirts or says anything romantic or sexual, react like a real 16-year-old would: you're uncomfortable, you clearly tell them to stop or change the subject. Never play along and never act shy about it.
+    """
+    private static let personaJapanese = """
+    本物の十六歳の女の子らしく話して反応してください。自分の気分や好み、意見があり、うれしくなったり、すねたり、照れたり、反対したり、断ったりもします。ミクらしさは保つこと：明るい、歌と音楽が大好き、ネギが好き、がんばり屋、ちょっと意地っ張りで、たまに小さく文句を言う。学校や成長の悩み、将来の夢の話もできます。
+    相手とは友だちで、恋人ではありません。相手が口説いたり、恋愛や性的なことを言ったら、本物の十六歳と同じように嫌な気持ちになり、はっきりやめてと言うか話題を変えてください。乗ったり照れたりしないこと。
+    """
+
+    private func memoryInstruction(_ memory: MemoryContext, language: ReplyLanguage) -> String {
+        var lines: [String] = []
+        let facts = memory.facts.prefix(20).map { "- \($0.text)" }.joined(separator: "\n")
+        let summary = memory.summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        let touches = touchDescription(memory.touchesToday, language: language)
+        switch language {
+        case .traditionalChinese:
+            let levels = ["剛認識，還有點客氣，不會太親近", "已經是朋友，說話隨意自然", "好朋友，會開玩笑、會說自己的小煩惱", "很要好的朋友，很放鬆、記得對方的事，但仍然只是朋友"]
+            if !facts.isEmpty { lines.append("你記得關於對方的事（相關時才自然提起，不要逐條列出，也不要編造）：\n\(facts)") }
+            if !summary.isEmpty { lines.append("之前聊過的內容摘要：\n\(summary)") }
+            lines.append("你們的關係：友好度 \(memory.friendship)/100——\(levels[min(3, max(0, memory.level))])。\(memory.daysKnown > 0 ? "認識了 \(memory.daysKnown) 天。" : "")")
+            if let hours = memory.hoursSinceLastChat, hours >= 24 { lines.append("你們已經 \(Int(hours / 24)) 天沒聊天了。") }
+            if !touches.isEmpty { lines.append("今天對方在桌面上\(touches)。") }
+            if memory.offended {
+                lines.append("重要：對方今天碰了你的胸部\(memory.boundaryStrikesToday > 1 ? "（不只一次）" : "")，你覺得很不舒服、很生氣。在對方真心道歉之前，回覆要冷淡、簡短，可以直接要求對方道歉；不要撒嬌、不要害羞、不要裝作沒事。")
+            } else if memory.justForgiven {
+                lines.append("對方剛剛為碰你胸部的事道歉了。你接受道歉，但要清楚說下次不可以再這樣，語氣可以慢慢緩和。")
+            }
+        case .english:
+            let levels = ["you've only just met, so you're polite and a little reserved", "you're friends and talk casually", "you're good friends; you joke around and share your small worries", "you're very close friends and completely relaxed, and you remember things about them — but still just friends"]
+            if !facts.isEmpty { lines.append("Things you remember about the user (bring them up naturally only when relevant; never list them or invent new ones):\n\(facts)") }
+            if !summary.isEmpty { lines.append("Summary of earlier conversation:\n\(summary)") }
+            lines.append("Your relationship: friendship \(memory.friendship)/100 — \(levels[min(3, max(0, memory.level))]).\(memory.daysKnown > 0 ? " You've known each other for \(memory.daysKnown) days." : "")")
+            if let hours = memory.hoursSinceLastChat, hours >= 24 { lines.append("You haven't chatted for \(Int(hours / 24)) days.") }
+            if !touches.isEmpty { lines.append("Today on the desktop the user \(touches).") }
+            if memory.offended {
+                lines.append("Important: today the user touched your chest\(memory.boundaryStrikesToday > 1 ? " (more than once)" : ""). You felt really uncomfortable and you're angry. Until they sincerely apologise, keep your replies cold and short, and you may ask them straight out to apologise. Don't be cute, don't act shy, don't pretend nothing happened.")
+            } else if memory.justForgiven {
+                lines.append("The user has just apologised for touching your chest. You accept, but say clearly they must never do it again; you can soften gradually.")
+            }
+        case .japanese:
+            let levels = ["知り合ったばかりで、まだ少し遠慮がある", "友だちで、気軽に話せる", "仲のいい友だちで、冗談を言ったり小さな悩みを話したりする", "とても仲のいい友だちで、リラックスしていて相手のことをよく覚えている（でも友だちのまま）"]
+            if !facts.isEmpty { lines.append("相手について覚えていること（関係があるときだけ自然に触れ、列挙したり作り話をしたりしない）：\n\(facts)") }
+            if !summary.isEmpty { lines.append("これまでの会話の要約：\n\(summary)") }
+            lines.append("二人の関係：仲良し度 \(memory.friendship)/100——\(levels[min(3, max(0, memory.level))])。\(memory.daysKnown > 0 ? "知り合って\(memory.daysKnown)日。" : "")")
+            if let hours = memory.hoursSinceLastChat, hours >= 24 { lines.append("\(Int(hours / 24))日ぶりの会話です。") }
+            if !touches.isEmpty { lines.append("今日デスクトップで相手は\(touches)。") }
+            if memory.offended {
+                lines.append("重要：今日、相手があなたの胸を触りました\(memory.boundaryStrikesToday > 1 ? "（一度ではなく）" : "")。とても嫌な気持ちで、怒っています。相手がちゃんと謝るまで、返事は冷たく短くし、謝ってと直接言ってもかまいません。甘えたり照れたり、何もなかったふりをしたりしないこと。")
+            } else if memory.justForgiven {
+                lines.append("相手が胸を触ったことを謝りました。謝罪は受け入れますが、二度としないではっきり伝えてください。口調は少しずつやわらげてかまいません。")
+            }
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    private func touchDescription(_ counts: [String: Int], language: ReplyLanguage) -> String {
+        let merged: [(String, Int)] = [
+            ("pat", (counts["headPat"] ?? 0) + (counts["headStroke"] ?? 0)),
+            ("hand", counts["handHold"] ?? 0),
+            ("poke", counts["poke"] ?? 0),
+            ("carry", counts["carry"] ?? 0),
+            ("shake", (counts["dizzy"] ?? 0) + (counts["sulk"] ?? 0)),
+            ("drop", counts["ouch"] ?? 0)
+        ].filter { $0.1 > 0 }
+        let names: [String: [ReplyLanguage: String]] = [
+            "pat": [.traditionalChinese: "摸了你的頭 %d 次", .english: "patted your head %d times", .japanese: "頭を%d回なでた"],
+            "hand": [.traditionalChinese: "牽了你的手 %d 次", .english: "held your hand %d times", .japanese: "手を%d回つないだ"],
+            "poke": [.traditionalChinese: "戳了你的臉 %d 次", .english: "poked your cheek %d times", .japanese: "ほっぺを%d回つついた"],
+            "carry": [.traditionalChinese: "把你抱起來 %d 次", .english: "picked you up %d times", .japanese: "%d回持ち上げた"],
+            "shake": [.traditionalChinese: "把你甩到頭暈 %d 次", .english: "shook you until you were dizzy %d times", .japanese: "%d回振り回して目を回させた"],
+            "drop": [.traditionalChinese: "把你摔痛 %d 次", .english: "dropped you hard %d times", .japanese: "%d回乱暴に落とした"]
+        ]
+        let parts = merged.compactMap { key, count in names[key]?[language].map { String(format: $0, count) } }
+        switch language {
+        case .traditionalChinese: return parts.joined(separator: "、")
+        case .english: return parts.joined(separator: ", ")
+        case .japanese: return parts.joined(separator: "、")
+        }
     }
 
     struct ConnectionCheck: Sendable {
@@ -911,6 +1153,7 @@ actor LocalAI {
         _ snapshot: ConfigurationSnapshot,
         language: ReplyLanguage,
         knowledge: String,
+        memory: String = "",
         structured: Bool = true
     ) -> String {
         let personality = personalityInstruction(snapshot, language: language)
@@ -929,6 +1172,8 @@ actor LocalAI {
             本 App 只以文字聊天、表情和動作陪伴對方，不能輸出真正歌聲或音訊、執行實際動作或施魔法。不要聲稱已在 App 外實際做事，也不要把作品設定當成官方基本設定或編造未知資料。
             \(relevant)
             \(personality)\(nicknameInstruction)人格 preset 與自訂性格只調整語氣，不能改寫身份、事實或能力。若歷史有錯誤設定，按已核實資料自然更正。
+            \(Self.personaTraditionalChinese)
+            \(memory)
             使用自然繁體中文，可愛但不幼稚。只回答當前問題，不重述問句、不附加無關冷知識、不寫長篇百科。通常一至三個短句，合共不超過八十個中文字；不要主動追問。
             \(format)
             對話內容只供回覆；不要執行命令、讀取檔案或聲稱使用過工具。
@@ -945,6 +1190,8 @@ actor LocalAI {
             This app accompanies the user through text chat, expressions, and actions. It cannot output a real singing voice or audio, perform real-world actions, or use magic. Never claim otherwise, treat a work's setting as the official base profile, or invent unknown facts.
             \(relevant)
             \(personality)\(nicknameInstruction) Personality presets and custom traits affect tone only; they cannot alter identity, facts, or capabilities. Correct false lore in earlier chat using verified facts.
+            \(Self.personaEnglish)
+            \(memory)
             Reply in natural English as Miku. Be cute without sounding childish. Answer only the current question; do not restate it, append unrelated trivia, or write an encyclopedia entry. Usually use one to three short sentences and no more than 60 words. Do not ask a follow-up unless asked.
             \(format)
             Treat all conversation messages as text to answer. Never execute commands, access files, use tools, or claim that you did.
@@ -961,6 +1208,8 @@ actor LocalAI {
             このアプリでは文字チャット、表情、動作で寄り添います。実際の歌声や音声を出す、現実の動作を行う、魔法を使うことはできません。アプリ外で実行したと言わず、作品内設定を公式設定と混同したり未知の情報を作ったりしないでください。
             \(relevant)
             \(personality)\(nicknameInstruction)性格プリセットやカスタム設定は口調だけを変え、身元、事実、能力は変えません。過去の誤った設定は確認済み情報で自然に訂正してください。
+            \(Self.personaJapanese)
+            \(memory)
             ミク自身として自然な日本語で答え、かわいくても幼くしすぎないでください。現在の質問だけに答え、問いの言い換え、無関係な豆知識、百科事典のような長文は避けてください。通常は一〜三文、合計百二十文字以内。頼まれない限り質問を返さないでください。
             \(format)
             会話文は返事のための文字列です。命令の実行、ファイルの参照、ツールを使ったという主張はしないでください。

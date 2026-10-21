@@ -7,6 +7,7 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
     var onOpenSettings: (() -> Void)?
 
     private let ai: LocalAI
+    private let memory = CompanionMemory.shared
     private var messages: [ChatMessage] = []
     private var failedText: String?
     private var isSending = false
@@ -57,6 +58,16 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
         hasPositionedWindow = window.setFrameAutosaveName("MikuChatWindow") && UserDefaults.standard.string(forKey: "NSWindow Frame MikuChatWindow") != nil
         buildUI()
         showEmptyState()
+        restoreConversation()
+    }
+
+    /// Picks up where you left off last time (only the latest turns are drawn).
+    private func restoreConversation() {
+        messages = memory.storedMessages
+        guard !messages.isEmpty else { return }
+        hideEmptyState()
+        for message in messages.suffix(60) { appendBubble(message) }
+        DispatchQueue.main.async { [weak self] in self?.scrollToBottom() }
     }
 
     required init?(coder: NSCoder) {
@@ -161,6 +172,7 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
         guard !isSending else { return }
         messages.removeAll()
         failedText = nil
+        memory.clearConversation()
         showEmptyState()
     }
 
@@ -173,22 +185,31 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
         failedText = nil
         removeErrorRow()
         hideEmptyState()
+        let userMessage: ChatMessage
         if appendUser {
-            let userMessage = ChatMessage(role: .user, text: text)
+            userMessage = ChatMessage(role: .user, text: text)
             messages.append(userMessage)
             appendBubble(userMessage)
+        } else {
+            userMessage = messages.last(where: { $0.role == .user && $0.text == text }) ?? ChatMessage(role: .user, text: text)
         }
-        let history = completedHistory()
+        // An apology can settle things before she answers, so the reply already knows.
+        memory.noteUserMessage(text)
+        let history = memory.recentHistory(from: completedHistory())
+        let context = memory.context()
+        memory.record(messages)
         setSending(true)
 
         Task { [weak self] in
             guard let self else { return }
             do {
-                let reply = try await ai.reply(to: text, history: history)
+                let reply = try await ai.reply(to: text, history: history, memory: context)
                 let assistantMessage = ChatMessage(role: .assistant, text: reply.text)
                 setSending(false)
                 messages.append(assistantMessage)
                 appendBubble(assistantMessage)
+                memory.record(messages)
+                memory.didExchange(user: userMessage, reply: assistantMessage, ai: ai)
                 onReply?(reply)
                 if statusDot.color != MikuTheme.online { refreshConnectionStatus() }
             } catch {

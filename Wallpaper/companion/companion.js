@@ -8,6 +8,7 @@ import { createGestures, GESTURE_PHRASES } from './gestures.js';
 import { createRoutine, createVariety } from './variety.js';
 import { characterEnvironment, defaultWeather, normalizeWeather, timeAnchors } from './environment.js';
 import { createAmbient } from './ambient.js';
+import { createRelationship, RELATIONSHIP_TOUCH_KINDS } from './relationship.js';
 import { OutlineEffect } from './vendor/effects/OutlineEffect.js';
 
 const canvas = document.querySelector('#webglCanvas');
@@ -108,7 +109,9 @@ const CYCLE_SECONDS = 150;
 const ALLOWED_EMOTIONS = new Set(['happy', 'curious', 'sleepy', 'calm', 'dizzy', 'pout']);
 const ALLOWED_REPLY_ACTIONS = new Set(['wave', 'stretch', 'rest', 'idle', 'nod']);
 const GESTURE_TYPES = ['dance', 'idolPose', 'think', 'tidyHair', 'yawn', 'doze', 'sneeze', 'cheer', 'bored', 'shiver', 'skyLook', 'startle'];
-const INTERACTION_TYPES = new Set(['headPat', 'headStroke', 'poke', 'wave', 'stretch', 'rest', 'hello', 'look', 'move', 'dizzy', 'ouch', ...GESTURE_TYPES]);
+const INTERACTION_TYPES = new Set(['headPat', 'headStroke', 'poke', 'wave', 'stretch', 'rest', 'hello', 'look', 'move', 'dizzy', 'ouch', 'boundary', 'snub', 'forgive', ...GESTURE_TYPES]);
+// Idle actions she isn't in the mood for while she's upset with you.
+const CHEERFUL_ACTIONS = new Set(['dance', 'idolPose', 'cheer', 'bored', 'hum', 'wave']);
 const CONTROLLED_BONES = [
   'センター', '上半身', '下半身', '首', '頭', '両目',
   '左肩', '左腕', '左腕捩', '左ひじ', '左手捩', '左手首',
@@ -172,6 +175,11 @@ const state = {
   lastImpact: 0,
   turnOffset: 0,
   hopLift: 0,
+  // Turning away from you while she's upset (eased so it never snaps).
+  upset: { x: 0, v: 0, side: 1 },
+  yawWatch: { recoverUntil: -Infinity },
+  lastFrameAt: null,
+  loopRestarts: 0,
   micro: null,
   nextMicro: 0,
   lastFlash: 0,
@@ -183,17 +191,20 @@ const HOVER_PHRASES = {
   'zh-Hant': {
     head: ['要摸摸頭嗎？♪', '嘿嘿～', '頭髮今天也很順喔！', '想摸就摸吧♪', '咦，在看我的雙馬尾？'],
     hand: ['要擊掌嗎？', '嗨～♪', '牽手？', '來，伸手♪', '要一起去哪裡嗎？'],
-    body: ['嗯？找我嗎？', '♪～', '在這裡喔！', '在忙什麼呀？', '要聽我唱歌嗎？♪']
+    body: ['嗯？找我嗎？', '♪～', '在這裡喔！', '在忙什麼呀？', '要聽我唱歌嗎？♪'],
+    cold: ['……', '哼。', '我還在生氣喔。', '（轉過頭去）']
   },
   en: {
     head: ['Head pats? ♪', 'Hehe~', 'Careful with the twintails!', 'Go on, I don\'t mind ♪', 'Looking at my twintails?'],
     hand: ['High five?', 'Hi~ ♪', 'Hold hands?', 'Here, give me your hand ♪', 'Going somewhere together?'],
-    body: ['Hm? Need me?', '♪~', "I'm right here!", "What are you working on?", 'Want me to sing for you? ♪']
+    body: ['Hm? Need me?', '♪~', "I'm right here!", "What are you working on?", 'Want me to sing for you? ♪'],
+    cold: ['…', 'Hmph.', "I'm still upset.", '(looks away)']
   },
   ja: {
     head: ['なでなでする？♪', 'えへへ～', 'ツインテ、崩さないでね！', 'なでてもいいよ♪', 'ツインテ見てるの？'],
     hand: ['ハイタッチする？', 'やっほー♪', '手、つなぐ？', 'ほら、手出して♪', 'どこか一緒に行く？'],
-    body: ['ん？呼んだ？', '♪～', 'ここにいるよ！', '何してるの？', '歌ってあげようか？♪']
+    body: ['ん？呼んだ？', '♪～', 'ここにいるよ！', '何してるの？', '歌ってあげようか？♪'],
+    cold: ['……', 'ふん。', 'まだ怒ってるよ。', '（ぷいっ）']
   }
 };
 const HOVER_NOTE_SYMBOLS = ['♪', '♫', '♬', '♪'];
@@ -212,7 +223,18 @@ const TOUCH_PHRASES = {
     pout: ['哼！不要再甩我了啦！', '你是故意的吧！', '再甩我就生氣囉！', '人家是偶像，不是搖搖樂！'],
     sulk: ['哼，不理你了！', '我生氣了，不准跟我說話！', '……哼。'],
     forgive: ['…好啦，原諒你一次。', '下不為例喔。', '…只原諒你一點點而已。', '要請我吃大蔥才行！'],
-    ouch: ['好痛…', '輕一點放我下來嘛！', '嗚…摔到了啦。', '痛痛痛…', '要接住我啦！']
+    ouch: ['好痛…', '輕一點放我下來嘛！', '嗚…摔到了啦。', '痛痛痛…', '要接住我啦！'],
+    // Touched where she doesn't want to be touched. Never shy or flattered: just "no".
+    boundary: ['欸！不要碰那裡！', '你在幹嘛？！那裡不可以碰！', '…很過分耶。不准碰那裡。'],
+    boundaryHurt: ['…我還以為你不會這樣做。', '我們是朋友吧？那裡不可以碰。', '…你這樣讓我很不舒服。'],
+    boundaryAgain: ['我說了不要！不理你了。', '……你不道歉的話，我不會理你。', '真的很討厭。走開啦。'],
+    snub: ['……先道歉。', '我還在生氣。', '別碰我，先跟我道歉。', '哼，不想理你。', '……'],
+    forgiven: ['…好吧，這次原諒你。下次不准再這樣。', '…知道錯就好。', '嗯…我接受你的道歉。'],
+    // Not close yet: friendly, but keeps a little distance.
+    headStrokeDistant: ['欸？我們還沒那麼熟吧…', '嗯…頭髮會亂掉啦。', '…一下下就好喔。'],
+    handHoldDistant: ['突、突然牽手？…有點怪怪的。', '嗯…先不要啦。', '…你的手好冰。'],
+    pokeDistant: ['…幹嘛？', '有事嗎？', '不要亂戳啦。'],
+    carryDistant: ['欸？！放我下來！', '不要隨便抱起來啦！', '我、我自己會走！']
   },
   en: {
     headStroke: ['Hehe~ one more pat? ♪', 'Gentle with the twintails!', 'That feels nice… ♪', 'I could get used to this~', 'Mmm~ ♪', "You're extra gentle today."],
@@ -228,7 +250,16 @@ const TOUCH_PHRASES = {
     pout: ["Hmph! Stop shaking me!", 'You did that on purpose!', "Shake me again and I'll get mad!", "I'm an idol, not a snow globe!"],
     sulk: ["Hmph. I'm not talking to you!", "I'm cross. No talking to me!", '…Hmph.'],
     forgive: ['…Fine. I forgive you, once.', "Don't do it again, okay?", 'I only forgive you a little bit.', 'You owe me a leek!'],
-    ouch: ['Ow…', 'Put me down gently!', 'Ugh… that hurt.', 'Ow ow ow…', 'You were supposed to catch me!']
+    ouch: ['Ow…', 'Put me down gently!', 'Ugh… that hurt.', 'Ow ow ow…', 'You were supposed to catch me!'],
+    boundary: ["Hey! Don't touch me there!", 'What are you doing?! Not there!', "…That's not okay. Don't touch me there."],
+    boundaryHurt: ["…I didn't think you'd do that.", "We're friends, right? Not there.", '…That made me really uncomfortable.'],
+    boundaryAgain: ["I said no! I'm not talking to you.", "…I'm ignoring you until you apologise.", 'Seriously, I hate that. Go away.'],
+    snub: ['…Apologise first.', "I'm still upset.", "Don't touch me. Say sorry first.", "Hmph. I'm ignoring you.", '…'],
+    forgiven: ["…Fine, I forgive you. Don't ever do that again.", '…As long as you know it was wrong.', '…Okay. I accept your apology.'],
+    headStrokeDistant: ["Huh? We're not that close yet…", "Mm… you'll mess up my hair.", '…Just for a second, okay?'],
+    handHoldDistant: ["H-holding hands, all of a sudden? …That's a bit weird.", 'Mm… not yet.', '…Your hand is cold.'],
+    pokeDistant: ['…What?', 'Need something?', "Don't just poke me."],
+    carryDistant: ['Hey?! Put me down!', "Don't just pick me up!", 'I-I can walk by myself!']
   },
   ja: {
     headStroke: ['えへへ、もう一回♪', '髪は優しくなでてね。', 'きもちいい…♪', 'くせになっちゃうよ～', 'ふにゃ～♪', '今日はとっても優しいね。'],
@@ -244,7 +275,16 @@ const TOUCH_PHRASES = {
     pout: ['もう！振らないでってば！', 'わざとでしょ！', '次やったら怒るよ！', 'わたしはアイドル！シェイカーじゃないの！'],
     sulk: ['ふんっ、もう知らない！', '怒ったからね、話しかけないで！', '……ふん。'],
     forgive: ['…しょうがないなぁ、許してあげる。', '次はないからね。', 'ちょっとだけ許してあげる。', 'ネギおごってくれたら許す！'],
-    ouch: ['いたた…', 'もっとそっと降ろしてよ！', 'うぅ…ぶつけた。', 'いたいいたい…', 'ちゃんと受け止めてよ！']
+    ouch: ['いたた…', 'もっとそっと降ろしてよ！', 'うぅ…ぶつけた。', 'いたいいたい…', 'ちゃんと受け止めてよ！'],
+    boundary: ['ちょっと！そこは触らないで！', 'なにしてるの？！そこはダメ！', '…ひどい。そこは触らないで。'],
+    boundaryHurt: ['…そういうことする人だと思わなかった。', '友だちでしょ？そこはダメだよ。', '…すごく嫌な気持ちになった。'],
+    boundaryAgain: ['ダメって言ったよね！もう知らない。', '……謝るまで口きかないから。', 'ほんとに嫌。あっち行って。'],
+    snub: ['……先に謝って。', 'まだ怒ってるんだからね。', '触らないで。まず謝ってよ。', 'ふん、知らない。', '……'],
+    forgiven: ['…しょうがないなぁ、今回だけ許してあげる。もうしないでね。', '…わかればいいの。', 'うん…謝ってくれたから、許す。'],
+    headStrokeDistant: ['え？まだそんなに仲良くないよね…', 'ん…髪くずれちゃう。', '…ちょっとだけだよ？'],
+    handHoldDistant: ['て、手？いきなりはちょっと…', 'ん…まだダメ。', '…手、つめたいね。'],
+    pokeDistant: ['…なに？', 'なにか用？', 'つつかないでよ。'],
+    carryDistant: ['えっ？！おろして！', 'いきなり持ち上げないで！', 'じ、自分で歩けるから！']
   }
 };
 
@@ -512,6 +552,17 @@ function setThinking(thinking) {
   }
 }
 
+// How she feels about you; the app sends the remembered values (see setRelationship).
+const relationship = createRelationship();
+const wrapAngle = angle => Math.atan2(Math.sin(angle), Math.cos(angle));
+
+/** Tell the app about a touch so it can remember it (friendship, today's count). */
+function reportTouch(kind) {
+  if (!RELATIONSHIP_TOUCH_KINDS.has(kind)) return;
+  if (kind !== 'boundary') relationship.noteTouch(kind);
+  postNative({ type: 'touch', kind });
+}
+
 function holdAnchor(anchor, elapsed, seconds = 12) {
   state.anchorHold = {
     anchor: THREE.MathUtils.clamp(anchor, 0.16, 0.68),
@@ -546,7 +597,10 @@ function startReaction(type, options = {}) {
     bored: 6,
     shiver: 5,
     skyLook: 5.5,
-    startle: 3
+    startle: 3,
+    boundary: 4.4,
+    snub: 2.4,
+    forgive: 3.6
   };
   const targetAnchor = Number.isFinite(Number(options.x))
     ? THREE.MathUtils.clamp(Number(options.x), 0.16, 0.68)
@@ -655,7 +709,12 @@ function chooseVariant(type) {
   // The more often she's been touched recently, the shyer (and cheekier) she gets.
   const mood = variety.mood(currentElapsed());
   // Heart eyes only once she's had a lot of fuss made of her.
-  const weights = mood > 0.45 ? { shy: 2.6, flustered: 2.3, pout: 1.8, giggle: 1.4, love: mood > 0.6 ? 2.4 : 0.6 } : { love: 0.12 };
+  // How shy or fond she gets depends on how close you are: no heart eyes for a stranger.
+  const level = relationship.level;
+  const love = level >= 2 ? (mood > 0.6 ? 2.4 : 0.6) : 0;
+  const weights = level === 0
+    ? { shy: 0.6, flustered: 0.4, love: 0 }
+    : mood > 0.45 ? { shy: 2.6, flustered: 2.3, pout: 1.8, giggle: 1.4, love: love || 0 } : { love: level >= 2 ? 0.12 : 0 };
   const styles = REACTION_STYLES[type];
   return {
     style: styles ? variety.pick(type, styles, weights) : null,
@@ -799,9 +858,11 @@ function raycastCharacter(clientX, clientY) {
   const width = Math.max(0.001, modelBox.max.x - modelBox.min.x);
   const normalizedHeight = (hit.point.y - modelBox.min.y) / height;
   const lateral = Math.abs((hit.point.x - (modelBox.min.x + modelBox.max.x) / 2) / width);
+  // Heights measured on the model: neck 0.82, shoulders 0.81, upper chest from 0.70.
   let zone = 'body';
-  if (normalizedHeight >= 0.73) zone = 'head';
+  if (normalizedHeight >= 0.82) zone = 'head';
   else if (normalizedHeight >= 0.43 && lateral >= 0.19) zone = 'hand';
+  else if (normalizedHeight >= 0.7 && normalizedHeight < 0.8 && lateral < 0.14) zone = 'chest';
   else if (normalizedHeight >= 0.4) zone = 'torso';
   state.model.worldToLocal(hitLocalPosition.copy(hit.point));
   return { hit, zone, normalizedHeight, lateral, side: hitLocalPosition.x >= 0 ? '左' : '右' };
@@ -1048,8 +1109,18 @@ function applyBasePose(elapsed) {
   if (state.emotion === 'sleepy') setMorph('まばたき', Math.max(blinkAmount(elapsed), 0.18));
   if (state.emotion === 'curious') rotateBone('頭', 0, 0.035, 0.045);
 
+  // Upset with you: no smile, a flat look, head turned a little away.
+  const upset = state.upset.x;
+  if (upset > 0.01) {
+    setSmile(0.12 * (1 - upset));
+    setMorph('口角上げ', 0);
+    setMorph('じと目', 0.3 * upset);
+    setMorph('∧', 0.3 * upset);
+    rotateBone('頭', -0.03 * upset, -state.upset.side * 0.18 * upset, 0);
+  }
+
   // Cursor resting on Miku: she brightens up and tilts her head towards it.
-  const hover = state.hoverBlend;
+  const hover = state.hoverBlend * (1 - upset);
   if (hover > 0.001) {
     const base = state.emotion === 'happy' ? 0.32 : 0.12;
     setSmile(Math.max(base, 0.14 + hover * (state.hover?.zone === 'head' ? 0.5 : 0.38)));
@@ -1058,7 +1129,8 @@ function applyBasePose(elapsed) {
     rotateBone('上半身', -0.012 * hover, 0, 0.012 * tilt * hover);
   }
   // A light blush when she's happy or you're paying her attention.
-  const blush = Math.max(state.emotion === 'happy' ? 0.22 : 0, hover * (state.hover?.zone === 'head' ? 0.55 : 0.38));
+  const warmth = relationship.level === 0 ? 0.35 : relationship.level === 1 ? 0.75 : 1;
+  const blush = Math.max(state.emotion === 'happy' ? 0.22 * (1 - upset) : 0, hover * warmth * (state.hover?.zone === 'head' ? 0.55 : 0.38));
   if (blush > 0.001) setMorph('照れ', blush);
 }
 
@@ -1130,7 +1202,14 @@ const TURN_ANGLE = 1.05;
 
 function applyTurnFollowThrough(gaitPose, elapsed, cue = 0) {
   const walkYaw = gaitPose.active ? gaitPose.direction * TURN_ANGLE * gaitPose.turn : 0;
-  const target = walkYaw + state.turnOffset;
+  // While the watchdog is turning her back round, ignore every deliberate offset.
+  const recovering = state.yawWatch.recoverUntil > elapsed;
+  let target = walkYaw + (recovering ? 0 : state.turnOffset);
+  if (!Number.isFinite(target)) target = 0;
+  if (!Number.isFinite(turning.yaw.x) || !Number.isFinite(turning.yaw.v)) {
+    turning.yaw.x = target;
+    turning.yaw.v = 0;
+  }
   if (reducedMotion.matches) {
     turning.yaw.x = target;
     turning.yaw.v = 0;
@@ -1138,7 +1217,7 @@ function applyTurnFollowThrough(gaitPose, elapsed, cue = 0) {
     return;
   }
   // After a full twirl, unwind the angle instead of spinning all the way back.
-  if (state.turnOffset === 0 && Math.abs(target - turning.yaw.x) > Math.PI) turning.yaw.x -= Math.round((turning.yaw.x - target) / (Math.PI * 2)) * Math.PI * 2;
+  if (Math.abs(state.turnOffset) < Math.PI && Math.abs(target - turning.yaw.x) > Math.PI) turning.yaw.x -= Math.round((turning.yaw.x - target) / (Math.PI * 2)) * Math.PI * 2;
   // Unhurried and without overshoot: people don't bounce at the end of a turn.
   const yaw = springTo(turning.yaw, target, 1.15, 0.95);
   const spin = THREE.MathUtils.clamp(turning.yaw.v, -6, 6); // rad/s, + = turning to her left
@@ -1541,19 +1620,25 @@ function updateModel(elapsed) {
   state.turnOffset = 0;
   state.hopLift = 0;
   let routineBehavior = behaviorAt(elapsed);
+  if (relationship.offended && CHEERFUL_ACTIONS.has(routineBehavior.name)) routineBehavior = { name: 'idle', progress: 0 };
   let routineAnchor = anchorAt(elapsed, routineBehavior);
   if (state.pinnedAnchor !== null) {
     // Pinned by the user: keep the idle gestures but don't walk away.
     if (routineBehavior.name === 'walk') routineBehavior = { name: 'idle', progress: 0 };
     routineAnchor = state.pinnedAnchor;
   }
-  const handHeld = state.pointer && !state.pointer.dragging && state.pointer.zone === 'hand';
+  const handHeld = state.pointer && !state.pointer.dragging && state.pointer.zone === 'hand' && !relationship.offended;
   const pointerReaction = state.pointer?.dragging
     ? { type: 'drag', progress: 0.5, fromAnchor: state.currentAnchor, toAnchor: state.currentAnchor }
     : handHeld ? { type: 'handHold', side: state.pointer.side, variant: state.pointer.variant, progress: Math.min(1, (elapsed - state.pointer.started) / 0.35) } : null;
   if (handHeld && !carrying && !state.pointer.greeted && elapsed - state.pointer.started >= 0.6) {
     state.pointer.greeted = true;
     showTouchPhrase('handHold');
+    reportTouch('handHold');
+  } else if (relationship.offended && state.pointer?.zone === 'hand' && !state.pointer.dragging && !state.pointer.greeted
+    && elapsed - state.pointer.started >= 0.4) {
+    state.pointer.greeted = true;
+    snubTouch(state.pointer.side);
   }
   const carryReaction = carrying ? { type: carryPose.phase, progress: carryPose.landingProgress ?? 0.5 } : null;
   const reaction = reducedMotion.matches ? null : carryReaction || pointerReaction || activeReactionAt(elapsed);
@@ -1562,6 +1647,8 @@ function updateModel(elapsed) {
     ? 'reduced'
     : carrying ? 'carry' : pointerReaction ? state.pointer : state.reaction || routineBehavior.name;
   updateHoverBlend(elapsed, Boolean(state.pointer || reaction || behavior.name === 'wave'));
+  springTo(state.upset, relationship.offended ? 1 : 0, 0.45, 1);
+  if (Math.abs(state.upset.x) < 1e-4 && !relationship.offended) state.upset.x = state.upset.v = 0;
   updateMotionSource(source, elapsed);
   resetSkeleton();
   resetMorphs();
@@ -1641,6 +1728,11 @@ function updateModel(elapsed) {
   if (GESTURE_TYPES.includes(behaviorName)) applyGesture(behaviorName, behavior, elapsed);
   else if (!reaction && !state.pointer) applyMicroExpression(behaviorName, elapsed);
   if (behaviorName === 'ouch') applyOuch(behavior.progress, elapsed, behavior.variant);
+  if (behaviorName === 'boundary') applyBoundary(behavior.progress, elapsed, behavior.variant);
+  if (behaviorName === 'snub') applySnub(behavior.progress, elapsed, behavior.variant);
+  if (behaviorName === 'forgive') applyForgive(behavior.progress, elapsed, behavior.variant);
+  // Upset: she stands half turned away from you until you've apologised.
+  if (!carrying && !dragging) state.turnOffset += state.upset.side * 0.6 * state.upset.x;
   if (gaitPose.active) applyWalk(gaitPose);
   applyTurnFollowThrough(gaitPose, elapsed, turnCue(routineBehavior, elapsed, !reaction && !dragging && !carrying));
   if (behaviorName === 'headPat' || behaviorName === 'headStroke') applyHeadPat(behavior.progress, behavior.variant);
@@ -1691,7 +1783,7 @@ function floatSymbol(text, kind, every = 0.5, dx = 0) {
 function gestureSay(variant, step, key, urgent = false) {
   if (!variant || (variant.said ?? 0) >= step) return;
   variant.said = step;
-  if (!showsCharacter || state.thinking) return;
+  if (!showsCharacter || state.thinking || (relationship.offended && !urgent)) return;
   const elapsed = currentElapsed();
   if (!urgent && (variant.talk === false || speechBubble.classList.contains('visible') || elapsed < state.nextTouchSpeech)) return;
   const language = GESTURE_PHRASES[state.language] ? state.language : 'zh-Hant';
@@ -1727,7 +1819,7 @@ function applyGesture(name, behavior, elapsed) {
 
 function applyMicroExpression(behaviorName, elapsed) {
   // Small flickers of feeling while she's otherwise idle, so the face is never frozen.
-  if (!['idle', 'rest-standing', 'walk', 'lookAround'].includes(behaviorName)) return;
+  if (!['idle', 'rest-standing', 'walk', 'lookAround'].includes(behaviorName) || relationship.offended) return;
   if (state.micro && elapsed < state.micro.start) {
     state.micro = null;
     state.nextMicro = elapsed + 2;
@@ -1795,6 +1887,7 @@ function startShakeAftermath(elapsed) {
   state.lastImpact = 0;
   if (!plan) return;
   if (plan.type === 'dizzy') state.shakeTimes.push(elapsed);
+  reportTouch(plan.type === 'ouch' ? 'ouch' : plan.style === 'sulk' ? 'sulk' : 'dizzy');
   const variant = { ...chooseVariant(plan.type), style: plan.style, peak: pending.peak, said: 0 };
   startReaction(plan.type, { touch: true, variant, duration: plan.duration });
   postNative({ type: 'haptic' });
@@ -1867,6 +1960,110 @@ function sayOnce(variant, step, key, emotion) {
   if (speechBubble.classList.contains('visible')) {
     window.setTimeout(() => sayNow(key, emotion), 900);
   } else sayNow(key, emotion);
+}
+
+// ---- Boundaries ---------------------------------------------------------------
+//
+// Touching her chest is not okay, however well you know each other. She flinches back,
+// covers herself and tells you off; if you're friends she's hurt more than angry, and if
+// you do it again she turns her back on you. Never shy, never flattered.
+
+/** Forearms folded across her front; `high` lifts them up over the chest. */
+function crossArms(weight, high = 1) {
+  for (const [index, side] of ['左', '右'].entries()) {
+    const s = index === 0 ? 1 : -1;
+    rotateBone(`${side}肩`, 0, 0, s * 0.08 * high * weight);
+    rotateBone(`${side}腕`, 0, -s * 1.2 * weight, s * (0.35 + 0.4 * high) * weight);
+    rotateBone(`${side}ひじ`, 0, -s * (2.1 + 0.3 * high) * weight, 0);
+    rotateBone(`${side}手首`, 0, 0, s * 0.25 * high * weight);
+  }
+}
+
+function applyBoundary(progress, elapsed, variant = {}) {
+  const style = variant?.style ?? 'angry';
+  const flip = variant?.flip ?? 1;
+  const flinch = easeBetween(progress, 0, 0.07) * (1 - easeBetween(progress, 0.82, 1));
+  const guard = easeBetween(progress, 0.02, 0.13) * (1 - easeBetween(progress, 0.8, 0.97));
+  const startled = easeBetween(progress, 0, 0.03) * (1 - easeBetween(progress, 0.1, 0.2));
+  // A half step back, leaning away, arms up over her chest.
+  offsetBone('センター', 0, -0.05 * flinch, -1.1 * flinch);
+  rotateBone('上半身', -0.1 * flinch, 0, 0);
+  rotateBone('下半身', 0.04 * flinch, 0, 0);
+  crossArms(guard);
+  rotateBone('首', 0.04 * guard, -flip * 0.2 * guard, 0);
+  rotateBone('頭', (style === 'hurt' ? 0.1 : -0.06) * guard, -flip * 0.3 * guard, 0.04 * flip * guard);
+  if (style === 'again') {
+    // Done with you: she turns her back.
+    const away = easeBetween(progress, 0.15, 0.32) * (1 - easeBetween(progress, 0.86, 1));
+    state.turnOffset += flip * 2.2 * away;
+  }
+  setMorph('びっくり', 0.8 * startled);
+  setMorph('口角上げ', 0);
+  if (style === 'hurt') {
+    setMorph('困る', 0.85 * guard);
+    setMorph('怒り', 0.25 * guard);
+    setMorph('じと目', 0.3 * guard);
+  } else {
+    setMorph('怒り', 0.85 * guard);
+    setMorph('じと目', 0.45 * guard);
+  }
+  setMorph('∧', 0.55 * guard);
+}
+
+function applySnub(progress, elapsed, variant = {}) {
+  // Brushes you off: steps away from your hand, folds her arms and looks elsewhere.
+  const flip = variant?.flip ?? 1;
+  const weight = easeBetween(progress, 0, 0.15) * (1 - easeBetween(progress, 0.75, 1));
+  offsetBone('センター', 0, 0, -0.45 * weight);
+  crossArms(0.75 * weight, 0);
+  rotateBone('首', 0, -flip * 0.25 * weight, 0);
+  rotateBone('頭', -0.05 * weight, -flip * 0.35 * weight, 0.03 * flip * weight);
+  setMorph('口角上げ', 0);
+  setMorph('じと目', 0.6 * weight);
+  setMorph('怒り', 0.4 * weight);
+  setMorph('∧', 0.4 * weight);
+}
+
+function applyForgive(progress, elapsed, variant = {}) {
+  // Turns back to you, lets out a breath, and (a little reluctantly) smiles again.
+  const flip = variant?.flip ?? 1;
+  const sigh = easeBetween(progress, 0.05, 0.25) * (1 - easeBetween(progress, 0.35, 0.55));
+  const soften = easeBetween(progress, 0.35, 0.7) * (1 - easeBetween(progress, 0.9, 1));
+  rotateBone('上半身', 0.04 * sigh, 0, 0);
+  rotateBone('頭', 0.08 * sigh, flip * 0.12 * (1 - soften) * sigh, 0.05 * flip * soften);
+  setMorph('まばたき', Math.max(blinkAmount(elapsed), 0.6 * sigh));
+  setMorph('困る', 0.4 * sigh + 0.2 * soften);
+  setSmile(Math.max(0.12, (0.25 + 0.1 * relationship.level) * soften));
+}
+
+let nextSnubLine = 0;
+function snubTouch(side) {
+  // Not now: she's still upset with you.
+  const elapsed = currentElapsed();
+  if (!['boundary', 'snub'].includes(state.reaction?.type)) {
+    startReaction('snub', { touch: true, side, variant: { flip: -state.upset.side, said: 0 } });
+  }
+  if (elapsed >= nextSnubLine) {
+    nextSnubLine = elapsed + 6;
+    sayNow('snub', 'pout');
+  }
+}
+
+function reactToBoundary(side) {
+  const plan = relationship.noteBoundary();
+  const flip = side === '左' ? -1 : 1;
+  state.upset.side = flip;
+  endHover();
+  startReaction('boundary', {
+    touch: true,
+    side,
+    duration: plan.style === 'again' ? 6.5 : 4.4,
+    variant: { style: plan.style, flip, said: 0 }
+  });
+  kick(springs.jolt, flip * 1.2);
+  postNative({ type: 'haptic' });
+  sayNow(plan.style === 'again' ? 'boundaryAgain' : plan.style === 'hurt' ? 'boundaryHurt' : 'boundary', 'pout');
+  reportTouch('boundary');
 }
 
 function applyDizzy(progress, elapsed, variant = null) {
@@ -2232,6 +2429,7 @@ function frame(timestamp) {
   if (state.lastTimestamp === null) state.lastTimestamp = timestamp;
   const delta = Math.min((timestamp - state.lastTimestamp) / 1000, 0.1);
   state.lastTimestamp = timestamp;
+  state.lastFrameAt = performance.now();
   if (state.previewElapsed === null) state.activeElapsed += delta;
 
   if (timestamp - state.renderedAt >= interval) renderState(timestamp);
@@ -2279,12 +2477,13 @@ function showTouchPhrase(type) {
   if (state.thinking || speechBubble.classList.contains('visible') || elapsed < state.nextTouchSpeech) return;
   const language = TOUCH_PHRASES[state.language] ? state.language : 'zh-Hant';
   const teased = variety.mood(elapsed) > 0.6 && type !== 'carry';
-  const key = teased ? 'teased' : type;
-  const phrases = TOUCH_PHRASES[language][key];
+  const key = relationship.phraseKey(type, { teased });
+  const phrases = TOUCH_PHRASES[language][key] ?? TOUCH_PHRASES[language][type];
   if (!phrases?.length) return;
   state.nextTouchSpeech = elapsed + variety.range(2.5, 5);
-  const context = !teased && variety.chance(0.2) ? contextLine() : null;
-  showBubble(context || variety.line(`${language}-${key}`, phrases), teased ? 'curious' : 'happy', 2600);
+  const context = key === type && variety.chance(0.2) ? contextLine() : null;
+  const emotion = key === 'snub' ? 'pout' : key === 'teased' ? 'curious' : key.endsWith('Distant') ? 'calm' : 'happy';
+  showBubble(context || variety.line(`${language}-${key}`, phrases), emotion, 2600);
 }
 
 function handlePointerDown(event) {
@@ -2293,7 +2492,11 @@ function handlePointerDown(event) {
   if (!result || result.zone === 'none') return;
   const point = normalizedPointer(event);
   touchGestures.reset();
-  const cheek = result.zone === 'head' && result.normalizedHeight < 0.88 && result.lateral < 0.13;
+  if (result.zone === 'chest') {
+    reactToBoundary(result.side);
+    return;
+  }
+  const cheek = result.zone === 'head' && result.normalizedHeight >= 0.845 && result.normalizedHeight < 0.89 && result.lateral < 0.13;
   state.pointer = {
     id: event.pointerId,
     startX: event.clientX,
@@ -2317,10 +2520,13 @@ function handlePointerDown(event) {
   postNative({ type: 'haptic' });
 
   const touch = { ...point, touch: true, side: result.side };
-  if (cheek) state.reaction = null;
-  else if (result.zone === 'head') startReaction('headPat', touch);
-  else if (result.zone === 'hand') state.reaction = null;
-  else startReaction('hello', touch);
+  const kind = cheek || result.zone === 'hand' ? null : result.zone === 'head' ? 'headPat' : 'hello';
+  if (kind && relationship.snubs(kind)) snubTouch(result.side);
+  else if (!kind) state.reaction = null;
+  else {
+    startReaction(kind, touch);
+    reportTouch(kind);
+  }
 
   if (!hasNativeBridge() && !cheek && result.zone !== 'hand' && !state.thinking && !speechBubble.classList.contains('visible')) {
     const [text, alternate] = browserReactionText(result.zone);
@@ -2359,9 +2565,11 @@ function rubHead(pointer, point, elapsed) {
     pointer.lastRubNote = elapsed;
   }
   const stroke = reducedMotion.matches ? null : rubGestures.sample({ zone: 'head', x: point.x, y: point.y, time: elapsed });
-  if (stroke) {
+  if (stroke && relationship.snubs('headStroke')) snubTouch(pointer.side);
+  else if (stroke) {
     startReaction('headStroke', { x: point.x, y: point.y, touch: true });
     showTouchPhrase('headStroke');
+    reportTouch('headStroke');
     postNative({ type: 'hover-haptic' });
   }
 }
@@ -2392,7 +2600,8 @@ function moveGrabbedPointer(pointer, event, elapsed) {
     pointer.shakeLines = 0;
     state.carryStyle = chooseVariant('carry').style;
     variety.noteTouch(elapsed);
-    if (variety.chance(0.55)) showTouchPhrase('carry');
+    reportTouch('carry');
+    if (variety.chance(0.55) || relationship.offended || relationship.level === 0) showTouchPhrase('carry');
   }
   state.reaction = null;
   holdAnchor(pointer.startAnchor + point.x - pointer.startPointX, elapsed, 15);
@@ -2418,10 +2627,19 @@ function finishPointer(event = null, { reset = false } = {}) {
     const shaken = shake.release(currentElapsed());
     state.pendingShake = { peak: shaken.peak, at: currentElapsed() };
   } else if (event?.type === 'pointerup' && pointer.cheek) {
-    startReaction('poke', { touch: true, side: pointer.side });
-    showTouchPhrase('poke');
+    if (relationship.snubs('poke')) snubTouch(pointer.side);
+    else {
+      startReaction('poke', { touch: true, side: pointer.side });
+      showTouchPhrase('poke');
+      reportTouch('poke');
+    }
   } else if (event?.type === 'pointerup' && pointer.zone === 'hand') {
-    startReaction('wave', { touch: true, side: pointer.side });
+    if (relationship.snubs('wave')) {
+      if (!pointer.greeted) snubTouch(pointer.side);
+    } else {
+      startReaction('wave', { touch: true, side: pointer.side });
+      if (!pointer.greeted) reportTouch('wave');
+    }
   }
   if (reset || reducedMotion.matches) carry.reset();
   else carry.release({ time: currentElapsed() });
@@ -2443,14 +2661,17 @@ function spawnHoverNote(x, y, zone) {
 
 function pickPhrase(zone) {
   const language = HOVER_PHRASES[state.language] ? state.language : 'zh-Hant';
+  if (relationship.offended) zone = 'cold';
   const phrases = HOVER_PHRASES[language][zone] || [];
-  const context = variety.chance(0.3) ? contextLine() : null;
+  const context = zone !== 'cold' && variety.chance(0.3) ? contextLine() : null;
   return context || variety.line(`${language}-hover-${zone}`, phrases) || '';
 }
 
 /** Called for every pointer position over (or near) Miku; drives the hover reaction. */
 function updateHover(hit, x, y) {
   const elapsed = currentElapsed();
+  // Hovering isn't touching: over her chest just counts as "near her".
+  if (hit?.zone === 'chest') hit = { ...hit, zone: 'body' };
   if (!hit) {
     if (state.hover) endHover();
     return;
@@ -2460,9 +2681,11 @@ function updateHover(hit, x, y) {
     return;
   }
   const stroke = reducedMotion.matches ? null : touchGestures.sample({ zone: hit.zone, x, y, time: elapsed });
-  if (stroke) {
+  if (stroke && relationship.snubs('headStroke')) snubTouch(hit.side);
+  else if (stroke) {
     startReaction('headStroke', { x, y, touch: true });
     showTouchPhrase('headStroke');
+    reportTouch('headStroke');
     spawnHoverNote(x, y, 'head');
     postNative({ type: 'hover-haptic' });
   }
@@ -2493,7 +2716,7 @@ function updateHover(hit, x, y) {
   // Rest the cursor on her for a moment and she says hello back.
   if (!state.hover.dwellDone && elapsed - state.hover.since > HOVER_DWELL_SECONDS && !state.pointer) {
     state.hover.dwellDone = true;
-    if (!state.reaction && !reducedMotion.matches) startReaction('hello');
+    if (!state.reaction && !reducedMotion.matches && !relationship.offended) startReaction('hello');
     const bubbleBusy = state.thinking || speechBubble.classList.contains('visible');
     if (!bubbleBusy && elapsed >= state.nextHoverGreeting) {
       state.nextHoverGreeting = elapsed + HOVER_GREETING_COOLDOWN;
@@ -2580,6 +2803,8 @@ function status() {
     sceneLayerOpacities: sourceOverOpacities(sceneWeightsAt(elapsed), [...state.sceneElements.keys()]),
     bounds: state.bounds ? { ...state.bounds } : null,
     pinnedAnchor: state.pinnedAnchor,
+    relationship: relationship.snapshot(),
+    loopRestarts: state.loopRestarts,
     sceneSlotSeconds: state.sceneSlotSeconds,
     thinking: state.thinking,
     weather: { ...state.weather },
@@ -2634,7 +2859,7 @@ window.mikuCompanion = Object.freeze({
     showBubble(typeof payload.text === 'string' ? payload.text : '', emotion);
     if (action === 'wave' || action === 'stretch' || action === 'rest') startReaction(action);
     else if (action === 'nod') startReaction('hello');
-    else if (!state.reaction?.touch) state.reaction = null;
+    else if (!state.reaction?.touch && state.reaction?.type !== 'forgive') state.reaction = null;
     renderState(performance.now());
     return status();
   },
@@ -2650,6 +2875,14 @@ window.mikuCompanion = Object.freeze({
   setThinking(thinking) {
     setThinking(thinking);
     return true;
+  },
+  /** What the app remembers about the two of you (friendship, whether she's upset). */
+  setRelationship(payload = {}) {
+    const { forgiven } = relationship.set(payload);
+    if (forgiven && showsCharacter && state.ready && !reducedMotion.matches) {
+      startReaction('forgive', { variant: { flip: -state.upset.side, said: 0 } });
+    }
+    return relationship.snapshot();
   },
   setPinnedAnchor(anchor = null) {
     const value = anchor === null ? null : Number(anchor);
@@ -2707,6 +2940,49 @@ window.addEventListener('resize', () => {
   ambient?.resize();
   renderState(performance.now());
 }, { passive: true });
+
+// Watchdog. If the animation loop has stalled while the page is visible, restart it; if she
+// has been facing away from you for a long time without meaning to, turn her back round
+// and tell the app (it keeps a diagnostics log), so the cause can be tracked down.
+let facingAwayChecks = 0;
+window.setInterval(() => {
+  if (!showsCharacter || !state.ready || document.hidden || state.previewElapsed !== null) return;
+  const now = performance.now();
+  const stalled = state.raf === null || now - (state.lastFrameAt ?? now) > 4000;
+  if (stalled) {
+    state.loopRestarts += 1;
+    postNative({ type: 'diag', what: 'loopStalled', raf: state.raf !== null, sinceFrame: Math.round(now - (state.lastFrameAt ?? now)), restarts: state.loopRestarts });
+    stopLoop();
+    startLoop();
+  }
+  const facing = Math.abs(wrapAngle(turning.yaw.x));
+  const meant = ['boundary'].includes(state.reaction?.type);
+  facingAwayChecks = facing > 2.3 && !meant ? facingAwayChecks + 1 : 0;
+  if (facingAwayChecks >= 4) {
+    facingAwayChecks = 0;
+    postNative({
+      type: 'diag',
+      what: 'facingAway',
+      yaw: Number(turning.yaw.x.toFixed(3)),
+      spin: Number(turning.yaw.v.toFixed(3)),
+      turnOffset: Number(state.turnOffset.toFixed(3)),
+      behavior: state.behavior,
+      reaction: state.reaction?.type ?? null,
+      elapsed: Number(currentElapsed().toFixed(2)),
+      springDelta,
+      stalled,
+      upset: Number(state.upset.x.toFixed(3)),
+      walking: JSON.stringify(walking?.status?.() ?? null).slice(0, 400)
+    });
+    turning.yaw.x = wrapAngle(turning.yaw.x);
+    state.yawWatch.recoverUntil = currentElapsed() + 4;
+    if (stalled || springDelta <= 0) {
+      turning.yaw.x = 0;
+      turning.yaw.v = 0;
+      renderState(performance.now());
+    }
+  }
+}, 2000);
 
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {

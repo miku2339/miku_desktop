@@ -85,6 +85,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         server?.stop()
+        CompanionMemory.shared.saveNow()
         if let settingsObserver { NotificationCenter.default.removeObserver(settingsObserver) }
     }
 

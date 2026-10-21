@@ -4,6 +4,7 @@ import { createWalking } from './walking.js';
 import { createCarry } from './carry.js';
 import { createTouchGestures } from './touch-gestures.js';
 import { createShake, shakeAftermath } from './shake.js';
+import { createGestures, GESTURE_PHRASES } from './gestures.js';
 import { createRoutine, createVariety } from './variety.js';
 import { characterEnvironment, defaultWeather, normalizeWeather, timeAnchors } from './environment.js';
 import { createAmbient } from './ambient.js';
@@ -105,7 +106,8 @@ const POSITION_ANCHORS = [0.22, 0.43, 0.62];
 const CYCLE_SECONDS = 150;
 const ALLOWED_EMOTIONS = new Set(['happy', 'curious', 'sleepy', 'calm', 'dizzy', 'pout']);
 const ALLOWED_REPLY_ACTIONS = new Set(['wave', 'stretch', 'rest', 'idle', 'nod']);
-const INTERACTION_TYPES = new Set(['headPat', 'headStroke', 'poke', 'wave', 'stretch', 'rest', 'hello', 'look', 'move', 'dizzy', 'ouch']);
+const GESTURE_TYPES = ['dance', 'idolPose', 'think', 'tidyHair', 'yawn', 'doze', 'sneeze', 'cheer', 'bored', 'shiver', 'skyLook', 'startle'];
+const INTERACTION_TYPES = new Set(['headPat', 'headStroke', 'poke', 'wave', 'stretch', 'rest', 'hello', 'look', 'move', 'dizzy', 'ouch', ...GESTURE_TYPES]);
 const CONTROLLED_BONES = [
   'センター', '上半身', '下半身', '首', '頭', '両目',
   '左肩', '左腕', '左腕捩', '左ひじ', '左手捩', '左手首',
@@ -168,6 +170,11 @@ const state = {
   pendingShake: null,
   lastImpact: 0,
   turnOffset: 0,
+  hopLift: 0,
+  micro: null,
+  nextMicro: 0,
+  lastFlash: 0,
+  nextStartle: 0,
   language: 'zh-Hant'
 };
 
@@ -521,7 +528,19 @@ function startReaction(type, options = {}) {
     look: 2.4,
     move: 4.2,
     dizzy: 4.5,
-    ouch: 3
+    ouch: 3,
+    dance: 7.5,
+    idolPose: 3.2,
+    think: 5.8,
+    tidyHair: 4.5,
+    yawn: 4,
+    doze: 7.5,
+    sneeze: 3.5,
+    cheer: 3.5,
+    bored: 6,
+    shiver: 5,
+    skyLook: 5.5,
+    startle: 3
   };
   const targetAnchor = Number.isFinite(Number(options.x))
     ? THREE.MathUtils.clamp(Number(options.x), 0.16, 0.68)
@@ -609,13 +628,17 @@ const touchGestures = createTouchGestures();
 const rubGestures = createTouchGestures();
 // Every reaction, idle moment and line is drawn fresh, so she never plays the same clip twice in a row.
 const variety = createVariety();
-const routine = createRoutine({ seed: (Date.now() ^ Math.floor(Math.random() * 1e9)) >>> 0, startAnchor: POSITION_ANCHORS[0] });
+const routine = createRoutine({
+  seed: (Date.now() ^ Math.floor(Math.random() * 1e9)) >>> 0,
+  startAnchor: POSITION_ANCHORS[0],
+  contextWeights: idleContextWeights
+});
 
 const REACTION_STYLES = {
   wave: ['big', 'small', 'tilt'],
-  headPat: ['melt', 'shy', 'giggle', 'proud'],
-  headStroke: ['melt', 'shy', 'giggle', 'proud'],
-  poke: ['wink', 'surprised', 'pout', 'flustered'],
+  headPat: ['melt', 'shy', 'giggle', 'proud', 'love'],
+  headStroke: ['melt', 'shy', 'giggle', 'proud', 'love'],
+  poke: ['wink', 'surprised', 'pout', 'flustered', 'tongue'],
   hello: ['nod', 'curious', 'bounce'],
   stretch: ['plain', 'yawn', 'side'],
   handHold: ['swing', 'shy', 'happy'],
@@ -625,7 +648,8 @@ const REACTION_STYLES = {
 function chooseVariant(type) {
   // The more often she's been touched recently, the shyer (and cheekier) she gets.
   const mood = variety.mood(currentElapsed());
-  const weights = mood > 0.45 ? { shy: 2.6, flustered: 2.3, pout: 1.8, giggle: 1.4 } : {};
+  // Heart eyes only once she's had a lot of fuss made of her.
+  const weights = mood > 0.45 ? { shy: 2.6, flustered: 2.3, pout: 1.8, giggle: 1.4, love: mood > 0.6 ? 2.4 : 0.6 } : { love: 0.12 };
   const styles = REACTION_STYLES[type];
   return {
     style: styles ? variety.pick(type, styles, weights) : null,
@@ -1105,6 +1129,8 @@ function applyTurnFollowThrough(gaitPose) {
     state.model.rotation.y = target;
     return;
   }
+  // After a full twirl, unwind the angle instead of spinning all the way back.
+  if (state.turnOffset === 0 && Math.abs(target - turning.yaw.x) > Math.PI) turning.yaw.x -= Math.round((turning.yaw.x - target) / (Math.PI * 2)) * Math.PI * 2;
   const yaw = springTo(turning.yaw, target, 1.55, 0.74);
   const spin = THREE.MathUtils.clamp(turning.yaw.v, -7, 7); // rad/s, + = turning to her left
   const lead = THREE.MathUtils.clamp(target - yaw, -0.9, 0.9);
@@ -1217,6 +1243,16 @@ function applyHeadPat(progress, variant = null) {
       setMorph('照れ', 0.3 * weight);
       setSmile(Math.max(0.12, 0.5 * weight));
       break;
+    case 'love':
+      // Heart eyes and a big blush, with little hearts floating up.
+      rotateBone('頭', 0.04 * weight, 0, 0.04 * nuzzle);
+      setMorph('まばたき', 0);
+      setMorph('はぁと', 0.9 * weight);
+      setMorph('照れ', 1 * weight);
+      setSmile(Math.max(0.12, 0.9 * weight));
+      setMorph('ワ', 0.2 * weight);
+      if (weight > 0.6) floatSymbol('♡', 'love', 0.6);
+      break;
     default:
       setMorph('まばたき', Math.max(blink, 0.72 * weight));
       setMorph('なごみ', 0.35 * weight);
@@ -1275,6 +1311,13 @@ function applyPoke(progress, elapsed, side, variant = null) {
       setMorph('じと目', 0.6 * weight);
       setMorph('口角下げ', 0.35 * weight);
       setMorph('ω', 0.3 * weight);
+      setMorph('照れ', 0.35 * weight);
+      break;
+    case 'tongue':
+      // Cheeky: wink and stick her tongue out.
+      rotateBone('頭', -0.02 * weight, 0, sign * 0.1 * weight);
+      setMorph(side === '右' ? 'ウィンク右' : 'ウィンク', 0.85 * weight);
+      setMorph('てへぺろ', 0.9 * weight);
       setMorph('照れ', 0.35 * weight);
       break;
     case 'flustered':
@@ -1456,6 +1499,7 @@ function updateModel(elapsed) {
   if (carrying) reactToShaking(shaken);
   else if (state.pendingShake) startShakeAftermath(elapsed);
   state.turnOffset = 0;
+  state.hopLift = 0;
   let routineBehavior = behaviorAt(elapsed);
   let routineAnchor = anchorAt(elapsed, routineBehavior);
   if (state.pinnedAnchor !== null) {
@@ -1554,6 +1598,8 @@ function updateModel(elapsed) {
   if (behaviorName === 'hum') applyHum(behavior.progress, elapsed, behavior.variant);
   if (behaviorName === 'rest-standing' || behaviorName === 'rest') applyRest(behavior.progress);
   if (behaviorName === 'dizzy') applyDizzy(behavior.progress, elapsed, behavior.variant);
+  if (GESTURE_TYPES.includes(behaviorName)) applyGesture(behaviorName, behavior, elapsed);
+  else if (!reaction && !state.pointer) applyMicroExpression(behaviorName, elapsed);
   if (behaviorName === 'ouch') applyOuch(behavior.progress, elapsed, behavior.variant);
   if (gaitPose.active) applyWalk(gaitPose);
   applyTurnFollowThrough(gaitPose);
@@ -1569,6 +1615,101 @@ function updateModel(elapsed) {
   blendMotionTransition(elapsed);
   if (!gaitDisabled) walking?.solve();
   state.model.updateMatrixWorld(true);
+}
+
+// ---- More actions, reactions and micro-expressions --------------------------
+
+function idleContextWeights() {
+  // Called while the idle routine is being planned: the hour and weather tilt the odds.
+  const hour = currentHour();
+  const weather = state.weather?.kind;
+  const late = hour >= 22 || hour < 5;
+  const evening = hour >= 20 || hour < 7;
+  return {
+    doze: late ? 1.6 : evening ? 0.4 : 0.03,
+    yawn: late ? 1.5 : evening ? 1 : hour >= 13 && hour < 15 ? 0.9 : 0.4,
+    cheer: hour >= 6 && hour < 11 ? 1.3 : 0.5,
+    dance: late ? 0.5 : 1.1,
+    sneeze: weather === 'snow' || weather === 'rain' ? 0.9 : 0.25,
+    shiver: weather === 'snow' ? 1.6 : 0,
+    skyLook: weather === 'rain' || weather === 'snow' ? 1.3 : 0
+  };
+}
+
+function floatSymbol(text, kind, every = 0.5, dx = 0) {
+  const elapsed = currentElapsed();
+  const key = `lastSymbol-${kind}`;
+  const last = state[key] ?? -Infinity;
+  if (every > 0 && elapsed >= last && elapsed - last < every) return;
+  state[key] = elapsed;
+  const face = projectedFaceAnchor();
+  if (!face) return;
+  const note = spawnHoverNote(face.x + dx + (variety.random() - 0.5) * 0.02, face.y - 0.05, kind);
+  if (note) note.textContent = text;
+}
+
+function gestureSay(variant, step, key, urgent = false) {
+  if (!variant || (variant.said ?? 0) >= step) return;
+  variant.said = step;
+  if (!showsCharacter || state.thinking) return;
+  const elapsed = currentElapsed();
+  if (!urgent && (variant.talk === false || speechBubble.classList.contains('visible') || elapsed < state.nextTouchSpeech)) return;
+  const language = GESTURE_PHRASES[state.language] ? state.language : 'zh-Hant';
+  const phrases = GESTURE_PHRASES[language][key];
+  if (!phrases?.length) return;
+  state.nextTouchSpeech = elapsed + variety.range(2, 4);
+  const emotion = ['doze', 'yawn'].includes(key) ? 'sleepy' : ['think', 'shiver', 'thunder', 'rainFeel'].includes(key) ? 'curious' : 'happy';
+  showBubble(variety.line(`g-${language}-${key}`, phrases), emotion, 2600);
+}
+
+const gestures = createGestures({
+  rotateBone,
+  twistBone,
+  offsetBone,
+  setMorph,
+  setSmile,
+  scaleMorph,
+  blinkAmount,
+  easeBetween,
+  envelope: gestureEnvelope,
+  symbol: (text, kind, dx = 0) => floatSymbol(text, kind, 0, dx),
+  say: gestureSay,
+  setTurnOffset: value => { state.turnOffset = value; },
+  lift: value => { state.hopLift = Math.max(state.hopLift, value); }
+});
+
+function applyGesture(name, behavior, elapsed) {
+  const variant = behavior.variant ?? {};
+  if (name === 'skyLook' && !variant.style) variant.style = state.weather?.kind === 'snow' ? 'snow' : 'rain';
+  if (!variant.side) variant.side = variant.flip === -1 ? '左' : '右';
+  gestures[name]?.(behavior.progress, elapsed, variant);
+}
+
+function applyMicroExpression(behaviorName, elapsed) {
+  // Small flickers of feeling while she's otherwise idle, so the face is never frozen.
+  if (!['idle', 'rest-standing', 'walk', 'lookAround'].includes(behaviorName)) return;
+  if (state.micro && elapsed < state.micro.start) {
+    state.micro = null;
+    state.nextMicro = elapsed + 2;
+  }
+  if ((!state.micro || elapsed > state.micro.end) && elapsed >= state.nextMicro) {
+    const duration = variety.range(1.2, 2.2);
+    state.micro = { type: variety.pick('micro', gestures.MICRO), start: elapsed, end: elapsed + duration };
+    state.nextMicro = elapsed + duration + variety.range(5, 12);
+  }
+  const micro = state.micro;
+  if (micro && elapsed >= micro.start && elapsed <= micro.end) {
+    gestures.micro(micro.type, (elapsed - micro.start) / (micro.end - micro.start), elapsed);
+  }
+}
+
+function reactToLightning(flash, elapsed) {
+  // A bright strike makes her jump and cover her ears (not while being carried around).
+  const rising = flash > 0.6 && state.lastFlash < 0.3;
+  state.lastFlash = flash;
+  if (!rising || state.pointer || carry.status().phase !== 'idle' || elapsed < state.nextStartle) return;
+  state.nextStartle = elapsed + 25;
+  if (!reducedMotion.matches) startReaction('startle', { variant: { ...chooseVariant('startle'), said: 0, talk: true } });
 }
 
 // ---- Being shaken ----------------------------------------------------------
@@ -2019,11 +2160,12 @@ function renderState(timestamp) {
       sunset: state.sunset
     });
     applyLighting(background.periodWeights, env);
+    reactToLightning(env.flash, elapsed);
     updateModel(elapsed);
     grounding.update(
       camera.position.y + CAMERA_HEIGHT * (0.5 - GROUND_SCREEN_Y),
       mixNumber(background.periodWeights, 'shadowOpacity') * 1.5 * env.shadowScale,
-      carryPose.height
+      carryPose.height + state.hopLift
     );
     (outline || renderer).render(scene, camera);
     updateCharacterBounds(timestamp);
@@ -2351,6 +2493,15 @@ canvas.addEventListener('webglcontextrestored', () => window.location.reload(), 
 canvas.addEventListener('pointerdown', handlePointerDown);
 canvas.addEventListener('pointermove', handlePointerMove, { passive: true });
 canvas.addEventListener('pointerup', event => finishPointer(event));
+canvas.addEventListener('dblclick', event => {
+  // Double-click: her idol pose, peace sign and wink.
+  if (!showsCharacter || !state.interactive) return;
+  const hit = raycastCharacter(event.clientX, event.clientY);
+  if (!hit || hit.zone === 'none') return;
+  const side = hit.side === '左' ? '左' : '右';
+  startReaction('idolPose', { touch: true, side, variant: { ...chooseVariant('idolPose'), side, said: 0, talk: true } });
+  postNative({ type: 'haptic' });
+});
 canvas.addEventListener('pointerleave', () => { if (!state.pointer) endHover(); });
 canvas.addEventListener('pointercancel', event => finishPointer(event));
 canvas.addEventListener('lostpointercapture', event => finishPointer(event));

@@ -77,3 +77,29 @@ test('routine mixes all idle actions', () => {
   for (let time = 0; time < 3000; time += 1) seen.add(routine.behaviorAt(time).name);
   for (const name of ['idle', 'walk', 'lookAround', 'hum', 'wave', 'stretch', 'rest-standing']) assert.ok(seen.has(name), name);
 });
+
+test('time and weather decide the situational idle actions', () => {
+  const seen = contextWeights => {
+    const routine = createRoutine({ seed: 4242, contextWeights });
+    const names = new Set();
+    for (let time = 0; time < 6000; time += 1) names.add(routine.behaviorAt(time).name);
+    return names;
+  };
+  const daytime = seen(() => ({}));
+  for (const name of ['dance', 'think', 'tidyHair', 'cheer', 'bored', 'yawn']) assert.ok(daytime.has(name), name);
+  for (const name of ['doze', 'shiver', 'skyLook']) assert.ok(!daytime.has(name), `${name} without a reason`);
+  const snowyNight = seen(() => ({ doze: 1.6, shiver: 1.6, skyLook: 1.3 }));
+  for (const name of ['doze', 'shiver', 'skyLook']) assert.ok(snowyNight.has(name), name);
+});
+
+test('new idle actions get a style and a duration in range', () => {
+  const routine = createRoutine({ seed: 99 });
+  const styles = { dance: new Set(), think: new Set() };
+  for (let time = 0; time < 8000; time += 1) {
+    const behavior = routine.behaviorAt(time);
+    if (styles[behavior.name]) styles[behavior.name].add(behavior.variant.style);
+    if (behavior.name === 'dance') assert.ok(behavior.duration >= 6.5 && behavior.duration <= 8.5);
+  }
+  assert.deepEqual([...styles.dance].sort(), ['idol', 'sway', 'twirl']);
+  assert.deepEqual([...styles.think].sort(), ['idea', 'plain']);
+});

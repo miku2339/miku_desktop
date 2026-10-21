@@ -38,7 +38,9 @@ export function createVariety(random = Math.random) {
     const pool = list.length > 1 ? list.filter(option => option.id !== previous) : list;
     const total = pool.reduce((sum, option) => sum + Math.max(0, weights[option.id] ?? option.weight ?? 1), 0);
     let roll = random() * (total || 1);
-    let choice = pool[pool.length - 1];
+    // Fall back to the last option that can actually be picked (rounding can leave a sliver of `roll`).
+    const weightOf = option => Math.max(0, weights[option.id] ?? option.weight ?? 1);
+    let choice = [...pool].reverse().find(option => weightOf(option) > 0) ?? pool[pool.length - 1];
     for (const option of pool) {
       roll -= Math.max(0, weights[option.id] ?? option.weight ?? 1);
       if (roll <= 0) {
@@ -90,18 +92,42 @@ export function createVariety(random = Math.random) {
 
 const IDLE_ACTIONS = [
   { id: 'walk', weight: 2.6 },
-  { id: 'lookAround', weight: 1.8 },
-  { id: 'hum', weight: 1.6 },
-  { id: 'wave', weight: 1.2 },
-  { id: 'stretch', weight: 1.1 },
-  { id: 'rest-standing', weight: 1.1 }
+  { id: 'lookAround', weight: 1.6 },
+  { id: 'hum', weight: 1.4 },
+  { id: 'wave', weight: 1 },
+  { id: 'stretch', weight: 0.9 },
+  { id: 'rest-standing', weight: 1 },
+  { id: 'dance', weight: 1.1 },
+  { id: 'think', weight: 1 },
+  { id: 'tidyHair', weight: 0.8 },
+  { id: 'cheer', weight: 0.6 },
+  { id: 'bored', weight: 0.7 },
+  { id: 'yawn', weight: 0.5 },
+  { id: 'sneeze', weight: 0.3 },
+  // Only when the time or weather calls for it (see `contextWeights`).
+  { id: 'doze', weight: 0 },
+  { id: 'shiver', weight: 0 },
+  { id: 'skyLook', weight: 0 }
 ];
+
+const GESTURE_DURATIONS = {
+  dance: [6.5, 8.5],
+  think: [5, 6.5],
+  tidyHair: [4, 5],
+  cheer: [3.2, 3.8],
+  bored: [5.5, 7],
+  yawn: [3.6, 4.4],
+  sneeze: [3.2, 3.8],
+  doze: [6.5, 9],
+  shiver: [4.5, 6],
+  skyLook: [5, 6.5]
+};
 
 /**
  * Open-ended idle routine. Seeded, so it is stable for a given elapsed time within a
  * session (previews and both pages agree) but different every time the app starts.
  */
-export function createRoutine({ seed = Date.now(), minAnchor = 0.2, maxAnchor = 0.64, startAnchor = 0.22 } = {}) {
+export function createRoutine({ seed = Date.now(), minAnchor = 0.2, maxAnchor = 0.64, startAnchor = 0.22, contextWeights = null } = {}) {
   const random = mulberry32(seed);
   const variety = createVariety(random);
   const segments = [];
@@ -118,13 +144,16 @@ export function createRoutine({ seed = Date.now(), minAnchor = 0.2, maxAnchor = 
 
   function generate() {
     cursor += variety.range(5, 15); // idle gap
-    const name = variety.pick('idle', IDLE_ACTIONS);
+    // Time of day and weather can make some actions likelier (dozing at night, shivering in snow).
+    const name = variety.pick('idle', IDLE_ACTIONS, contextWeights?.() ?? {});
     const variant = {
       speed: variety.range(0.85, 1.18),
       amplitude: variety.range(0.8, 1.2),
       side: variety.chance(0.5) ? '左' : '右',
       flip: variety.chance(0.5) ? 1 : -1,
-      style: null
+      style: null,
+      // Not every idle moment needs a line.
+      talk: variety.chance(0.45)
     };
     let duration;
     let fromAnchor = anchor;
@@ -151,6 +180,24 @@ export function createRoutine({ seed = Date.now(), minAnchor = 0.2, maxAnchor = 
         break;
       case 'hum':
         duration = variety.range(6, 10);
+        break;
+      case 'dance':
+        variant.style = variety.pick('idleDance', ['sway', 'twirl', 'idol']);
+        duration = variety.range(...GESTURE_DURATIONS.dance);
+        break;
+      case 'think':
+        variant.style = variety.pick('idleThink', [{ id: 'plain', weight: 1 }, { id: 'idea', weight: 1.4 }]);
+        duration = variety.range(...GESTURE_DURATIONS.think);
+        break;
+      case 'tidyHair':
+      case 'cheer':
+      case 'bored':
+      case 'yawn':
+      case 'sneeze':
+      case 'doze':
+      case 'shiver':
+      case 'skyLook':
+        duration = variety.range(...GESTURE_DURATIONS[name]);
         break;
       default:
         duration = 5;

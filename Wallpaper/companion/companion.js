@@ -226,6 +226,7 @@ const TOUCH_PHRASES = {
     ouch: ['好痛…', '輕一點放我下來嘛！', '嗚…摔到了啦。', '痛痛痛…', '要接住我啦！'],
     // Touched where she doesn't want to be touched. Never shy or flattered: just "no".
     boundary: ['欸！不要碰那裡！', '你在幹嘛？！那裡不可以碰！', '…很過分耶。不准碰那裡。'],
+    boundarySkirt: ['欸！不准掀裙子！', '你在幹嘛？！變態！', '…很過分耶。不要碰我的裙子。'],
     boundaryHurt: ['…我還以為你不會這樣做。', '我們是朋友吧？那裡不可以碰。', '…你這樣讓我很不舒服。'],
     boundaryAgain: ['我說了不要！不理你了。', '……你不道歉的話，我不會理你。', '真的很討厭。走開啦。'],
     snub: ['……先道歉。', '我還在生氣。', '別碰我，先跟我道歉。', '哼，不想理你。', '……'],
@@ -252,6 +253,7 @@ const TOUCH_PHRASES = {
     forgive: ['…Fine. I forgive you, once.', "Don't do it again, okay?", 'I only forgive you a little bit.', 'You owe me a leek!'],
     ouch: ['Ow…', 'Put me down gently!', 'Ugh… that hurt.', 'Ow ow ow…', 'You were supposed to catch me!'],
     boundary: ["Hey! Don't touch me there!", 'What are you doing?! Not there!', "…That's not okay. Don't touch me there."],
+    boundarySkirt: ["Hey! Don't touch my skirt!", 'What are you doing?! Creep!', "…That's not okay. Hands off my skirt."],
     boundaryHurt: ["…I didn't think you'd do that.", "We're friends, right? Not there.", '…That made me really uncomfortable.'],
     boundaryAgain: ["I said no! I'm not talking to you.", "…I'm ignoring you until you apologise.", 'Seriously, I hate that. Go away.'],
     snub: ['…Apologise first.', "I'm still upset.", "Don't touch me. Say sorry first.", "Hmph. I'm ignoring you.", '…'],
@@ -277,6 +279,7 @@ const TOUCH_PHRASES = {
     forgive: ['…しょうがないなぁ、許してあげる。', '次はないからね。', 'ちょっとだけ許してあげる。', 'ネギおごってくれたら許す！'],
     ouch: ['いたた…', 'もっとそっと降ろしてよ！', 'うぅ…ぶつけた。', 'いたいいたい…', 'ちゃんと受け止めてよ！'],
     boundary: ['ちょっと！そこは触らないで！', 'なにしてるの？！そこはダメ！', '…ひどい。そこは触らないで。'],
+    boundarySkirt: ['ちょっと！スカートめくらないで！', 'なにしてるの？！へんたい！', '…ひどい。スカートに触らないで。'],
     boundaryHurt: ['…そういうことする人だと思わなかった。', '友だちでしょ？そこはダメだよ。', '…すごく嫌な気持ちになった。'],
     boundaryAgain: ['ダメって言ったよね！もう知らない。', '……謝るまで口きかないから。', 'ほんとに嫌。あっち行って。'],
     snub: ['……先に謝って。', 'まだ怒ってるんだからね。', '触らないで。まず謝ってよ。', 'ふん、知らない。', '……'],
@@ -557,10 +560,10 @@ const relationship = createRelationship();
 const wrapAngle = angle => Math.atan2(Math.sin(angle), Math.cos(angle));
 
 /** Tell the app about a touch so it can remember it (friendship, today's count). */
-function reportTouch(kind) {
+function reportTouch(kind, part = null) {
   if (!RELATIONSHIP_TOUCH_KINDS.has(kind)) return;
   if (kind !== 'boundary') relationship.noteTouch(kind);
-  postNative({ type: 'touch', kind });
+  postNative(part ? { type: 'touch', kind, part } : { type: 'touch', kind });
 }
 
 function holdAnchor(anchor, elapsed, seconds = 12) {
@@ -842,6 +845,39 @@ function updateCharacterBounds(timestamp) {
   postNative({ type: 'bounds', rect: { ...rect } });
 }
 
+const LIMB_BONE = /腕|ひじ|肩|手|指|袖/;
+const HAIR_BONE = /髪/;
+const CHEST_BONE = /^(上半身2|ﾈｸﾀｲ[０-２0-2])$/;
+const SKIRT_BONE = /スカート|ｽｶｰﾄ|下半身|足/;
+
+/** Name of the bone with the most weight on the triangle that was hit. */
+function dominantBone(hit) {
+  const mesh = hit?.object;
+  const face = hit?.face;
+  const skinIndex = mesh?.geometry?.attributes?.skinIndex;
+  const skinWeight = mesh?.geometry?.attributes?.skinWeight;
+  if (!mesh?.isSkinnedMesh || !face || !skinIndex || !skinWeight) return '';
+  const totals = new Map();
+  for (const vertex of [face.a, face.b, face.c]) {
+    for (let slot = 0; slot < 4; slot += 1) {
+      const weight = skinWeight.getComponent(vertex, slot);
+      if (weight > 0) {
+        const index = skinIndex.getComponent(vertex, slot);
+        totals.set(index, (totals.get(index) ?? 0) + weight);
+      }
+    }
+  }
+  let best = null;
+  let bestWeight = -1;
+  for (const [index, weight] of totals) {
+    if (weight > bestWeight) {
+      bestWeight = weight;
+      best = index;
+    }
+  }
+  return mesh.skeleton?.bones?.[best]?.name ?? '';
+}
+
 function raycastCharacter(clientX, clientY) {
   if (!state.model || !state.interactive) return null;
   const rect = canvas.getBoundingClientRect();
@@ -858,11 +894,17 @@ function raycastCharacter(clientX, clientY) {
   const width = Math.max(0.001, modelBox.max.x - modelBox.min.x);
   const normalizedHeight = (hit.point.y - modelBox.min.y) / height;
   const lateral = Math.abs((hit.point.x - (modelBox.min.x + modelBox.max.x) / 2) / width);
-  // Heights measured on the model: neck 0.82, shoulders 0.81, upper chest from 0.70.
+  // Which part of her was touched comes from the bone that moves that spot, so an arm
+  // resting in front of her body still counts as her arm. Heights measured on the model:
+  // neck 0.82, shoulders 0.81, upper chest from 0.70, waist 0.645, hip joints 0.58.
+  const bone = dominantBone(hit);
+  const limb = LIMB_BONE.test(bone);
+  const hair = HAIR_BONE.test(bone);
   let zone = 'body';
   if (normalizedHeight >= 0.82) zone = 'head';
-  else if (normalizedHeight >= 0.43 && lateral >= 0.19) zone = 'hand';
-  else if (normalizedHeight >= 0.7 && normalizedHeight < 0.8 && lateral < 0.14) zone = 'chest';
+  else if (normalizedHeight >= 0.43 && (limb || lateral >= 0.19)) zone = 'hand';
+  else if (!hair && normalizedHeight >= 0.66 && (CHEST_BONE.test(bone) || (bone === '上半身' && normalizedHeight >= 0.72))) zone = 'chest';
+  else if (!hair && normalizedHeight >= 0.47 && normalizedHeight < 0.66 && SKIRT_BONE.test(bone)) zone = 'skirt';
   else if (normalizedHeight >= 0.4) zone = 'torso';
   state.model.worldToLocal(hitLocalPosition.copy(hit.point));
   return { hit, zone, normalizedHeight, lateral, side: hitLocalPosition.x >= 0 ? '左' : '右' };
@@ -1979,6 +2021,16 @@ function crossArms(weight, high = 1) {
   }
 }
 
+/** Both hands pressing the front of her skirt down. */
+function holdSkirtDown(weight) {
+  for (const [index, side] of ['左', '右'].entries()) {
+    const s = index === 0 ? 1 : -1;
+    rotateBone(`${side}腕`, 0, -s * 0.55 * weight, -s * 0.1 * weight);
+    rotateBone(`${side}ひじ`, 0, -s * 0.5 * weight, 0);
+    rotateBone(`${side}手首`, 0, 0, -s * 0.3 * weight);
+  }
+}
+
 function applyBoundary(progress, elapsed, variant = {}) {
   const style = variant?.style ?? 'angry';
   const flip = variant?.flip ?? 1;
@@ -1989,7 +2041,8 @@ function applyBoundary(progress, elapsed, variant = {}) {
   offsetBone('センター', 0, -0.05 * flinch, -1.1 * flinch);
   rotateBone('上半身', -0.1 * flinch, 0, 0);
   rotateBone('下半身', 0.04 * flinch, 0, 0);
-  crossArms(guard);
+  if (variant?.part === 'skirt') holdSkirtDown(guard);
+  else crossArms(guard);
   rotateBone('首', 0.04 * guard, -flip * 0.2 * guard, 0);
   rotateBone('頭', (style === 'hurt' ? 0.1 : -0.06) * guard, -flip * 0.3 * guard, 0.04 * flip * guard);
   if (style === 'again') {
@@ -2049,7 +2102,7 @@ function snubTouch(side) {
   }
 }
 
-function reactToBoundary(side) {
+function reactToBoundary(side, part = 'chest') {
   const plan = relationship.noteBoundary();
   const flip = side === '左' ? -1 : 1;
   state.upset.side = flip;
@@ -2058,12 +2111,13 @@ function reactToBoundary(side) {
     touch: true,
     side,
     duration: plan.style === 'again' ? 6.5 : 4.4,
-    variant: { style: plan.style, flip, said: 0 }
+    variant: { style: plan.style, flip, part, said: 0 }
   });
   kick(springs.jolt, flip * 1.2);
   postNative({ type: 'haptic' });
-  sayNow(plan.style === 'again' ? 'boundaryAgain' : plan.style === 'hurt' ? 'boundaryHurt' : 'boundary', 'pout');
-  reportTouch('boundary');
+  const first = part === 'skirt' ? 'boundarySkirt' : 'boundary';
+  sayNow(plan.style === 'again' ? 'boundaryAgain' : plan.style === 'hurt' ? 'boundaryHurt' : first, 'pout');
+  reportTouch('boundary', part);
 }
 
 function applyDizzy(progress, elapsed, variant = null) {
@@ -2492,8 +2546,8 @@ function handlePointerDown(event) {
   if (!result || result.zone === 'none') return;
   const point = normalizedPointer(event);
   touchGestures.reset();
-  if (result.zone === 'chest') {
-    reactToBoundary(result.side);
+  if (result.zone === 'chest' || result.zone === 'skirt') {
+    reactToBoundary(result.side, result.zone);
     return;
   }
   const cheek = result.zone === 'head' && result.normalizedHeight >= 0.845 && result.normalizedHeight < 0.89 && result.lateral < 0.13;
@@ -2670,8 +2724,8 @@ function pickPhrase(zone) {
 /** Called for every pointer position over (or near) Miku; drives the hover reaction. */
 function updateHover(hit, x, y) {
   const elapsed = currentElapsed();
-  // Hovering isn't touching: over her chest just counts as "near her".
-  if (hit?.zone === 'chest') hit = { ...hit, zone: 'body' };
+  // Hovering isn't touching: over her chest or skirt just counts as "near her".
+  if (hit?.zone === 'chest' || hit?.zone === 'skirt') hit = { ...hit, zone: 'body' };
   if (!hit) {
     if (state.hover) endHover();
     return;

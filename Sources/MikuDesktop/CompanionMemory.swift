@@ -27,13 +27,15 @@ struct MemoryContext: Sendable {
     var offended: Bool
     var justForgiven: Bool
     var boundaryStrikesToday: Int
+    /// Where she was touched last time ("chest" or "skirt").
+    var boundaryPart: String?
     var touchesToday: [String: Int]
     var daysKnown: Int
     var hoursSinceLastChat: Double?
 
     static let empty = MemoryContext(
         summary: "", facts: [], friendship: 30, level: 1, offended: false, justForgiven: false,
-        boundaryStrikesToday: 0, touchesToday: [:], daysKnown: 0, hoursSinceLastChat: nil
+        boundaryStrikesToday: 0, boundaryPart: nil, touchesToday: [:], daysKnown: 0, hoursSinceLastChat: nil
     )
 }
 
@@ -68,6 +70,7 @@ final class CompanionMemory {
         var offendedSince: Date?
         var boundaryStrikes: Int = 0
         var lastBoundary: Date?
+        var lastBoundaryPart: String?
         var dailyGain: [String: Double] = [:]
     }
 
@@ -142,6 +145,7 @@ final class CompanionMemory {
             offended: relationship.offendedSince != nil,
             justForgiven: justForgiven,
             boundaryStrikesToday: strikesToday,
+            boundaryPart: relationship.lastBoundaryPart,
             touchesToday: today.filter { $0.key != "boundary" },
             daysKnown: max(0, days),
             hoursSinceLastChat: hours
@@ -221,7 +225,7 @@ final class CompanionMemory {
 
     // MARK: - Touch
 
-    func recordTouch(_ kind: String) {
+    func recordTouch(_ kind: String, part: String? = nil) {
         guard Self.touchFriendship[kind] != nil || kind == "boundary" else { return }
         let day = Self.dayKey(Date())
         if let index = store.touchDays.firstIndex(where: { $0.day == day }) {
@@ -238,6 +242,7 @@ final class CompanionMemory {
             store.relationship.offendedSince = store.relationship.offendedSince ?? Date()
             store.relationship.boundaryStrikes += 1
             store.relationship.lastBoundary = Date()
+            store.relationship.lastBoundaryPart = part ?? "chest"
             justForgiven = false
         } else if let change = Self.touchFriendship[kind] {
             if change < 0 {

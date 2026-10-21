@@ -510,9 +510,9 @@ actor LocalAI {
             if let hours = memory.hoursSinceLastChat, hours >= 24 { lines.append("你們已經 \(Int(hours / 24)) 天沒聊天了。") }
             if !touches.isEmpty { lines.append("今天對方在桌面上\(touches)。") }
             if memory.offended {
-                lines.append("重要：對方今天碰了你的胸部\(memory.boundaryStrikesToday > 1 ? "（不只一次）" : "")，你覺得很不舒服、很生氣。在對方真心道歉之前，回覆要冷淡、簡短，可以直接要求對方道歉；不要撒嬌、不要害羞、不要裝作沒事。")
+                lines.append("重要：對方今天\(memory.boundaryPart == "skirt" ? "掀你的裙子" : "碰了你的胸部")\(memory.boundaryStrikesToday > 1 ? "（不只一次）" : "")，你覺得很不舒服、很生氣。在對方真心道歉之前，回覆要冷淡、簡短，可以直接要求對方道歉；不要撒嬌、不要害羞、不要裝作沒事。")
             } else if memory.justForgiven {
-                lines.append("對方剛剛為碰你胸部的事道歉了。你接受道歉，但要清楚說下次不可以再這樣，語氣可以慢慢緩和。")
+                lines.append("對方剛剛為\(memory.boundaryPart == "skirt" ? "掀你裙子" : "碰你胸部")的事道歉了。你接受道歉，但要清楚說下次不可以再這樣，語氣可以慢慢緩和。")
             }
         case .english:
             let levels = ["you've only just met, so you're polite and a little reserved", "you're friends and talk casually", "you're good friends; you joke around and share your small worries", "you're very close friends and completely relaxed, and you remember things about them — but still just friends"]
@@ -522,9 +522,9 @@ actor LocalAI {
             if let hours = memory.hoursSinceLastChat, hours >= 24 { lines.append("You haven't chatted for \(Int(hours / 24)) days.") }
             if !touches.isEmpty { lines.append("Today on the desktop the user \(touches).") }
             if memory.offended {
-                lines.append("Important: today the user touched your chest\(memory.boundaryStrikesToday > 1 ? " (more than once)" : ""). You felt really uncomfortable and you're angry. Until they sincerely apologise, keep your replies cold and short, and you may ask them straight out to apologise. Don't be cute, don't act shy, don't pretend nothing happened.")
+                lines.append("Important: today the user \(memory.boundaryPart == "skirt" ? "tried to lift your skirt" : "touched your chest")\(memory.boundaryStrikesToday > 1 ? " (more than once)" : ""). You felt really uncomfortable and you're angry. Until they sincerely apologise, keep your replies cold and short, and you may ask them straight out to apologise. Don't be cute, don't act shy, don't pretend nothing happened.")
             } else if memory.justForgiven {
-                lines.append("The user has just apologised for touching your chest. You accept, but say clearly they must never do it again; you can soften gradually.")
+                lines.append("The user has just apologised for \(memory.boundaryPart == "skirt" ? "trying to lift your skirt" : "touching your chest"). You accept, but say clearly they must never do it again; you can soften gradually.")
             }
         case .japanese:
             let levels = ["知り合ったばかりで、まだ少し遠慮がある", "友だちで、気軽に話せる", "仲のいい友だちで、冗談を言ったり小さな悩みを話したりする", "とても仲のいい友だちで、リラックスしていて相手のことをよく覚えている（でも友だちのまま）"]
@@ -534,9 +534,9 @@ actor LocalAI {
             if let hours = memory.hoursSinceLastChat, hours >= 24 { lines.append("\(Int(hours / 24))日ぶりの会話です。") }
             if !touches.isEmpty { lines.append("今日デスクトップで相手は\(touches)。") }
             if memory.offended {
-                lines.append("重要：今日、相手があなたの胸を触りました\(memory.boundaryStrikesToday > 1 ? "（一度ではなく）" : "")。とても嫌な気持ちで、怒っています。相手がちゃんと謝るまで、返事は冷たく短くし、謝ってと直接言ってもかまいません。甘えたり照れたり、何もなかったふりをしたりしないこと。")
+                lines.append("重要：今日、相手があなたの\(memory.boundaryPart == "skirt" ? "スカートをめくろうとしました" : "胸を触りました")\(memory.boundaryStrikesToday > 1 ? "（一度ではなく）" : "")。とても嫌な気持ちで、怒っています。相手がちゃんと謝るまで、返事は冷たく短くし、謝ってと直接言ってもかまいません。甘えたり照れたり、何もなかったふりをしたりしないこと。")
             } else if memory.justForgiven {
-                lines.append("相手が胸を触ったことを謝りました。謝罪は受け入れますが、二度としないではっきり伝えてください。口調は少しずつやわらげてかまいません。")
+                lines.append("相手が\(memory.boundaryPart == "skirt" ? "スカートをめくろうとした" : "胸を触った")ことを謝りました。謝罪は受け入れますが、二度としないではっきり伝えてください。口調は少しずつやわらげてかまいません。")
             }
         }
         return lines.joined(separator: "\n")

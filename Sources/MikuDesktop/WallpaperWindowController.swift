@@ -268,7 +268,8 @@ final class WallpaperWindowController: NSObject, WKNavigationDelegate, WKScriptM
             if dragActive { panel.ignoresMouseEvents = false }
         case "touch":
             guard let kind = payload["kind"] as? String, kind.count <= 24 else { return }
-            MainActor.assumeIsolated { CompanionMemory.shared.recordTouch(kind) }
+            let part = (payload["part"] as? String).flatMap { ["chest", "skirt"].contains($0) ? $0 : nil }
+            MainActor.assumeIsolated { CompanionMemory.shared.recordTouch(kind, part: part) }
         case "diag":
             // Only plain values from the page; nothing it sends is executed.
             let entry = payload.filter { $0.value is String || $0.value is NSNumber || $0.value is NSNull }

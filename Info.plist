@@ -28,6 +28,8 @@
     <true/>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>Miku reads the song playing in Music or Spotify, and the video title of a YouTube or Niconico tab in your browser, so she can chat about it. Only when you turn this on in Settings; nothing leaves this Mac.</string>
     <key>NSHumanReadableCopyright</key>
     <string>Unofficial fan project. Hatsune Miku © Crypton Future Media, INC.</string>
 </dict>

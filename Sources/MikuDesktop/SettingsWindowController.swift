@@ -69,7 +69,13 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
     private let memoryStatusLabel = NSTextField.mikuLabel("", size: 12, color: MikuTheme.secondaryText)
     private let factsStack = NSStackView()
     private let eraseMemoryButton = MikuPillButton(frame: .zero)
+    private let restoreMemoryButton = MikuPillButton(frame: .zero)
+    private let deleteBackupButton = MikuPillButton(frame: .zero)
     private var memoryObserver: NSObjectProtocol?
+
+    private var awarenessSwitches: [AwarenessService.Source: NSSwitch] = [:]
+    private let screenIntervalPopup = NSPopUpButton()
+    private let awarenessHint = NSTextField.mikuLabel("", size: 11.5, color: MikuTheme.secondaryText)
 
     private var rowLabels: [String: NSTextField] = [:]
     private var sectionLabels: [String: NSTextField] = [:]
@@ -144,13 +150,53 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         refreshLoginState()
         memoryHint.stringValue = L10n.text("memoryHint")
         eraseMemoryButton.title = L10n.text("memoryErase")
+        restoreMemoryButton.title = L10n.text("memoryRestore")
+        deleteBackupButton.title = L10n.text("memoryBackupDelete")
         refreshMemory()
+        refreshAwareness()
+    }
+
+    // MARK: - Awareness
+
+    func refreshAwareness() {
+        for (source, toggle) in awarenessSwitches {
+            toggle.state = AwarenessService.isEnabled(source) ? .on : .off
+            if source == .screen, #unavailable(macOS 14.0) {
+                toggle.isEnabled = false
+            }
+        }
+        screenIntervalPopup.isEnabled = AwarenessService.isEnabled(.screen)
+        if #unavailable(macOS 14.0) { screenIntervalPopup.isEnabled = false }
+        for (item, minutes) in zip(screenIntervalPopup.itemArray, AwarenessService.screenMinuteChoices) {
+            item.title = L10n.format("everyMinutes", String(minutes))
+        }
+        select(String(AwarenessService.screenMinutes), in: screenIntervalPopup)
+        var hint = L10n.text("awarenessHint")
+        if #unavailable(macOS 14.0) {
+            hint += "\n" + L10n.text("awarenessScreenUnavailable")
+        } else if AwarenessService.isEnabled(.screen), !CGPreflightScreenCaptureAccess() {
+            hint += "\n" + L10n.text("awarenessScreenPermission")
+        }
+        awarenessHint.stringValue = hint
+    }
+
+    @objc private func awarenessToggled(_ sender: NSSwitch) {
+        guard let raw = sender.identifier?.rawValue, let source = AwarenessService.Source(rawValue: raw) else { return }
+        AwarenessService.setEnabled(source, sender.state == .on)
+        refreshAwareness()
+    }
+
+    @objc private func screenIntervalChanged() {
+        guard let value = screenIntervalPopup.selectedItem?.representedObject as? String, let minutes = Int(value) else { return }
+        UserDefaults.standard.set(minutes, forKey: AwarenessService.screenMinutesKey)
     }
 
     // MARK: - Memory
 
     func refreshMemory() {
         let memory = CompanionMemory.shared
+        restoreMemoryButton.isHidden = !memory.hasResetBackup
+        deleteBackupButton.isHidden = !memory.hasResetBackup
         memorySwitch.state = memory.isEnabled ? .on : .off
         let level = CompanionMemory.level(for: Double(memory.friendship))
         let relationship = memory.relationshipStatus == .dating ? L10n.text("relationshipDating") : L10n.text("friendLevel\(level)")
@@ -202,17 +248,37 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
     }
 
     @objc private func eraseMemory() {
-        guard let window else { return }
+        MemoryResetConfirmation.run()
+    }
+
+    @objc private func restoreMemory() {
+        let alert = NSAlert()
+        alert.messageText = L10n.text("memoryRestoreConfirm")
+        alert.informativeText = L10n.text("memoryRestoreDetail")
+        alert.addButton(withTitle: L10n.text("cancel"))
+        alert.addButton(withTitle: L10n.text("memoryRestore"))
+        guard alert.runModal() == .alertSecondButtonReturn else { return }
+        if !CompanionMemory.shared.restoreResetBackup() { showMemoryError() }
+    }
+
+    @objc private func deleteMemoryBackup() {
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = L10n.text("memoryEraseConfirm")
-        alert.informativeText = L10n.text("memoryEraseDetail")
-        alert.addButton(withTitle: L10n.text("memoryErase"))
+        alert.messageText = L10n.text("memoryBackupDeleteConfirm")
+        alert.informativeText = L10n.text("memoryBackupDeleteDetail")
         alert.addButton(withTitle: L10n.text("cancel"))
-        alert.beginSheetModal(for: window) { response in
-            guard response == .alertFirstButtonReturn else { return }
-            MainActor.assumeIsolated { CompanionMemory.shared.eraseAll() }
-        }
+        let delete = alert.addButton(withTitle: L10n.text("memoryBackupDelete"))
+        delete.hasDestructiveAction = true
+        guard alert.runModal() == .alertSecondButtonReturn else { return }
+        if !CompanionMemory.shared.deleteResetBackup() { showMemoryError() }
+    }
+
+    private func showMemoryError() {
+        let alert = NSAlert()
+        alert.alertStyle = .critical
+        alert.messageText = L10n.text("memoryOperationFailed")
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
     }
 
     func refreshSceneSelection() {
@@ -433,7 +499,21 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         memoryToggleStack.orientation = .horizontal
         memoryToggleStack.alignment = .centerY
         memoryToggleStack.spacing = 10
-        let memoryListStack = NSStackView(views: [memoryStatusLabel, factsStack, eraseMemoryButton])
+        for (button, symbol, action) in [
+            (restoreMemoryButton, "arrow.uturn.backward", #selector(restoreMemory)),
+            (deleteBackupButton, "trash.slash", #selector(deleteMemoryBackup))
+        ] {
+            button.style = .soft
+            button.symbolName = symbol
+            button.controlHeight = 26
+            button.font = MikuTheme.font(12, .semibold)
+            button.target = self
+            button.action = action
+        }
+        let backupStack = NSStackView(views: [restoreMemoryButton, deleteBackupButton])
+        backupStack.orientation = .horizontal
+        backupStack.spacing = 8
+        let memoryListStack = NSStackView(views: [memoryStatusLabel, factsStack, eraseMemoryButton, backupStack])
         memoryListStack.orientation = .vertical
         memoryListStack.alignment = .leading
         memoryListStack.spacing = 8
@@ -442,6 +522,38 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
             row("memoryFacts", memoryListStack)
         ])
 
+        // What she notices (all off by default, all on this Mac)
+        var awarenessRows: [[NSView]] = []
+        for source in AwarenessService.Source.allCases {
+            let toggle = NSSwitch()
+            toggle.target = self
+            toggle.action = #selector(awarenessToggled(_:))
+            toggle.identifier = NSUserInterfaceItemIdentifier(source.rawValue)
+            awarenessSwitches[source] = toggle
+            if source == .screen {
+                configurePopup(
+                    screenIntervalPopup,
+                    titles: AwarenessService.screenMinuteChoices.map { L10n.format("everyMinutes", String($0)) },
+                    values: AwarenessService.screenMinuteChoices.map(String.init),
+                    action: #selector(screenIntervalChanged)
+                )
+                let screenStack = NSStackView(views: [toggle, screenIntervalPopup])
+                screenStack.orientation = .horizontal
+                screenStack.alignment = .centerY
+                screenStack.spacing = 10
+                awarenessRows.append(row("awareness_\(source.rawValue)", screenStack))
+            } else {
+                let stack = NSStackView(views: [toggle])
+                stack.orientation = .horizontal
+                awarenessRows.append(row("awareness_\(source.rawValue)", stack))
+            }
+        }
+        awarenessHint.lineBreakMode = .byWordWrapping
+        awarenessHint.maximumNumberOfLines = 4
+        awarenessHint.preferredMaxLayoutWidth = 300
+        awarenessRows.append([NSGridCell.emptyContentView, awarenessHint])
+        let awarenessCard = card("sectionAwareness", symbol: "eye", rows: awarenessRows)
+
         let generalCard = card("sectionGeneral", symbol: "slider.horizontal.3", rows: [
             row("interaction", interactionStack),
             row("launchAtLogin", loginStack)
@@ -449,7 +561,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
 
         footerLabel.alignment = .center
 
-        let stack = NSStackView(views: [header, sceneCard, characterCard, memoryCard, languageCard, aiCard, generalCard, footerLabel])
+        let stack = NSStackView(views: [header, sceneCard, characterCard, memoryCard, awarenessCard, languageCard, aiCard, generalCard, footerLabel])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 14
@@ -486,7 +598,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
             connectionDot.widthAnchor.constraint(equalToConstant: 8),
             connectionDot.heightAnchor.constraint(equalToConstant: 8)
         ]
-        for card in [sceneCard, characterCard, memoryCard, languageCard, aiCard, generalCard] {
+        for card in [sceneCard, characterCard, memoryCard, awarenessCard, languageCard, aiCard, generalCard] {
             constraints.append(card.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -44))
         }
         NSLayoutConstraint.activate(constraints)

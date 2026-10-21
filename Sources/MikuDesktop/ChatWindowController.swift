@@ -12,6 +12,8 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
     private var failedText: String?
     private var failedImage: Data?
     private var isSending = false
+    private var chatTask: Task<Void, Never>?
+    private var conversationGeneration = 0
     private var connectionTask: Task<Void, Never>?
     private var hasPositionedWindow = false
 
@@ -71,6 +73,7 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
         showEmptyState()
         restoreConversation()
         NotificationCenter.default.addObserver(self, selector: #selector(memoryErased), name: .mikuMemoryErased, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(memoryRestored), name: .mikuMemoryRestored, object: nil)
         // ⌘V with a picture on the clipboard attaches it instead of pasting text.
         pasteMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             let isPaste = event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command
@@ -91,6 +94,21 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
             NSSound.beep()
         }
         return true
+    }
+
+    /// A line she said on her own (she noticed what you were doing).
+    func receiveProactive(_ reply: CompanionReply) {
+        let message = ChatMessage(role: .assistant, text: reply.text)
+        hideEmptyState()
+        messages.append(message)
+        appendBubble(message)
+        memory.record(messages)
+        DispatchQueue.main.async { [weak self] in self?.scrollToBottom() }
+    }
+
+    /// Whether you're in the middle of talking to her here.
+    var isChatting: Bool {
+        isSending || (window?.isKeyWindow == true && !inputField.stringValue.isEmpty)
     }
 
     // MARK: - Pictures
@@ -129,12 +147,20 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
         }
     }
 
+    @objc private func memoryRestored() {
+        cancelActiveConversation()
+        failedText = nil
+        failedImage = nil
+        showEmptyState()
+        restoreConversation()
+    }
+
     @objc private func memoryErased() {
+        cancelActiveConversation()
         messages.removeAll()
         failedText = nil
         failedImage = nil
-        removeErrorRow()
-        if !isSending { showEmptyState() }
+        showEmptyState()
     }
 
     /// Picks up where you left off last time (only the latest turns are drawn).
@@ -285,11 +311,14 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
         memory.record(messages)
         setSending(true)
 
-        Task { [weak self] in
+        let generation = conversationGeneration
+        chatTask = Task { [weak self] in
             guard let self else { return }
             do {
                 let reply = try await ai.reply(to: prompt, image: image, history: history, memory: context)
+                guard !Task.isCancelled, generation == conversationGeneration else { return }
                 let assistantMessage = ChatMessage(role: .assistant, text: reply.text)
+                chatTask = nil
                 setSending(false)
                 messages.append(assistantMessage)
                 appendBubble(assistantMessage)
@@ -298,6 +327,8 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
                 onReply?(reply)
                 if statusDot.color != MikuTheme.online { refreshConnectionStatus() }
             } catch {
+                guard !Task.isCancelled, generation == conversationGeneration else { return }
+                chatTask = nil
                 setSending(false)
                 failedText = text
                 failedImage = image
@@ -306,6 +337,13 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
                 refreshConnectionStatus()
             }
         }
+    }
+
+    private func cancelActiveConversation() {
+        conversationGeneration &+= 1
+        chatTask?.cancel()
+        chatTask = nil
+        setSending(false)
     }
 
     /// Only user turns that received an answer are sent back as context, so a failed

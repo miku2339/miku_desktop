@@ -18,6 +18,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.button?.toolTip = "Miku Desktop"
         rebuildMenu()
 
+        let awareness = AwarenessService.shared
+        awareness.onSpeak = { [weak self] reply in self?.deliverProactive(reply) }
+        awareness.isChatting = { [weak self] in self?.chatController?.isChatting ?? false }
+        awareness.start()
+
         settingsObserver = NotificationCenter.default.addObserver(
             forName: .mikuSettingsChanged,
             object: nil,
@@ -188,6 +193,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSMenuItem(title: L10n.text(titleKey), action: Selector((action)), keyEquivalent: key)
     }
 
+    /// Something she noticed and wanted to say: speech bubble on the desktop, and in the chat.
+    private func deliverProactive(_ reply: CompanionReply) {
+        wallpaperController?.receiveReply(reply)
+        if let chatController {
+            chatController.receiveProactive(reply)
+        } else {
+            CompanionMemory.shared.appendAssistantMessage(reply.text)
+        }
+    }
+
     @objc private func openChat(_ sender: Any?) {
         if chatController == nil {
             let controller = ChatWindowController()
@@ -249,15 +264,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func resetMemory(_ sender: Any?) {
-        NSApp.activate(ignoringOtherApps: true)
-        let alert = NSAlert()
-        alert.alertStyle = .warning
-        alert.messageText = L10n.text("memoryEraseConfirm")
-        alert.informativeText = L10n.text("memoryEraseDetail")
-        alert.addButton(withTitle: L10n.text("memoryErase"))
-        alert.addButton(withTitle: L10n.text("cancel"))
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
-        CompanionMemory.shared.eraseAll()
+        MemoryResetConfirmation.run()
     }
 
     @objc private func quit(_ sender: Any?) {

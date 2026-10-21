@@ -28,7 +28,9 @@ struct CompanionMemoryTests {
             checks += 1
         }
         func fixture(_ name: String, friendship: Double) throws -> URL {
-            let url = folder.appendingPathComponent(name + ".json")
+            let fixtureFolder = folder.appendingPathComponent(name, isDirectory: true)
+            try FileManager.default.createDirectory(at: fixtureFolder, withIntermediateDirectories: true)
+            let url = fixtureFolder.appendingPathComponent("memory.json")
             let object: [String: Any] = [
                 "version": 1, "messages": [], "summarizedCount": 0, "summary": "", "facts": [], "touchDays": [],
                 "relationship": ["friendship": friendship, "boundaryStrikes": 0, "dailyGain": [:]]
@@ -90,6 +92,147 @@ struct CompanionMemoryTests {
         let afterReset = CompanionMemory(fileURL: highURL, defaults: defaults)
         try check(afterReset.relationshipStatus == .friends, "Reset relationship is persisted")
 
+        let roundTripURL = try fixture("reset-round-trip", friendship: 80)
+        let roundTrip = CompanionMemory(fileURL: roundTripURL, defaults: defaults)
+        roundTrip.noteUserMessage("我喜歡你，可以做我女朋友嗎？")
+        let oldImageName = try require(roundTrip.saveImage(Data([0xFF, 0xD8, 0xFF, 0xD9])), "Test image must be saved")
+        let oldImageURL = try require(roundTrip.imageURL(named: oldImageName), "Saved image must have a URL")
+        let oldMessages = [
+            ChatMessage(role: .user, text: "重設前", imageName: oldImageName),
+            ChatMessage(role: .assistant, text: "我會記得")
+        ]
+        roundTrip.record(oldMessages)
+        roundTrip.saveNow()
+        defaults.set("keep-this", forKey: "unrelatedSetting")
+
+        var erasedNotifications = 0
+        var restoredNotifications = 0
+        let erasedObserver = NotificationCenter.default.addObserver(forName: .mikuMemoryErased, object: roundTrip, queue: nil) { _ in
+            erasedNotifications += 1
+        }
+        let restoredObserver = NotificationCenter.default.addObserver(forName: .mikuMemoryRestored, object: roundTrip, queue: nil) { _ in
+            restoredNotifications += 1
+        }
+        defer {
+            NotificationCenter.default.removeObserver(erasedObserver)
+            NotificationCenter.default.removeObserver(restoredObserver)
+        }
+
+        roundTrip.eraseAll()
+        try check(erasedNotifications == 1, "Reset posts one erased notification")
+        try check(roundTrip.hasResetBackup, "Reset keeps one undo backup")
+        try check(roundTrip.storedMessages.isEmpty, "Reset clears the conversation")
+        try check(roundTrip.relationshipStatus == .friends, "Reset clears dating before undo")
+        try check(FileManager.default.fileExists(atPath: oldImageURL.path), "Reset keeps images referenced by its backup")
+        try check(defaults.string(forKey: "unrelatedSetting") == "keep-this", "Reset preserves unrelated settings")
+
+        let newImageName = try require(roundTrip.saveImage(Data([0xFF, 0xD8, 0x00, 0xD9])), "Post-reset image must be saved")
+        let newImageURL = try require(roundTrip.imageURL(named: newImageName), "Post-reset image must have a URL")
+        roundTrip.record([ChatMessage(role: .user, text: "重設後", imageName: newImageName)])
+        try check(roundTrip.restoreResetBackup(), "A valid reset backup can be restored")
+        try check(restoredNotifications == 1, "Undo posts one restored notification")
+        try check(!roundTrip.hasResetBackup, "Undo consumes the one-time backup")
+        try check(roundTrip.storedMessages.map(\.text) == oldMessages.map(\.text), "Undo replaces post-reset chat with the backed-up chat")
+        try check(roundTrip.relationshipStatus == .dating, "Undo restores dating status")
+        try check(FileManager.default.fileExists(atPath: oldImageURL.path), "Undo keeps restored chat images")
+        try check(!FileManager.default.fileExists(atPath: newImageURL.path), "Undo removes images used only by replaced post-reset chat")
+        try check(defaults.string(forKey: "unrelatedSetting") == "keep-this", "Undo preserves unrelated settings")
+        try check(!roundTrip.restoreResetBackup(), "The same reset backup cannot be restored twice")
+
+        let singleBackupURL = try fixture("single-reset-backup", friendship: 60)
+        let singleBackup = CompanionMemory(fileURL: singleBackupURL, defaults: defaults)
+        singleBackup.record([ChatMessage(role: .user, text: "first reset")])
+        singleBackup.eraseAll()
+        singleBackup.record([ChatMessage(role: .user, text: "second reset")])
+        singleBackup.eraseAll()
+        singleBackup.eraseAll()
+        let backupFiles = try FileManager.default.contentsOfDirectory(
+            at: singleBackupURL.deletingLastPathComponent(),
+            includingPropertiesForKeys: nil
+        ).filter { $0.lastPathComponent == "memory-before-reset.json" }
+        try check(backupFiles.count == 1, "Only one reset backup is retained")
+        try check(singleBackup.restoreResetBackup(), "The latest non-empty reset has a valid backup")
+        try check(singleBackup.storedMessages.map(\.text) == ["second reset"], "A newer reset replaces the older reset backup")
+
+        let deleteBackupURL = try fixture("delete-reset-backup", friendship: 65)
+        let deleteBackup = CompanionMemory(fileURL: deleteBackupURL, defaults: defaults)
+        let deletedImageName = try require(deleteBackup.saveImage(Data([0xFF, 0xD8, 0x01, 0xD9])), "Backup image must be saved")
+        let deletedImageURL = try require(deleteBackup.imageURL(named: deletedImageName), "Backup image must have a URL")
+        deleteBackup.record([ChatMessage(role: .user, text: "delete backup", imageName: deletedImageName)])
+        deleteBackup.eraseAll()
+        try check(FileManager.default.fileExists(atPath: deletedImageURL.path), "Backup image remains until the backup is deleted")
+        deleteBackup.deleteResetBackup()
+        try check(!deleteBackup.hasResetBackup, "Permanent deletion removes the reset backup")
+        try check(!FileManager.default.fileExists(atPath: deletedImageURL.path), "Permanent deletion removes images used only by the backup")
+
+        let legacyURL = try fixture("legacy-reset-backup", friendship: 30)
+        let legacy = CompanionMemory(fileURL: legacyURL, defaults: defaults)
+        legacy.record([ChatMessage(role: .user, text: "temporary")])
+        let legacyDate = ISO8601DateFormatter().string(from: Date(timeIntervalSince1970: 1_700_000_000))
+        let legacyMessageID = UUID()
+        let legacyBackup: [String: Any] = [
+            "version": 1,
+            "messages": [["id": legacyMessageID.uuidString, "role": "user", "text": "legacy chat", "date": legacyDate]],
+            "summarizedCount": 99,
+            "summary": "legacy summary",
+            "facts": [],
+            "touchDays": [],
+            "relationship": ["friendship": 72.0, "boundaryStrikes": 0, "dailyGain": [:]]
+        ]
+        let legacyBackupURL = legacyURL.deletingLastPathComponent().appendingPathComponent("memory-before-reset.json")
+        try JSONSerialization.data(withJSONObject: legacyBackup).write(to: legacyBackupURL)
+        try check(legacy.restoreResetBackup(), "A legacy version-1 backup can be restored")
+        try check(legacy.storedMessages.map(\.text) == ["legacy chat"], "Legacy backup restores its conversation")
+        try check(legacy.friendship == 72, "Legacy backup restores friendship")
+        try check(legacy.relationshipStatus == .friends, "Legacy backup without relationship status defaults to friends")
+        try check(defaults.string(forKey: "unrelatedSetting") == "keep-this", "Legacy restore preserves unrelated settings")
+
+        let corruptURL = try fixture("corrupt-reset-backup", friendship: 40)
+        let corrupt = CompanionMemory(fileURL: corruptURL, defaults: defaults)
+        corrupt.record([ChatMessage(role: .user, text: "current chat")])
+        let corruptBackupURL = corruptURL.deletingLastPathComponent().appendingPathComponent("memory-before-reset.json")
+        try Data("not json".utf8).write(to: corruptBackupURL)
+        try check(!corrupt.restoreResetBackup(), "A corrupt reset backup is rejected")
+        try check(corrupt.storedMessages.map(\.text) == ["current chat"], "A failed restore leaves current memory unchanged")
+
+        let backupFailureURL = try fixture("reset-backup-write-failure", friendship: 55)
+        let backupFailure = CompanionMemory(fileURL: backupFailureURL, defaults: defaults)
+        backupFailure.record([ChatMessage(role: .user, text: "older backup")])
+        backupFailure.eraseAll()
+        backupFailure.record([ChatMessage(role: .user, text: "must not be erased without a fresh backup")])
+        let backupFailureFolder = backupFailureURL.deletingLastPathComponent()
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: backupFailureFolder.path)
+        backupFailure.eraseAll()
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: backupFailureFolder.path)
+        try check(
+            backupFailure.storedMessages.map(\.text) == ["must not be erased without a fresh backup"],
+            "Reset must leave current memory intact when its fresh backup cannot replace the older backup"
+        )
+
+        let restoreFailureURL = try fixture("reset-restore-write-failure", friendship: 58)
+        let restoreFailure = CompanionMemory(fileURL: restoreFailureURL, defaults: defaults)
+        restoreFailure.record([ChatMessage(role: .user, text: "backed up")])
+        restoreFailure.eraseAll()
+        let restoreFailureFolder = restoreFailureURL.deletingLastPathComponent()
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: restoreFailureFolder.path)
+        let restoreSucceeded = restoreFailure.restoreResetBackup()
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: restoreFailureFolder.path)
+        try check(!restoreSucceeded, "Restore must report failure when restored memory cannot be persisted")
+        try check(restoreFailure.storedMessages.isEmpty, "A failed restore leaves current memory intact")
+        try check(restoreFailure.hasResetBackup, "A failed restore keeps the backup available for retry")
+
+        let clearAfterResetURL = try fixture("clear-after-reset", friendship: 62)
+        let clearAfterReset = CompanionMemory(fileURL: clearAfterResetURL, defaults: defaults)
+        let backupOnlyImageName = try require(clearAfterReset.saveImage(Data([0xFF, 0xD8, 0x02, 0xD9])), "Backup-only image must be saved")
+        let backupOnlyImageURL = try require(clearAfterReset.imageURL(named: backupOnlyImageName), "Backup-only image must have a URL")
+        clearAfterReset.record([ChatMessage(role: .user, text: "image in reset backup", imageName: backupOnlyImageName)])
+        clearAfterReset.eraseAll()
+        clearAfterReset.clearConversation()
+        try check(
+            FileManager.default.fileExists(atPath: backupOnlyImageURL.path),
+            "Clearing post-reset chat must keep images referenced by the reset backup"
+        )
+
         defaults.set(false, forKey: CompanionMemory.enabledKey)
         let disabled = CompanionMemory(fileURL: try fixture("disabled", friendship: 80), defaults: defaults)
         try check(!disabled.isEnabled, "Tests use isolated preferences")
@@ -114,6 +257,11 @@ struct CompanionMemoryTests {
         }
         print("PASS: \(checks) memory and dialogue checks")
     }
+}
+
+private func require<T>(_ value: T?, _ message: String) throws -> T {
+    guard let value else { throw TestFailure(message: message) }
+    return value
 }
 
 private struct TestFailure: Error, CustomStringConvertible {

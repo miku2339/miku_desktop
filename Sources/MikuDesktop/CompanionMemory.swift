@@ -5,6 +5,8 @@ extension Notification.Name {
     static let mikuMemoryChanged = Notification.Name("com.qimake.MikuDesktop.memoryChanged")
     /// Posted after every memory has been erased (the chat window clears itself).
     static let mikuMemoryErased = Notification.Name("com.qimake.MikuDesktop.memoryErased")
+    /// Posted after a reset was undone (the chat window reloads the conversation).
+    static let mikuMemoryRestored = Notification.Name("com.qimake.MikuDesktop.memoryRestored")
 }
 
 /// One thing Miku remembers about the user ("Your name is Ka Hei", "You're studying in Chiba").
@@ -232,6 +234,12 @@ final class CompanionMemory {
         scheduleSave()
     }
 
+    /// Something she said on her own while the chat window wasn't open yet.
+    func appendAssistantMessage(_ text: String) {
+        guard isEnabled else { return }
+        record(store.messages + [ChatMessage(role: .assistant, text: text)])
+    }
+
     /// A completed exchange: warm up a little, then (in the background) fold old turns into
     /// the summary and pick out anything worth remembering.
     func didExchange(user: ChatMessage, reply: ChatMessage, ai: LocalAI) {
@@ -291,7 +299,8 @@ final class CompanionMemory {
 
     /// Deletes pictures no remembered message refers to any more.
     func removeUnusedImages(keeping extra: Set<String> = []) {
-        let used = Set(store.messages.compactMap(\.imageName)).union(extra)
+        let backupImages = Set(backupStore()?.messages.compactMap(\.imageName) ?? [])
+        let used = Set(store.messages.compactMap(\.imageName)).union(backupImages).union(extra)
         guard let files = try? FileManager.default.contentsOfDirectory(at: imagesFolder, includingPropertiesForKeys: nil) else { return }
         for file in files where file.pathExtension == "jpg" && !used.contains(file.lastPathComponent) {
             try? FileManager.default.removeItem(at: file)
@@ -340,17 +349,95 @@ final class CompanionMemory {
 
     /// Forget everything about the two of you: chat, summary, facts, touches, friendship.
     /// Her personality and the app settings are not part of memory and stay as they are.
-    func eraseAll() {
+    @discardableResult
+    func eraseAll() -> Bool {
+        let empty = Store()
+        // Keep what she remembered until now as a backup, so the reset can be undone.
+        if !store.messages.isEmpty || !store.facts.isEmpty || store.firstMet != nil {
+            do {
+                try write(store, to: backupURL)
+            } catch {
+                return false
+            }
+        }
+        do {
+            try write(empty, to: fileURL)
+        } catch {
+            return false
+        }
+        saveWork?.cancel()
+        saveWork = nil
         maintenance?.cancel()
         maintenance = nil
-        store = Store()
+        store = empty
         justForgiven = false
         confessionDecision = nil
         resetPending = true
         removeUnusedImages()
-        saveNow()
         NotificationCenter.default.post(name: .mikuMemoryErased, object: self)
         notify()
+        return true
+    }
+
+    // MARK: - Reset backup
+
+    private var backupURL: URL {
+        fileURL.deletingLastPathComponent().appendingPathComponent("memory-before-reset.json")
+    }
+
+    /// What a reset would make her forget, for the confirmation.
+    var resetSummary: (messages: Int, facts: Int, friendship: Int, daysKnown: Int) {
+        let days = store.firstMet.map { Calendar.current.dateComponents([.day], from: $0, to: Date()).day ?? 0 } ?? 0
+        return (store.messages.count, store.facts.count, friendship, max(0, days))
+    }
+
+    var hasResetBackup: Bool { FileManager.default.fileExists(atPath: backupURL.path) }
+
+    private func backupStore() -> Store? {
+        guard let data = try? Data(contentsOf: backupURL) else { return nil }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try? decoder.decode(Store.self, from: data)
+    }
+
+    /// Undoes the last reset. Anything new since then is replaced by the backup.
+    @discardableResult
+    func restoreResetBackup() -> Bool {
+        guard var restored = backupStore() else { return false }
+        restored.summarizedCount = min(max(0, restored.summarizedCount), restored.messages.count)
+        do {
+            try write(restored, to: fileURL)
+        } catch {
+            return false
+        }
+        saveWork?.cancel()
+        saveWork = nil
+        maintenance?.cancel()
+        maintenance = nil
+        store = restored
+        justForgiven = false
+        confessionDecision = nil
+        resetPending = true
+        try? FileManager.default.removeItem(at: backupURL)
+        removeUnusedImages()
+        NotificationCenter.default.post(name: .mikuMemoryRestored, object: self)
+        notify()
+        return true
+    }
+
+    /// Deletes the backup for good (the reset can no longer be undone).
+    @discardableResult
+    func deleteResetBackup() -> Bool {
+        if FileManager.default.fileExists(atPath: backupURL.path) {
+            do {
+                try FileManager.default.removeItem(at: backupURL)
+            } catch {
+                return false
+            }
+        }
+        removeUnusedImages()
+        notify()
+        return true
     }
 
     // MARK: - Background work
@@ -503,20 +590,30 @@ final class CompanionMemory {
     private func scheduleSave() {
         saveWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
-            MainActor.assumeIsolated { self?.saveNow() }
+            _ = MainActor.assumeIsolated { self?.saveNow() }
         }
         saveWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8, execute: work)
     }
 
-    func saveNow() {
+    @discardableResult
+    func saveNow() -> Bool {
         saveWork?.cancel()
         saveWork = nil
+        do {
+            try write(store, to: fileURL)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    private func write(_ value: Store, to url: URL) throws {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        guard let data = try? encoder.encode(store) else { return }
-        try? data.write(to: fileURL, options: [.atomic])
+        let data = try encoder.encode(value)
+        try data.write(to: url, options: [.atomic])
     }
 
     private func notify() {

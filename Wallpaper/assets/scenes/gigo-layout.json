@@ -1,0 +1,93 @@
+{
+  "scene": "GiGO Akihabara Building 1 - side street / historical red facade",
+  "files": {
+    "day": {
+      "file": "gigo-day.jpg",
+      "width": 2560,
+      "height": 1600,
+      "bytes": 2069830,
+      "sha256": "85cfc4d95cfe6ea03b3edb26137e978b604d720685fa766c9994dfd2f9ca3e94"
+    },
+    "dusk": {
+      "file": "gigo-dusk.jpg",
+      "width": 2560,
+      "height": 1600,
+      "bytes": 2023442,
+      "sha256": "5db6bdaefc7d2a23f4adb9398368023079e7a8ab4cf86833e905200514418fcd"
+    },
+    "night": {
+      "file": "gigo-night.jpg",
+      "width": 2560,
+      "height": 1600,
+      "bytes": 1872536,
+      "sha256": "7586b1bec119bb69d2f494c3b6d39d9816eafa3dcfd82abb41bc0553bb7f94e4"
+    }
+  },
+  "generation": {
+    "tool": "OpenAI built-in image_gen.imagegen",
+    "reference": "User-provided personal photographs, primarily the portrait side-street view",
+    "nativeSize": [
+      1586,
+      992
+    ],
+    "deliverySize": [
+      2560,
+      1600
+    ],
+    "upscaled": true,
+    "resampling": "Lanczos, centered aspect fit with less than 1 source pixel vertical crop"
+  },
+  "coordinates": {
+    "units": "normalized image coordinates; approximate, confirm during scene integration",
+    "mainRoadBand": [
+      0,
+      0.647,
+      1,
+      0.052
+    ],
+    "crosswalkBand": [
+      0.14,
+      0.7,
+      0.72,
+      0.025
+    ],
+    "clearForeground": [
+      0.15,
+      0.75,
+      0.55,
+      0.25
+    ],
+    "suggestedFootY": 0.915,
+    "safeSkyRect": [
+      0.19,
+      0,
+      0.57,
+      0.17
+    ],
+    "gigoRoofSignBounds": [
+      0.424,
+      0.196,
+      0.143,
+      0.083
+    ],
+    "railwayOnLeft": true,
+    "legacyTrackOverlayNeedsRecalibration": true,
+    "rectFormat": "x,y,width,height"
+  },
+  "alignment": {
+    "dusk": {
+      "matches": 961,
+      "inliers": 903,
+      "directMedianPx": 0.43,
+      "directP95Px": 1.13,
+      "homographyResidualMedianPx": 0.367
+    },
+    "night": {
+      "matches": 734,
+      "inliers": 692,
+      "directMedianPx": 0.413,
+      "directP95Px": 1.053,
+      "homographyResidualMedianPx": 0.421
+    }
+  }
+}

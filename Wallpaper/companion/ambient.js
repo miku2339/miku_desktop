@@ -4,7 +4,7 @@
 // `background-size: cover` transform the scene images use.
 
 import { lightningFlash, normalizeWeather, sunDirection } from './environment.js';
-import { drawVehicle, drawVehicleGround, spawnVehicle, vehicleAlpha, vehicleLook, vehiclePosition } from './vehicles.js';
+import { createTraffic, drawTrainCar, drawVehicle3D, pointOnPath, vehicleLook } from './vehicles.js';
 
 const IMAGE_WIDTH = 1586;
 const IMAGE_HEIGHT = 992;
@@ -20,23 +20,61 @@ const SCENE_FEATURES = {
       { x: 0.865, y: 0.27, w: 0.03, h: 0.1, colour: '120 255 140' }
     ]
   },
+  // GiGO Akihabara Building 1, seen from the side street across the junction.
+  // Miku stands in the quiet street in front; traffic crosses on the main road behind her.
   akihabara: {
-    sky: [[0.36, 0, 0.67, 0.31]],
-    ground: 0.66,
-    tracks: [{ y: 0.428, height: 0.043, x0: 0.326, x1: 0.664 }],
+    size: [2560, 1600],
+    sky: [[0.19, 0, 0.76, 0.17]],
+    ground: 0.72,
     roads: [{
-      kind: 'perspective',
-      vanish: [0.5, 0.636],
-      // At the reference row `refY`, each lane's centre is at `x` and a car is `carWidth` wide.
-      // Japan drives on the left: the left lane heads away from us, the right lane comes towards us.
-      refY: 0.78,
-      carWidth: 0.125,
-      wet: 0.55,
+      kind: 'cross3d',
+      // Horizon / vanishing point measured from the side street's kerbs.
+      vanish: [0.5, 0.612],
+      refY: 0.69,
+      // Eye-level camera (~1.5 m): a 1.7 m-wide car is 1.13 × the camera height.
+      carWidth: 0.078 * 1.13,
+      focal: 0.85,
+      wet: 0,
+      // Japan drives on the left: near lanes run right→left, far lanes left→right.
       lanes: [
-        { x: 0.408, direction: 'away' },
-        { x: 0.588, direction: 'toward' }
-      ]
+        { y: 0.692, direction: 'left' },
+        { y: 0.68, direction: 'left' },
+        { y: 0.667, direction: 'right' },
+        { y: 0.655, direction: 'right' }
+      ],
+      spawnGaps: [[2500, 4500], [7000, 18000]],
+      // Signs and street lights keep the traffic visible at night.
+      minLight: 0.62
     }],
+    // Bollards, lamp posts, railings and shrubs on the near corners, cut out of the
+    // scene so passing traffic goes behind them.
+    // JR viaduct on the left. Measured from the parapet's top edge, (0.065, 0.135) to
+    // (0.22, 0.335), taking it as 8 m up: about 11 m away and running almost straight
+    // down the street. Trains run behind the parapet, so only windows and roofs show.
+    viaduct: {
+      railY: 0.86,
+      camera: { vanish: [0.37, 0.47], height: 0.13, focal: 0.85 },
+      tracks: [{ x: -1.11, z: 2 }, { x: -1.17, z: 2 }],
+      direction: [-0.12, 1],
+      car: { width: 0.154, length: 1.04, height: 0.19, gap: 0.025 },
+      cars: 10,
+      parapet: [[0.065, 0.135], [0.22, 0.335]],
+      clipX: [0.062, 0.34],
+      lines: ['yamanote', 'keihinTohoku', 'sobu'],
+      // Catenary poles on the near side of the viaduct stand in front of the trains.
+      occluders: {
+        rect: [0.06, 0, 0.45, 0.45],
+        day: '../assets/scenes/gigo-viaduct-occluders-day.png',
+        dusk: '../assets/scenes/gigo-viaduct-occluders-dusk.png',
+        night: '../assets/scenes/gigo-viaduct-occluders-night.png'
+      }
+    },
+    occluders: {
+      rect: [0, 0.55, 1, 0.76],
+      day: '../assets/scenes/gigo-occluders-day.png',
+      dusk: '../assets/scenes/gigo-occluders-dusk.png',
+      night: '../assets/scenes/gigo-occluders-night.png'
+    },
     birds: true
   },
   ikebukuro: {
@@ -93,19 +131,11 @@ export function createAmbient(canvas) {
   const sceneState = new Map();
   const stars = new Map();
   let activeLevel = 0;
-  let pixelRatio = 1;
-  // Scratch canvases: each vehicle is painted once per frame, then stamped onto the
-  // scene and again, flipped and fading, as its reflection in the wet road.
-  const sprite = document.createElement('canvas');
-  const spriteContext = sprite.getContext('2d');
-  const mirror = document.createElement('canvas');
-  const mirrorContext = mirror.getContext('2d');
 
   function resize() {
     width = Math.max(1, window.innerWidth);
     height = Math.max(1, window.innerHeight);
     const ratio = Math.min(window.devicePixelRatio || 1, 1.5);
-    pixelRatio = ratio;
     canvas.width = Math.round(width * ratio);
     canvas.height = Math.round(height * ratio);
     context.setTransform(ratio, 0, 0, ratio, 0, 0);
@@ -408,66 +438,176 @@ export function createAmbient(canvas) {
     context.restore();
   }
 
-  function fitScratch(target, cssWidth, cssHeight) {
-    const w = Math.ceil(cssWidth * pixelRatio);
-    const h = Math.ceil(cssHeight * pixelRatio);
-    if (target.width < w || target.height < h) {
-      target.width = Math.max(target.width, w);
-      target.height = Math.max(target.height, h);
+  const occluderImages = new Map();
+  function occluderImage(src) {
+    if (!occluderImages.has(src)) {
+      const image = new Image();
+      image.decoding = 'async';
+      image.src = src;
+      occluderImages.set(src, image);
     }
-    return [w, h];
+    const image = occluderImages.get(src);
+    return image.complete && image.naturalWidth > 0 ? image : null;
   }
 
-  function drawPerspectiveCar(car, road, env, now, sceneAlpha) {
-    const { z, scale } = vehiclePosition(car, now);
-    const fade = vehicleAlpha(z);
-    const lane = road.lanes[car.lane];
-    const cx = px(road.vanish[0] + (lane.x - road.vanish[0]) * scale);
-    const ground = py(road.vanish[1] + (road.refY - road.vanish[1]) * scale);
-    const w = size(road.carWidth) * scale * (car.typeWidth ?? 1);
-    if (fade <= 0.01 || w < 2) return;
-    const wet = Math.min(1, road.wet + (['rain', 'storm'].includes(env.weather.kind) ? env.weather.intensity * 0.6 : 0)
-      + (env.weather.kind === 'snow' ? -0.3 : 0));
-    const look = vehicleLook(env, lightLevel(env), scale, Math.max(0, wet), now);
-
-    const above = w * 1.5;
-    const below = w * 0.06;
-    const spanX = w * 0.78;
-    const [spriteW, spriteH] = fitScratch(sprite, spanX * 2, above + below);
-    spriteContext.setTransform(1, 0, 0, 1, 0, 0);
-    spriteContext.clearRect(0, 0, spriteW, spriteH);
-    spriteContext.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
-    drawVehicle(spriteContext, car, spanX, above, w, look);
-
-    context.save();
-    context.globalAlpha = sceneAlpha * fade;
-    drawVehicleGround(context, car, cx, ground, w, look);
-    if (look.wet > 0.05) {
-      // Reflection: the sprite flipped about the road line, fading out with distance.
-      fitScratch(mirror, spanX * 2, above + below);
-      mirrorContext.setTransform(1, 0, 0, 1, 0, 0);
-      mirrorContext.globalCompositeOperation = 'source-over';
-      mirrorContext.clearRect(0, 0, spriteW, spriteH);
-      mirrorContext.setTransform(1, 0, 0, -1, 0, spriteH);
-      mirrorContext.drawImage(sprite, 0, 0, spriteW, spriteH, 0, 0, spriteW, spriteH);
-      mirrorContext.setTransform(1, 0, 0, 1, 0, 0);
-      mirrorContext.globalCompositeOperation = 'destination-in';
-      const groundRow = below * pixelRatio;
-      const mask = mirrorContext.createLinearGradient(0, groundRow, 0, groundRow + w * 0.7 * pixelRatio);
-      mask.addColorStop(0, 'rgb(0 0 0 / 1)');
-      mask.addColorStop(1, 'rgb(0 0 0 / 0)');
-      mirrorContext.fillStyle = mask;
-      mirrorContext.fillRect(0, 0, spriteW, spriteH);
-      mirrorContext.globalCompositeOperation = 'source-over';
-      context.globalAlpha = sceneAlpha * fade * 0.32 * look.wet;
-      context.drawImage(mirror, 0, 0, spriteW, spriteH, cx - spanX, ground - below, spanX * 2, above + below);
-      context.globalAlpha = sceneAlpha * fade;
+  /** Redraw the near-corner objects over the traffic, blended like the scene's periods. */
+  function drawOccluders(occluders, env) {
+    const [x0, y0, x1, y1] = occluders.rect;
+    const left = px(x0);
+    const top = py(y0);
+    const w = px(x1) - left;
+    const h = py(y1) - top;
+    const weights = env.periodWeights;
+    let drawn = 0;
+    // Same "source over" stacking as the scene layers: day, then dusk, then night on top.
+    for (const period of ['day', 'dusk', 'night']) {
+      const weight = weights[period];
+      if (weight <= 0.001) continue;
+      const image = occluderImage(occluders[period]);
+      if (!image) continue;
+      const opacity = drawn === 0 ? 1 : weight / (drawn + weight);
+      drawn += weight;
+      context.save();
+      context.globalAlpha *= opacity;
+      context.drawImage(image, left, top, w, h);
+      context.restore();
     }
-    // A hint of softness so the vector shapes sit in the painted scene (more with distance).
-    context.filter = `blur(${(0.25 + look.haze * 0.9).toFixed(2)}px)`;
-    context.drawImage(sprite, 0, 0, spriteW, spriteH, cx - spanX, ground - above, spanX * 2, above + below);
-    context.filter = 'none';
+  }
+
+  function drawViaductTrains(s, features, env, now, sceneAlpha) {
+    const viaduct = features.viaduct;
+    const road = features.roads[0];
+    road.aspect ??= cover.width / cover.height;
+    const random = Math.random;
+    s.rail ??= { trains: [], next: now + 4000 + random() * 12000 };
+    if (now >= s.rail.next) {
+      const outbound = random() < 0.5;
+      s.rail.trains.push({
+        start: now,
+        outbound,
+        track: outbound ? 1 : 0,
+        line: viaduct.lines[Math.floor(random() * viaduct.lines.length)],
+        speed: 0.55 + random() * 0.15,
+        seed: random() * 1000
+      });
+      s.rail.next = now + 28000 + random() * 50000;
+    }
+    const { width: carWidth, length, height, gap } = viaduct.car;
+    const pitch = length + gap;
+    const trainLength = viaduct.cars * pitch;
+    const [dx, dz] = viaduct.direction;
+    const norm = Math.hypot(dx, dz);
+    const outboundHeading = Math.atan2(dx, dz);
+    const far = 14;
+    s.rail.trains = s.rail.trains.filter(train => {
+      const travelled = (now - train.start) / 1000 * train.speed;
+      // Inbound trains come from far down the line towards us; outbound ones leave.
+      const head = train.outbound ? -1.5 + travelled : far - travelled;
+      train.head = head;
+      return train.outbound ? head - trainLength < far + 2 : head + trainLength > -3;
+    });
+    if (s.rail.trains.length === 0) return false;
+    const cam = sceneCamera(viaduct.camera);
+    const light = Math.max(lightLevel(env), road.minLight ?? 0);
+    const cars = [];
+    for (const train of s.rail.trains) {
+      const track = viaduct.tracks[train.track];
+      for (let index = 0; index < viaduct.cars; index += 1) {
+        // Cars trail behind the head, away from the direction of travel.
+        const along = train.outbound ? train.head - index * pitch - length / 2 : train.head + index * pitch + length / 2;
+        const x = track.x + dx / norm * along;
+        const z = track.z + dz / norm * along;
+        const lead = index === 0 ? 'front' : index === viaduct.cars - 1 ? 'rear' : null;
+        const heading = outboundHeading + (train.outbound ? 0 : Math.PI);
+        cars.push({ x, z, heading, railY: viaduct.railY, width: carWidth, length, height, line: train.line, lead, seed: train.seed });
+      }
+    }
+    cars.sort((a, b) => Math.hypot(b.x, b.z) - Math.hypot(a.x, a.z));
+    const [[ax, ay], [bx, by]] = viaduct.parapet;
+    const parapetY = x => ay + (x - ax) * (by - ay) / (bx - ax);
+    const [left, right] = viaduct.clipX;
+    context.save();
+    context.globalAlpha = sceneAlpha;
+    // Only above the parapet, and not past the buildings on either side.
+    context.beginPath();
+    context.moveTo(px(left), 0);
+    context.lineTo(px(right), 0);
+    context.lineTo(px(right), py(parapetY(right)));
+    context.lineTo(px(left), py(parapetY(left)));
+    context.closePath();
+    context.clip();
+    for (const car of cars) {
+      const look = vehicleLook(env, light, viaduct.camera.focal / Math.max(0.1, car.z), 0, now);
+      context.filter = `blur(${(0.2 + look.haze * 0.8).toFixed(2)}px)`;
+      drawTrainCar(context, car, cam, look);
+      context.filter = 'none';
+    }
     context.restore();
+    if (viaduct.occluders) drawOccluders(viaduct.occluders, env);
+    return true;
+  }
+
+  function sceneCamera({ vanish, height: cameraHeight, focal }) {
+    const hpx = size(1);
+    const vx = px(vanish[0]);
+    const vy = py(vanish[1]);
+    return {
+      height: cameraHeight,
+      hpx,
+      project: (X, Y, Z) => {
+        const s = focal / Math.max(Z, 0.05) * hpx;
+        return [vx + X * s, vy + (cameraHeight - Y) * s];
+      },
+      scaleAt: Z => focal / Math.max(Z, 0.05) * hpx
+    };
+  }
+
+  function roadCamera(road) {
+    return sceneCamera({
+      vanish: road.vanish,
+      height: road.refY - road.vanish[1],
+      focal: road.focal
+    });
+  }
+
+  function drawStreetTraffic(state, road, env, now, sceneAlpha) {
+    road.aspect ??= cover.width / cover.height;
+    state.traffic ??= createTraffic(road);
+    const cars = state.traffic.update(now);
+    if (cars.length === 0) return false;
+    const cam = roadCamera(road);
+    const wet = Math.max(0, Math.min(1, road.wet + (['rain', 'storm'].includes(env.weather.kind) ? env.weather.intensity * 0.6 : 0)
+      + (env.weather.kind === 'snow' ? -0.3 : 0)));
+    const light = Math.max(lightLevel(env), road.minLight ?? 0);
+    // Building corners at a junction hide traffic in the side streets.
+    let clipLeft = 0;
+    let clipRight = width;
+    if (road.kind === 'street3d') {
+      const junctionZ = road.junction * road.focal + road.crossOffset;
+      clipLeft = cam.project(-road.hideX, 0, junctionZ)[0];
+      clipRight = cam.project(road.hideX, 0, junctionZ)[0];
+    }
+    const farZ = (road.far ?? 1e6) * road.focal;
+    const placed = cars.map(car => ({ car, pose: pointOnPath(car.path, car.d) }))
+      .sort((a, b) => Math.hypot(b.pose.x, b.pose.z) - Math.hypot(a.pose.x, a.pose.z));
+    context.save();
+    context.beginPath();
+    context.rect(clipLeft, 0, clipRight - clipLeft, height);
+    context.clip();
+    for (const { car, pose } of placed) {
+      const fade = Math.min(1, (farZ - pose.z) / (2.5 * road.focal));
+      if (fade <= 0.01) continue;
+      const scale = road.focal / pose.z;
+      const look = vehicleLook(env, light, scale, wet, now);
+      const w = road.carWidth * (car.typeWidth ?? 1);
+      context.globalAlpha = sceneAlpha * fade;
+      // Soften the vector edges a touch so they sit in the painted scene.
+      context.filter = `blur(${(0.2 + look.haze * 0.8).toFixed(2)}px)`;
+      drawVehicle3D(context, car, { ...pose, roll: pose.turning ? -Math.sign(pose.sweep) * 0.06 : 0 }, cam, look, w);
+      context.filter = 'none';
+    }
+    context.restore();
+    return true;
   }
 
   function drawBirds(flock, features, env, now) {
@@ -519,29 +659,12 @@ export function createAmbient(canvas) {
         }
         continue;
       }
-      // Each lane has its own rhythm: sometimes a little queue, sometimes an empty road.
-      s.laneTimers ??= road.lanes.map(() => now + 800 + random() * 5000);
-      road.lanes.forEach((lane, index) => {
-        if (now < s.laneTimers[index]) return;
-        const ahead = s.cars.filter(car => car.road === road && car.lane === index).at(-1) ?? null;
-        const vehicle = spawnVehicle({ ...lane, index }, now, random, ahead);
-        if (vehicle) {
-          vehicle.road = road;
-          s.cars.push(vehicle);
-          s.laneTimers[index] = now + (random() < 0.3 ? 1500 + random() * 2000 : 4500 + random() * 9000);
-        } else s.laneTimers[index] = now + 700;
-      });
+      if (road.kind === 'street3d' || road.kind === 'cross3d') drawStreetTraffic(s, road, env, now, alpha);
     }
-    s.cars = s.cars.filter(car => (car.road.kind === 'side'
-      ? now - car.start < car.duration
-      : !vehiclePosition(car, now).done));
-    // Far vehicles first so near ones overlap them.
-    const depth = car => (car.road.kind === 'side' ? 0 : vehiclePosition(car, now).z);
-    const sorted = [...s.cars].sort((a, b) => depth(b) - depth(a));
-    for (const car of sorted) {
-      if (car.road.kind === 'side') drawSideCar(car, car.road, env, now);
-      else drawPerspectiveCar(car, car.road, env, now, alpha);
-    }
+    s.cars = s.cars.filter(car => now - car.start < car.duration);
+    for (const car of s.cars) drawSideCar(car, car.road, env, now);
+    if (features.viaduct && features.roads?.length) drawViaductTrains(s, features, env, now, alpha);
+    if (features.occluders && s.traffic?.cars.length) drawOccluders(features.occluders, env);
     if (features.birds && features.sky && env.periodWeights.night < 0.6 && ['clear', 'cloudy'].includes(env.weather.kind)) {
       if (s.nextBirds === null) s.nextBirds = now + 15000 + random() * 30000;
       if (!s.birds && now >= s.nextBirds) {
@@ -562,7 +685,8 @@ export function createAmbient(canvas) {
       }
       if (s.birds && !drawBirds(s.birds, features, env, now)) s.birds = null;
     }
-    return s.trains.length > 0 || s.cars.length > 0 || Boolean(s.birds);
+    const busy = s.trains.length > 0 || s.cars.length > 0 || Boolean(s.birds) || Boolean(s.traffic?.cars.length) || Boolean(s.rail?.trains.length);
+    return busy;
   }
 
   // ---- weather particles ---------------------------------------------------

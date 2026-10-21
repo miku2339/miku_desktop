@@ -19,7 +19,8 @@ export const SCENE_LIGHT = {
   // Hachikō gates: fluorescent station light, so the time of day shows only faintly.
   shibuya: { indoor: true, day: [1, 1, 1.03], dusk: [1.03, 0.98, 0.95], night: [0.98, 0.99, 1.05], rim: [0.7, 1, 0.75] },
   ikebukuro: { indoor: false, day: [1.05, 1.0, 0.94], dusk: [1.06, 0.94, 0.9], night: [0.98, 0.96, 1.04], rim: [1, 0.92, 0.8] },
-  akihabara: { indoor: false, day: [1, 1, 1.02], dusk: [1.06, 0.92, 1.0], night: [1.06, 0.86, 1.08], rim: [0.6, 1, 1] },
+  // GiGO corner: bright autumn street by day, orange sunset, warm signs and the red façade at night.
+  akihabara: { indoor: false, day: [1.02, 1, 0.98], dusk: [1.08, 0.93, 0.88], night: [1.04, 0.9, 0.96], rim: [1, 0.72, 0.66] },
   shinjuku: { indoor: false, day: [1, 1.0, 1.02], dusk: [1.05, 0.95, 0.92], night: [0.94, 0.98, 1.08], rim: [0.85, 0.92, 1] },
   hallway: { indoor: true, day: [1.06, 1.0, 0.9], dusk: [1.08, 0.92, 0.82], night: [0.98, 1.0, 1.04], rim: [1, 0.9, 0.75] },
   musicroom: { indoor: true, day: [1.02, 0.96, 1.05], dusk: [1.06, 0.9, 0.98], night: [0.98, 0.98, 1.06], rim: [1, 0.85, 1] }

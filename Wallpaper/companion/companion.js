@@ -74,10 +74,11 @@ const SCENE_CONFIGS = [
     night: '../assets/scenes/ikebukuro-night.jpg'
   },
   {
+    // GiGO Akihabara Building 1 corner (painted from the user's own photos).
     id: 'akihabara',
-    day: '../assets/scenes/akihabara-day.jpg',
-    dusk: '../assets/scenes/akihabara-dusk.jpg',
-    night: '../assets/scenes/akihabara-night.jpg'
+    day: '../assets/scenes/gigo-day.jpg',
+    dusk: '../assets/scenes/gigo-dusk.jpg',
+    night: '../assets/scenes/gigo-night.jpg'
   },
   {
     id: 'shinjuku',
@@ -389,10 +390,15 @@ async function prepareScenes() {
 
   const results = await Promise.all(SCENE_CONFIGS.map(async config => {
     try {
-      await Promise.all(['day', 'dusk', 'night'].map(period => preload(config[period])));
+      await Promise.all(['day', 'dusk', 'night'].map(async period => {
+        const url = config[period];
+        if (showsBackground) return preload(url);
+        const response = await fetch(url, { method: 'HEAD' });
+        if (!response.ok) throw new Error(`Missing scene asset: ${url}`);
+      }));
       return config.id;
     } catch {
-      state.sceneElements.get(config.id).remove();
+      state.sceneElements.get(config.id)?.remove();
       state.sceneElements.delete(config.id);
       return null;
     }
@@ -2726,8 +2732,7 @@ reducedMotion.addEventListener('change', () => {
 });
 
 try {
-  if (showsBackground) await prepareScenes();
-  else state.loadedScenes = SCENE_CONFIGS.map(config => config.id);
+  await prepareScenes();
   if (showsCharacter) {
     fallbackPortrait.src = fallbackPortrait.dataset.src;
     setupRenderer();

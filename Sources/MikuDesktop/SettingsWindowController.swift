@@ -153,7 +153,8 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         let memory = CompanionMemory.shared
         memorySwitch.state = memory.isEnabled ? .on : .off
         let level = CompanionMemory.level(for: Double(memory.friendship))
-        var status = L10n.format("memoryStatus", String(memory.facts.count), String(memory.friendship), L10n.text("friendLevel\(level)"))
+        let relationship = memory.relationshipStatus == .dating ? L10n.text("relationshipDating") : L10n.text("friendLevel\(level)")
+        var status = L10n.format("memoryStatus", String(memory.facts.count), String(memory.friendship), relationship)
         if memory.isOffended { status += "\n" + L10n.text("memoryUpset") }
         memoryStatusLabel.stringValue = status
         memoryStatusLabel.textColor = memory.isOffended ? MikuTheme.pink : MikuTheme.secondaryText

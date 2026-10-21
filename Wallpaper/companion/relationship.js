@@ -4,8 +4,8 @@
 // reactions can change straight away, before the app has answered.
 //
 // friendship 0–100: it grows with chatting, head pats and holding hands, and drops when
-// you're rough with her. It only ever means friendship: closer friends get warmer, more
-// relaxed lines, never romance.
+// you're rough with her. It controls how warm and relaxed her touch reactions are;
+// the app separately owns confession decisions and the remembered relationship status.
 //
 // offended: she's been touched where she doesn't want to be touched. Until you apologise
 // in the chat she keeps her distance: she turns half away, brushes off head pats and hand

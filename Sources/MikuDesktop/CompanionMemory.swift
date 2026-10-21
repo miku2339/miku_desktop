@@ -3,6 +3,8 @@ import Foundation
 extension Notification.Name {
     /// Posted on the main actor whenever remembered facts, the summary or the relationship change.
     static let mikuMemoryChanged = Notification.Name("com.qimake.MikuDesktop.memoryChanged")
+    /// Posted after every memory has been erased (the chat window clears itself).
+    static let mikuMemoryErased = Notification.Name("com.qimake.MikuDesktop.memoryErased")
 }
 
 /// One thing Miku remembers about the user ("Your name is Ka Hei", "You're studying in Chiba").
@@ -32,6 +34,8 @@ struct MemoryContext: Sendable {
     var touchesToday: [String: Int]
     var daysKnown: Int
     var hoursSinceLastChat: Double?
+    var relationshipStatus: RelationshipStatus = .friends
+    var confessionDecision: ConfessionDecision? = nil
 
     static let empty = MemoryContext(
         summary: "", facts: [], friendship: 30, level: 1, offended: false, justForgiven: false,
@@ -67,6 +71,7 @@ final class CompanionMemory {
 
     private struct Relationship: Codable {
         var friendship: Double = 30
+        var status: RelationshipStatus?
         var offendedSince: Date?
         var boundaryStrikes: Int = 0
         var lastBoundary: Date?
@@ -90,22 +95,31 @@ final class CompanionMemory {
     private var saveWork: DispatchWorkItem?
     private var maintenance: Task<Void, Never>?
     private var justForgiven = false
+    private var confessionDecision: ConfessionDecision?
+    /// The next relationship update is a reset, not her forgiving you.
+    private var resetPending = false
     private let fileURL: URL
+    private let defaults: UserDefaults
 
     var isEnabled: Bool {
-        get { UserDefaults.standard.object(forKey: Self.enabledKey) as? Bool ?? true }
+        get { defaults.object(forKey: Self.enabledKey) as? Bool ?? true }
         set {
-            UserDefaults.standard.set(newValue, forKey: Self.enabledKey)
+            defaults.set(newValue, forKey: Self.enabledKey)
             notify()
         }
     }
 
-    private init() {
+    private convenience init() {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSTemporaryDirectory())
         let folder = base.appendingPathComponent("MikuDesktop", isDirectory: true)
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        fileURL = folder.appendingPathComponent("memory.json")
+        self.init(fileURL: folder.appendingPathComponent("memory.json"), defaults: .standard)
+    }
+
+    init(fileURL: URL, defaults: UserDefaults) {
+        self.fileURL = fileURL
+        self.defaults = defaults
         load()
     }
 
@@ -114,6 +128,7 @@ final class CompanionMemory {
     var facts: [MemoryFact] { store.facts.sorted { $0.updated > $1.updated } }
     var summary: String { store.summary }
     var friendship: Int { Int(store.relationship.friendship.rounded()) }
+    var relationshipStatus: RelationshipStatus { store.relationship.status ?? .friends }
     var isOffended: Bool { store.relationship.offendedSince != nil }
 
     /// The remembered conversation, restored into the chat window (empty when memory is off).
@@ -148,7 +163,9 @@ final class CompanionMemory {
             boundaryPart: relationship.lastBoundaryPart,
             touchesToday: today.filter { $0.key != "boundary" },
             daysKnown: max(0, days),
-            hoursSinceLastChat: hours
+            hoursSinceLastChat: hours,
+            relationshipStatus: relationshipStatus,
+            confessionDecision: confessionDecision
         )
     }
 
@@ -156,9 +173,13 @@ final class CompanionMemory {
     func relationshipPayload() -> [String: Any] {
         let relationship = store.relationship
         let today = touchCounts(for: Self.dayKey(Date()))
+        let reset = resetPending
+        resetPending = false
         return [
+            "reset": reset,
             "friendship": (relationship.friendship * 10).rounded() / 10,
             "level": Self.level(for: relationship.friendship),
+            "status": relationshipStatus.rawValue,
             "offended": relationship.offendedSince != nil,
             "strikesToday": today["boundary"] ?? 0,
             "today": today
@@ -171,14 +192,28 @@ final class CompanionMemory {
     @discardableResult
     func noteUserMessage(_ text: String) -> Bool {
         justForgiven = false
+        confessionDecision = nil
         if store.firstMet == nil { store.firstMet = Date() }
-        guard store.relationship.offendedSince != nil, Self.isApology(text) else { return false }
-        store.relationship.offendedSince = nil
-        store.relationship.friendship = min(100, store.relationship.friendship + 2)
-        justForgiven = true
-        scheduleSave()
-        notify()
-        return true
+        if isOffended, Self.isApology(text) {
+            store.relationship.offendedSince = nil
+            store.relationship.friendship = min(100, store.relationship.friendship + 2)
+            justForgiven = true
+        }
+        confessionDecision = ConfessionPolicy.evaluate(
+            text,
+            friendship: store.relationship.friendship,
+            status: relationshipStatus,
+            offended: isOffended,
+            justForgiven: justForgiven
+        )
+        if confessionDecision == .accepted {
+            store.relationship.status = .dating
+        }
+        if justForgiven || confessionDecision == .accepted {
+            scheduleSave()
+            notify()
+        }
+        return justForgiven
     }
 
     func record(_ messages: [ChatMessage]) {
@@ -202,6 +237,7 @@ final class CompanionMemory {
     func didExchange(user: ChatMessage, reply: ChatMessage, ai: LocalAI) {
         if !isOffended { gainFriendship(0.6, kind: "chat", dailyCap: 6) }
         justForgiven = false
+        confessionDecision = nil
         scheduleSave()
         notify()
         guard isEnabled else { return }
@@ -263,12 +299,17 @@ final class CompanionMemory {
         notify()
     }
 
-    /// Forget everything, including how she feels about you.
+    /// Forget everything about the two of you: chat, summary, facts, touches, friendship.
+    /// Her personality and the app settings are not part of memory and stay as they are.
     func eraseAll() {
         maintenance?.cancel()
+        maintenance = nil
         store = Store()
         justForgiven = false
-        scheduleSave()
+        confessionDecision = nil
+        resetPending = true
+        saveNow()
+        NotificationCenter.default.post(name: .mikuMemoryErased, object: self)
         notify()
     }
 

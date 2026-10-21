@@ -59,6 +59,14 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
         buildUI()
         showEmptyState()
         restoreConversation()
+        NotificationCenter.default.addObserver(self, selector: #selector(memoryErased), name: .mikuMemoryErased, object: nil)
+    }
+
+    @objc private func memoryErased() {
+        messages.removeAll()
+        failedText = nil
+        removeErrorRow()
+        if !isSending { showEmptyState() }
     }
 
     /// Picks up where you left off last time (only the latest turns are drawn).

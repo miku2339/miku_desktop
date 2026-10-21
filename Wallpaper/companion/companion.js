@@ -2933,7 +2933,11 @@ window.mikuCompanion = Object.freeze({
   /** What the app remembers about the two of you (friendship, whether she's upset). */
   setRelationship(payload = {}) {
     const { forgiven } = relationship.set(payload);
-    if (forgiven && showsCharacter && state.ready && !reducedMotion.matches) {
+    if (payload?.reset) {
+      // Memory was wiped: she simply doesn't remember, there's nothing to forgive.
+      state.upset.x = state.upset.v = 0;
+      if (['boundary', 'snub', 'forgive'].includes(state.reaction?.type)) state.reaction = null;
+    } else if (forgiven && showsCharacter && state.ready && !reducedMotion.matches) {
       startReaction('forgive', { variant: { flip: -state.upset.side, said: 0 } });
     }
     return relationship.snapshot();

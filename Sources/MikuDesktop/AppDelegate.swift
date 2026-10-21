@@ -139,6 +139,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         menu.addItem(.separator())
+        let resetMemory = NSMenuItem(title: L10n.text("resetMemoryMenu"), action: #selector(resetMemory(_:)), keyEquivalent: "")
+        resetMemory.target = self
+        menu.addItem(resetMemory)
         let settings = NSMenuItem(title: L10n.text("settings"), action: #selector(openSettings(_:)), keyEquivalent: ",")
         settings.target = self
         menu.addItem(settings)
@@ -243,6 +246,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             settingsController = controller
         }
         settingsController?.present()
+    }
+
+    @objc private func resetMemory(_ sender: Any?) {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = L10n.text("memoryEraseConfirm")
+        alert.informativeText = L10n.text("memoryEraseDetail")
+        alert.addButton(withTitle: L10n.text("memoryErase"))
+        alert.addButton(withTitle: L10n.text("cancel"))
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        CompanionMemory.shared.eraseAll()
     }
 
     @objc private func quit(_ sender: Any?) {

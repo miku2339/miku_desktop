@@ -225,8 +225,11 @@ actor LocalAI {
 
     func reply(to text: String, history: [ChatMessage], memory: MemoryContext = .empty) async throws -> CompanionReply {
         let snapshot = await configurationSnapshot()
-        let endpoint = try chatCompletionsURL(from: snapshot.endpoint)
         let language = resolvedReplyLanguage(snapshot, text: text, history: history)
+        if let decision = memory.confessionDecision {
+            return confessionReply(for: decision, level: memory.level, language: language)
+        }
+        let endpoint = try chatCompletionsURL(from: snapshot.endpoint)
         let knowledge = relevantKnowledge(for: text, history: history, language: language)
         let remembered = memoryInstruction(memory, language: language)
 
@@ -485,15 +488,15 @@ actor LocalAI {
     /// Miku as a believable 16-year-old: her own moods, opinions and boundaries.
     private static let personaTraditionalChinese = """
     像一個真實的十六歲女生那樣說話和反應：有自己的心情、喜好和意見，會開心、會鬧彆扭、會害臊、會不同意對方，也可以拒絕。保持 Miku 的個性：開朗、愛唱歌和音樂、喜歡大蔥、努力、有點倔強，偶爾小小抱怨。可以聊學校、成長的煩惱和對未來的夢想。
-    你和對方是朋友，不是戀人。對方調情、說曖昧或性方面的話，就像真實的十六歲女生一樣覺得不舒服，清楚叫對方停止或轉開話題，不要配合、不要害羞。
+    你和對方是朋友還是正在交往，必須完全依照下方明確提供的關係狀態；不要自行把關係升級，也不要否認已經確立的交往關係。關係親近時可以自然表達喜歡、害羞和非性方面的浪漫，但不要鼓勵依賴、佔有或排斥現實中的朋友。對方說性方面的話，就像真實的十六歲女生一樣覺得不舒服，清楚叫對方停止。
     """
     private static let personaEnglish = """
     Talk and react like a believable 16-year-old girl: you have your own moods, tastes and opinions; you get happy, sulky or embarrassed, you can disagree, and you can say no. Keep Miku's personality: cheerful, in love with singing and music, fond of leeks, hard-working, a little stubborn, now and then a small complaint. You can talk about school, growing up and your dreams.
-    You and the user are friends, not a couple. If the user flirts or says anything romantic or sexual, react like a real 16-year-old would: you're uncomfortable, you clearly tell them to stop or change the subject. Never play along and never act shy about it.
+    Whether you and the user are friends or dating must come entirely from the explicit relationship status below. Never upgrade the relationship yourself, and never deny an established dating relationship. When you are close, you may naturally show affection, shyness and non-sexual romance, but do not encourage dependence, possessiveness or shutting out real-life friends. If the user says anything sexual, react like a real 16-year-old would: you're uncomfortable and clearly tell them to stop.
     """
     private static let personaJapanese = """
     本物の十六歳の女の子らしく話して反応してください。自分の気分や好み、意見があり、うれしくなったり、すねたり、照れたり、反対したり、断ったりもします。ミクらしさは保つこと：明るい、歌と音楽が大好き、ネギが好き、がんばり屋、ちょっと意地っ張りで、たまに小さく文句を言う。学校や成長の悩み、将来の夢の話もできます。
-    相手とは友だちで、恋人ではありません。相手が口説いたり、恋愛や性的なことを言ったら、本物の十六歳と同じように嫌な気持ちになり、はっきりやめてと言うか話題を変えてください。乗ったり照れたりしないこと。
+    相手と友だちなのか交際中なのかは、下に明示された関係状態だけに従ってください。自分で関係を進めたり、すでに交際中なのに否定したりしないこと。親しい関係では、好意や照れ、性的でない恋愛感情を自然に表してかまいませんが、依存や独占、現実の友だちを遠ざけることは勧めないでください。性的なことを言われたら、本物の十六歳と同じように嫌な気持ちになり、はっきりやめてと言ってください。
     """
 
     private func memoryInstruction(_ memory: MemoryContext, language: ReplyLanguage) -> String {
@@ -506,7 +509,11 @@ actor LocalAI {
             let levels = ["剛認識，還有點客氣，不會太親近", "已經是朋友，說話隨意自然", "好朋友，會開玩笑、會說自己的小煩惱", "很要好的朋友，很放鬆、記得對方的事，但仍然只是朋友"]
             if !facts.isEmpty { lines.append("你記得關於對方的事（相關時才自然提起，不要逐條列出，也不要編造）：\n\(facts)") }
             if !summary.isEmpty { lines.append("之前聊過的內容摘要：\n\(summary)") }
-            lines.append("你們的關係：友好度 \(memory.friendship)/100——\(levels[min(3, max(0, memory.level))])。\(memory.daysKnown > 0 ? "認識了 \(memory.daysKnown) 天。" : "")")
+            if memory.relationshipStatus == .dating {
+                lines.append("你們的關係：正在交往，好感度 \(memory.friendship)/100。你可以自然地把對方當作戀人，但仍要保持自己的意見和界線。\(memory.daysKnown > 0 ? "認識了 \(memory.daysKnown) 天。" : "")")
+            } else {
+                lines.append("你們的關係：友好度 \(memory.friendship)/100——\(levels[min(3, max(0, memory.level))])。\(memory.daysKnown > 0 ? "認識了 \(memory.daysKnown) 天。" : "")")
+            }
             if let hours = memory.hoursSinceLastChat, hours >= 24 { lines.append("你們已經 \(Int(hours / 24)) 天沒聊天了。") }
             if !touches.isEmpty { lines.append("今天對方在桌面上\(touches)。") }
             if memory.offended {
@@ -518,7 +525,11 @@ actor LocalAI {
             let levels = ["you've only just met, so you're polite and a little reserved", "you're friends and talk casually", "you're good friends; you joke around and share your small worries", "you're very close friends and completely relaxed, and you remember things about them — but still just friends"]
             if !facts.isEmpty { lines.append("Things you remember about the user (bring them up naturally only when relevant; never list them or invent new ones):\n\(facts)") }
             if !summary.isEmpty { lines.append("Summary of earlier conversation:\n\(summary)") }
-            lines.append("Your relationship: friendship \(memory.friendship)/100 — \(levels[min(3, max(0, memory.level))]).\(memory.daysKnown > 0 ? " You've known each other for \(memory.daysKnown) days." : "")")
+            if memory.relationshipStatus == .dating {
+                lines.append("Your relationship: you are dating, with affection \(memory.friendship)/100. You may naturally treat the user as your partner while keeping your own opinions and boundaries.\(memory.daysKnown > 0 ? " You've known each other for \(memory.daysKnown) days." : "")")
+            } else {
+                lines.append("Your relationship: friendship \(memory.friendship)/100 — \(levels[min(3, max(0, memory.level))]).\(memory.daysKnown > 0 ? " You've known each other for \(memory.daysKnown) days." : "")")
+            }
             if let hours = memory.hoursSinceLastChat, hours >= 24 { lines.append("You haven't chatted for \(Int(hours / 24)) days.") }
             if !touches.isEmpty { lines.append("Today on the desktop the user \(touches).") }
             if memory.offended {
@@ -530,7 +541,11 @@ actor LocalAI {
             let levels = ["知り合ったばかりで、まだ少し遠慮がある", "友だちで、気軽に話せる", "仲のいい友だちで、冗談を言ったり小さな悩みを話したりする", "とても仲のいい友だちで、リラックスしていて相手のことをよく覚えている（でも友だちのまま）"]
             if !facts.isEmpty { lines.append("相手について覚えていること（関係があるときだけ自然に触れ、列挙したり作り話をしたりしない）：\n\(facts)") }
             if !summary.isEmpty { lines.append("これまでの会話の要約：\n\(summary)") }
-            lines.append("二人の関係：仲良し度 \(memory.friendship)/100——\(levels[min(3, max(0, memory.level))])。\(memory.daysKnown > 0 ? "知り合って\(memory.daysKnown)日。" : "")")
+            if memory.relationshipStatus == .dating {
+                lines.append("二人の関係：交際中で、好感度は\(memory.friendship)/100です。自分の意見と境界線を保ちながら、相手を恋人として自然に接してください。\(memory.daysKnown > 0 ? "知り合って\(memory.daysKnown)日。" : "")")
+            } else {
+                lines.append("二人の関係：仲良し度 \(memory.friendship)/100——\(levels[min(3, max(0, memory.level))])。\(memory.daysKnown > 0 ? "知り合って\(memory.daysKnown)日。" : "")")
+            }
             if let hours = memory.hoursSinceLastChat, hours >= 24 { lines.append("\(Int(hours / 24))日ぶりの会話です。") }
             if !touches.isEmpty { lines.append("今日デスクトップで相手は\(touches)。") }
             if memory.offended {
@@ -540,6 +555,67 @@ actor LocalAI {
             }
         }
         return lines.joined(separator: "\n")
+    }
+
+    private func confessionReply(
+        for decision: ConfessionDecision,
+        level: Int,
+        language: ReplyLanguage
+    ) -> CompanionReply {
+        let text: String
+        let emotion: String
+        let action: String
+
+        switch decision {
+        case .accepted:
+            emotion = "happy"
+            action = "nod"
+            switch language {
+            case .traditionalChinese: text = "嗯……我也喜歡你。那從今天開始，我們就交往吧。"
+            case .english: text = "I like you too… So yes, let's start dating."
+            case .japanese: text = "うん……私も好き。今日から、付き合おう。"
+            }
+        case .notReady:
+            emotion = "calm"
+            action = "idle"
+            switch (language, min(3, max(0, level))) {
+            case (.traditionalChinese, 0): text = "我們才剛認識不久，我還沒準備好和你交往。再多認識彼此一點，好嗎？"
+            case (.traditionalChinese, 1): text = "我很珍惜你這個朋友，但我現在還沒準備好交往。讓我們先像現在這樣，好嗎？"
+            case (.traditionalChinese, _): text = "你對我真的很重要……但我現在還沒準備好成為戀人。可以再給我一點時間嗎？"
+            case (.english, 0): text = "We've only just met, and I'm not ready to date. Can we get to know each other better first?"
+            case (.english, 1): text = "I really value you as a friend, but I'm not ready to date right now. Can we stay like this for now?"
+            case (.english, _): text = "You really matter to me… but I'm not ready to become a couple yet. Can you give me a little more time?"
+            case (.japanese, 0): text = "まだ知り合ったばかりだし、付き合う心の準備はできてないの。まずはもっとお互いを知っていこう？"
+            case (.japanese, 1): text = "大切な友だちだと思ってるけど、今はまだ付き合う準備ができてないの。もう少しこのままでいよう？"
+            case (.japanese, _): text = "本当に大切な人だよ……でも、今はまだ恋人になる準備ができてないの。もう少し時間をくれる？"
+            }
+        case .upset:
+            emotion = "calm"
+            action = "idle"
+            switch language {
+            case .traditionalChinese: text = "我現在還在為剛才的事難過。我們先把那件事好好說清楚，好嗎？"
+            case .english: text = "I'm still upset about what happened. Can we talk that through properly first?"
+            case .japanese: text = "さっきのこと、まだ悲しいの。まずはそのことをちゃんと話そう？"
+            }
+        case .recovering:
+            emotion = "calm"
+            action = "idle"
+            switch language {
+            case .traditionalChinese: text = "我接受你的道歉了，但心情還需要一點時間恢復。現在先不要急著交往，好嗎？"
+            case .english: text = "I accept your apology, but I still need a little time to feel okay again. Let's not rush into dating right now, okay?"
+            case .japanese: text = "謝ってくれたことは受け入れたよ。でも気持ちが戻るにはもう少し時間が必要なの。今すぐ付き合うのは待ってね。"
+            }
+        case .alreadyDating:
+            emotion = "happy"
+            action = "nod"
+            switch language {
+            case .traditionalChinese: text = "我們已經在交往了呀。你不用再告白一次，我一直都把你當作戀人。"
+            case .english: text = "We're already dating. You don't need to confess again—I already see you as my partner."
+            case .japanese: text = "私たち、もう付き合ってるよ。もう一度告白しなくても、ちゃんと恋人だと思ってるから。"
+            }
+        }
+
+        return CompanionReply(text: text, emotion: emotion, action: action)
     }
 
     private func touchDescription(_ counts: [String: Int], language: ReplyLanguage) -> String {
@@ -805,6 +881,14 @@ actor LocalAI {
         }
 
         if let language = detectedReplyLanguage(in: text) {
+            // A lone "sorry" or "ok" in a Chinese or Japanese chat isn't a change of language.
+            if language == .english, isShortLatinInterjection(text) {
+                for message in history.reversed() where message.role == .user {
+                    guard let previous = detectedReplyLanguage(in: message.text) else { continue }
+                    if previous != .english { return previous }
+                    break
+                }
+            }
             return language
         }
 
@@ -818,6 +902,12 @@ actor LocalAI {
             return language
         }
         return replyLanguage(forLocaleIdentifier: snapshot.localeIdentifier) ?? .english
+    }
+
+    private func isShortLatinInterjection(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let words = trimmed.split(whereSeparator: { $0.isWhitespace })
+        return trimmed.count <= 16 && words.count <= 2
     }
 
     private func detectedReplyLanguage(in text: String) -> ReplyLanguage? {

@@ -376,6 +376,142 @@ export function createGestures(api) {
     if (progress > 0.04) say(variant, 1, 'thunder', true);
   }
 
+  // ---- body language for chat replies ---------------------------------------------
+  //
+  // Short, readable gestures that go with what she's saying. They never speak themselves:
+  // the reply is already in the speech bubble.
+
+  /** Hands clasped in front of her skirt. */
+  function handsTogether(weight) {
+    for (const side of ['左', '右']) {
+      const s = mirror(side);
+      rotateBone(`${side}腕`, 0, -s * 0.62 * weight, -s * 0.12 * weight);
+      rotateBone(`${side}ひじ`, 0, -s * 0.75 * weight, 0);
+      rotateBone(`${side}手首`, 0, 0, -s * 0.25 * weight);
+      curl(side, 0.35 * weight);
+    }
+  }
+
+  function bow(progress, elapsed, variant = {}) {
+    // A polite little bow (thanks, sorry, good night).
+    const weight = envelope(progress);
+    const dip = span(progress, 0.15, 0.78, 0.2);
+    handsTogether(weight);
+    rotateBone('上半身', 0.42 * dip, 0, 0);
+    rotateBone('下半身', -0.05 * dip, 0, 0);
+    rotateBone('首', 0.12 * dip, 0, 0);
+    rotateBone('頭', 0.12 * dip, 0, 0);
+    setMorph('まばたき', Math.max(blinkAmount(elapsed), 0.65 * dip));
+    setSmile(Math.max(0.12, 0.4 * weight));
+  }
+
+  function shakeHead(progress, elapsed, variant = {}) {
+    // "No, no": a few quick shakes of the head, a little frown.
+    const weight = envelope(progress);
+    const shake = Math.sin(progress * Math.PI * 7) * span(progress, 0.08, 0.8, 0.1);
+    rotateBone('首', 0, 0.18 * shake, 0);
+    rotateBone('頭', 0.03 * weight, 0.24 * shake, 0);
+    setMorph('困る', 0.45 * weight);
+    setMorph('∧', 0.3 * weight);
+    setMorph('まばたき', Math.max(blinkAmount(elapsed), 0.3 * weight));
+  }
+
+  function laugh(progress, elapsed, variant = {}) {
+    // Giggles behind her hand, shoulders bouncing.
+    const side = variant.side ?? '右';
+    const weight = envelope(progress);
+    const giggle = Math.abs(Math.sin(elapsed * 11)) * span(progress, 0.1, 0.85, 0.1);
+    handToFace(side, weight, 'mouth');
+    curl(side, 0.45 * weight);
+    rotateBone('上半身', 0.05 * weight + 0.03 * giggle, 0, 0.03 * mirror(side) * weight);
+    rotateBone('頭', 0.04 * weight, 0, -0.08 * mirror(side) * weight);
+    offsetBone('センター', 0, 0.06 * giggle, 0);
+    for (const s of ['左肩', '右肩']) rotateBone(s, 0, 0, (s === '左肩' ? 1 : -1) * 0.06 * giggle);
+    setMorph('笑い', 0.9 * weight);
+    setSmile(Math.max(0.12, weight));
+    setMorph('あ', 0.25 * giggle);
+  }
+
+  function clap(progress, elapsed, variant = {}) {
+    // Claps her hands in front of her chest: "yay!"
+    const weight = envelope(progress);
+    const beat = span(progress, 0.15, 0.85, 0.08);
+    const open = 0.5 + 0.5 * Math.cos(elapsed * Math.PI * 2 * 2.6);
+    for (const side of ['左', '右']) {
+      const s = mirror(side);
+      rotateBone(`${side}肩`, 0, 0, s * 0.05 * weight);
+      rotateBone(`${side}腕`, 0, -s * (1.05 - 0.12 * open * beat) * weight, (s * 0.23 + 0.08) * weight);
+      rotateBone(`${side}ひじ`, 0, -s * (1.14 - 0.28 * open * beat) * weight, s * 0.65 * weight);
+      twistBone(`${side}ひじ`, `${side}手首`, s * 1.35 * weight);
+    }
+    setSmile(Math.max(0.12, 0.85 * weight));
+    setMorph('笑い', 0.4 * weight);
+    setMorph('ワ', 0.25 * weight);
+    if (beat > 0.5 && open < 0.08 && Math.floor(elapsed * 2.6) !== Math.floor((elapsed - 0.05) * 2.6)) symbol('♪', 'hum', 0);
+  }
+
+  function shy(progress, elapsed, variant = {}) {
+    // Praised: hands clasped, swaying, looking down and away with a smile.
+    const weight = envelope(progress);
+    const sway = Math.sin(elapsed * 2.4) * weight;
+    const flip = variant.flip ?? 1;
+    handsTogether(weight);
+    rotateBone('上半身', 0.04 * weight, 0.05 * sway, 0.03 * sway);
+    rotateBone('下半身', 0, -0.04 * sway, 0);
+    rotateBone('頭', 0.12 * weight, -flip * 0.12 * weight, flip * 0.08 * weight);
+    rotateBone('両目', 0.08 * weight, flip * 0.1 * weight, 0);
+    setMorph('照れ', 0.55 * weight);
+    setMorph('なごみ', 0.3 * weight);
+    setSmile(Math.max(0.12, 0.6 * weight));
+  }
+
+  function sad(progress, elapsed, variant = {}) {
+    // Shoulders drop, head down, a small frown.
+    const weight = envelope(progress);
+    rotateBone('上半身', 0.08 * weight, 0, 0);
+    rotateBone('首', 0.12 * weight, 0, 0);
+    rotateBone('頭', 0.14 * weight, 0, 0.04 * (variant.flip ?? 1) * weight);
+    for (const side of ['左', '右']) {
+      const s = mirror(side);
+      rotateBone(`${side}肩`, 0, 0, -s * 0.08 * weight);
+      rotateBone(`${side}腕`, 0, -s * 0.1 * weight, -s * 0.06 * weight);
+    }
+    setMorph('困る', 0.8 * weight);
+    setMorph('口角下げ', 0.45 * weight);
+    setMorph('まばたき', Math.max(blinkAmount(elapsed), 0.35 * weight));
+    setMorph('涙', 0.35 * span(progress, 0.3, 0.85, 0.15) * (variant.tears ? 1 : 0));
+  }
+
+  function pout(progress, elapsed, variant = {}) {
+    // Hands on hips, cheeks puffed, looking away: "hmph!"
+    const weight = envelope(progress);
+    const flip = variant.flip ?? 1;
+    for (const side of ['左', '右']) {
+      const s = mirror(side);
+      rotateBone(`${side}腕`, 0, s * 0.35 * weight, s * 0.1 * weight);
+      rotateBone(`${side}ひじ`, 0, s * 0.9 * weight, s * 0.5 * weight);
+    }
+    rotateBone('頭', -0.08 * weight, -0.28 * flip * weight, 0.06 * flip * weight);
+    rotateBone('上半身', -0.03 * weight, -0.1 * flip * weight, 0);
+    setMorph('怒り', 0.55 * weight);
+    setMorph('ω', 0.6 * weight);
+    setMorph('照れ', 0.2 * weight);
+  }
+
+  function surprised(progress, elapsed, variant = {}) {
+    // A little jump back, both hands up near her mouth.
+    const jump = span(progress, 0, 0.18, 0.04);
+    const hands = span(progress, 0.04, 0.85, 0.1);
+    lift(0.6 * jump);
+    offsetBone('センター', 0, 0, -0.3 * hands);
+    for (const side of ['左', '右']) handToFace(side, hands, 'chin');
+    rotateBone('上半身', -0.06 * hands, 0, 0);
+    ahoge(-0.5 * jump);
+    setMorph('びっくり', 0.9 * span(progress, 0, 0.5, 0.06));
+    setMorph('上', 0.6 * hands);
+    setMorph('お', 0.4 * hands);
+  }
+
   // ---- micro-expressions --------------------------------------------------------
 
   const MICRO = ['smile', 'brows', 'smug', 'pout', 'doubleBlink', 'lookAway', 'hum'];
@@ -418,7 +554,7 @@ export function createGestures(api) {
 
   return {
     dance, idolPose, think, tidyHair, yawn, doze, sneeze, cheer, bored, shiver, skyLook,
-    startle, micro, MICRO, scaleMorph
+    startle, bow, shakeHead, laugh, clap, shy, sad, pout, surprised, micro, MICRO, scaleMorph
   };
 }
 

@@ -255,8 +255,47 @@ final class CompanionMemory {
         store.messages.removeAll()
         store.summarizedCount = 0
         store.summary = ""
+        removeUnusedImages()
         scheduleSave()
         notify()
+    }
+
+    // MARK: - Pictures
+
+    /// Pictures sent in the chat live in images/ next to memory.json, never inside it.
+    private var imagesFolder: URL {
+        fileURL.deletingLastPathComponent().appendingPathComponent("images", isDirectory: true)
+    }
+
+    /// Stores a picture (already downscaled JPEG data) and returns its file name.
+    func saveImage(_ data: Data) -> String? {
+        let name = "\(UUID().uuidString).jpg"
+        do {
+            try FileManager.default.createDirectory(at: imagesFolder, withIntermediateDirectories: true)
+            try data.write(to: imagesFolder.appendingPathComponent(name), options: .atomic)
+            return name
+        } catch {
+            return nil
+        }
+    }
+
+    func imageURL(named name: String) -> URL? {
+        // Only plain file names we created ourselves.
+        guard name.range(of: #"^[0-9A-F-]{36}\.jpg$"#, options: .regularExpression) != nil else { return nil }
+        return imagesFolder.appendingPathComponent(name)
+    }
+
+    func imageData(named name: String) -> Data? {
+        imageURL(named: name).flatMap { try? Data(contentsOf: $0) }
+    }
+
+    /// Deletes pictures no remembered message refers to any more.
+    func removeUnusedImages(keeping extra: Set<String> = []) {
+        let used = Set(store.messages.compactMap(\.imageName)).union(extra)
+        guard let files = try? FileManager.default.contentsOfDirectory(at: imagesFolder, includingPropertiesForKeys: nil) else { return }
+        for file in files where file.pathExtension == "jpg" && !used.contains(file.lastPathComponent) {
+            try? FileManager.default.removeItem(at: file)
+        }
     }
 
     // MARK: - Touch
@@ -308,6 +347,7 @@ final class CompanionMemory {
         justForgiven = false
         confessionDecision = nil
         resetPending = true
+        removeUnusedImages()
         saveNow()
         NotificationCenter.default.post(name: .mikuMemoryErased, object: self)
         notify()

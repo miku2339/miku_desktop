@@ -10,12 +10,15 @@ struct ChatMessage: Identifiable, Codable, Sendable {
     let role: Role
     let text: String
     let date: Date
+    /// A picture sent with the message, stored next to the memory file (see CompanionMemory).
+    let imageName: String?
 
-    init(id: UUID = UUID(), role: Role, text: String, date: Date = Date()) {
+    init(id: UUID = UUID(), role: Role, text: String, date: Date = Date(), imageName: String? = nil) {
         self.id = id
         self.role = role
         self.text = text
         self.date = date
+        self.imageName = imageName
     }
 }
 

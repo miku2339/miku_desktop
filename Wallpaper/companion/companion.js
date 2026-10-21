@@ -106,12 +106,14 @@ const GROUND_SCREEN_Y = 0.915;
 const FPS_CAP = 30;
 const POSITION_ANCHORS = [0.22, 0.43, 0.62];
 const CYCLE_SECONDS = 150;
-const ALLOWED_EMOTIONS = new Set(['happy', 'curious', 'sleepy', 'calm', 'dizzy', 'pout']);
-const ALLOWED_REPLY_ACTIONS = new Set(['wave', 'stretch', 'rest', 'idle', 'nod']);
-const GESTURE_TYPES = ['dance', 'idolPose', 'think', 'tidyHair', 'yawn', 'doze', 'sneeze', 'cheer', 'bored', 'shiver', 'skyLook', 'startle'];
+const ALLOWED_EMOTIONS = new Set(['happy', 'curious', 'sleepy', 'calm', 'dizzy', 'pout', 'sad', 'shy', 'surprised']);
+// Body language the chat reply can ask for (see LocalAI.allowedActions).
+const REPLY_GESTURES = ['bow', 'shakeHead', 'laugh', 'clap', 'shy', 'sad', 'pout', 'surprised'];
+const ALLOWED_REPLY_ACTIONS = new Set(['wave', 'stretch', 'rest', 'idle', 'nod', 'think', 'cheer', 'dance', 'idolPose', 'yawn', ...REPLY_GESTURES]);
+const GESTURE_TYPES = ['dance', 'idolPose', 'think', 'tidyHair', 'yawn', 'doze', 'sneeze', 'cheer', 'bored', 'shiver', 'skyLook', 'startle', ...REPLY_GESTURES];
 const INTERACTION_TYPES = new Set(['headPat', 'headStroke', 'poke', 'wave', 'stretch', 'rest', 'hello', 'look', 'move', 'dizzy', 'ouch', 'boundary', 'snub', 'forgive', ...GESTURE_TYPES]);
 // Idle actions she isn't in the mood for while she's upset with you.
-const CHEERFUL_ACTIONS = new Set(['dance', 'idolPose', 'cheer', 'bored', 'hum', 'wave']);
+const CHEERFUL_ACTIONS = new Set(['dance', 'idolPose', 'cheer', 'bored', 'hum', 'wave', 'clap', 'laugh', 'shy']);
 const CONTROLLED_BONES = [
   'センター', '上半身', '下半身', '首', '頭', '両目',
   '左肩', '左腕', '左腕捩', '左ひじ', '左手捩', '左手首',
@@ -524,6 +526,48 @@ const bubbleText = document.createElement('span');
 bubbleText.className = 'bubble-text';
 speechBubble.replaceChildren(bubbleName, bubbleText);
 
+// ---- Talking ------------------------------------------------------------------
+//
+// While a line is in the speech bubble her mouth moves through it: about seven syllables
+// a second, a different vowel shape for each, closed at commas and full stops.
+
+const MOUTH_VOWELS = ['あ', 'い', 'う', 'え', 'お'];
+const PAUSE = /[\s、。，．,.!?！？…〜～ー・「」『』（）()♪☆★♥~\-]/;
+
+function startTalking(text) {
+  if (!showsCharacter || reducedMotion.matches) {
+    state.talk = null;
+    return;
+  }
+  const chars = [...text];
+  const latin = /[A-Za-z]/.test(text) && !/[\u3040-\u30ff\u4e00-\u9fff]/.test(text);
+  const rate = latin ? 14 : 7.5;
+  const start = currentElapsed();
+  state.talk = { chars, rate, start, end: start + Math.min(8, chars.length / rate) };
+}
+
+function applyTalking(elapsed) {
+  if (reducedMotion.matches) {
+    state.talk = null;
+    return;
+  }
+  const talk = state.talk;
+  if (!talk || state.thinking) return;
+  if (elapsed < talk.start || elapsed > talk.end + 0.15) {
+    state.talk = null;
+    return;
+  }
+  const char = talk.chars[Math.floor((elapsed - talk.start) * talk.rate)] ?? '';
+  if (!char || PAUSE.test(char)) return;
+  const syllable = (elapsed - talk.start) * 7;
+  const open = Math.sin((syllable % 1) * Math.PI);
+  const vowel = MOUTH_VOWELS[(char.codePointAt(0) + Math.floor(syllable)) % MOUTH_VOWELS.length];
+  const index = state.morphs[vowel];
+  const influences = state.model?.morphTargetInfluences;
+  if (index === undefined || !influences) return;
+  influences[index] = Math.max(influences[index], open * (vowel === 'あ' ? 0.5 : 0.38));
+}
+
 function showBubble(text, emotion = 'calm', duration = null) {
   if (!showsCharacter) return;
   const safeText = typeof text === 'string' ? text.trim().slice(0, 240) : '';
@@ -533,6 +577,7 @@ function showBubble(text, emotion = 'calm', duration = null) {
   speechBubble.classList.remove('thinking');
   bubbleText.textContent = safeText;
   speechBubble.dataset.emotion = safeEmotion;
+  startTalking(safeText);
   speechBubble.classList.add('visible');
   clearTimeout(state.bubbleTimer);
   // Longer replies stay up longer so they can actually be read.
@@ -543,6 +588,7 @@ function showBubble(text, emotion = 'calm', duration = null) {
 function setThinking(thinking) {
   if (!showsCharacter) return;
   state.thinking = Boolean(thinking);
+  state.talk = null;
   clearTimeout(state.bubbleTimer);
   if (state.thinking) {
     bubbleText.textContent = '♪ ♫ ♪';
@@ -603,7 +649,15 @@ function startReaction(type, options = {}) {
     startle: 3,
     boundary: 4.4,
     snub: 2.4,
-    forgive: 3.6
+    forgive: 3.6,
+    bow: 2.6,
+    shakeHead: 2.2,
+    laugh: 2.8,
+    clap: 3.2,
+    shy: 3.8,
+    sad: 4.2,
+    pout: 3.4,
+    surprised: 2.4
   };
   const targetAnchor = Number.isFinite(Number(options.x))
     ? THREE.MathUtils.clamp(Number(options.x), 0.16, 0.68)
@@ -1150,6 +1204,20 @@ function applyBasePose(elapsed) {
   if (state.emotion === 'happy') setSmile(0.32);
   if (state.emotion === 'sleepy') setMorph('まばたき', Math.max(blinkAmount(elapsed), 0.18));
   if (state.emotion === 'curious') rotateBone('頭', 0, 0.035, 0.045);
+  if (state.emotion === 'sad') {
+    setMorph('困る', 0.35);
+    setMorph('口角下げ', 0.2);
+    setMorph('口角上げ', 0);
+  }
+  if (state.emotion === 'shy') {
+    setMorph('照れ', 0.3);
+    setSmile(0.25);
+  }
+  if (state.emotion === 'pout') {
+    setMorph('ω', 0.25);
+    setMorph('怒り', 0.2);
+  }
+  if (state.emotion === 'surprised') setMorph('上', 0.3);
 
   // Upset with you: no smile, a flat look, head turned a little away.
   const upset = state.upset.x;
@@ -1773,6 +1841,9 @@ function updateModel(elapsed) {
   if (behaviorName === 'boundary') applyBoundary(behavior.progress, elapsed, behavior.variant);
   if (behaviorName === 'snub') applySnub(behavior.progress, elapsed, behavior.variant);
   if (behaviorName === 'forgive') applyForgive(behavior.progress, elapsed, behavior.variant);
+  applyTalking(elapsed);
+  // A reply's mood lingers for a while, then she settles back down.
+  if (state.emotion !== 'calm' && elapsed - (state.emotionAt ?? elapsed) > 40) state.emotion = 'calm';
   // Upset: she stands half turned away from you until you've apologised.
   if (!carrying && !dragging) state.turnOffset += state.upset.side * 0.6 * state.upset.x;
   if (gaitPose.active) applyWalk(gaitPose);
@@ -2910,9 +2981,20 @@ window.mikuCompanion = Object.freeze({
     const emotion = ALLOWED_EMOTIONS.has(payload.emotion) ? payload.emotion : 'calm';
     const action = ALLOWED_REPLY_ACTIONS.has(payload.action) ? payload.action : 'idle';
     state.emotion = emotion;
+    state.emotionAt = currentElapsed();
     showBubble(typeof payload.text === 'string' ? payload.text : '', emotion);
-    if (action === 'wave' || action === 'stretch' || action === 'rest') startReaction(action);
+    const moody = relationship.offended && CHEERFUL_ACTIONS.has(action);
+    if (moody || reducedMotion.matches) {
+      if (!state.reaction?.touch) state.reaction = null;
+    } else if (action === 'wave' || action === 'stretch' || action === 'rest') startReaction(action);
     else if (action === 'nod') startReaction('hello');
+    else if (GESTURE_TYPES.includes(action)) {
+      // Body language for what she's saying; the words are already in the bubble.
+      const variant = { ...chooseVariant(action), said: 0, talk: false };
+      if (action === 'think') variant.style = 'plain';
+      if (action === 'sad') variant.tears = emotion === 'sad' && variety.chance(0.3);
+      startReaction(action, { variant });
+    }
     else if (!state.reaction?.touch && state.reaction?.type !== 'forgive') state.reaction = null;
     renderState(performance.now());
     return status();
@@ -2936,7 +3018,17 @@ window.mikuCompanion = Object.freeze({
     if (payload?.reset) {
       // Memory was wiped: she simply doesn't remember, there's nothing to forgive.
       state.upset.x = state.upset.v = 0;
-      if (['boundary', 'snub', 'forgive'].includes(state.reaction?.type)) state.reaction = null;
+      state.reaction = null;
+      state.emotion = 'calm';
+      state.emotionAt = currentElapsed();
+      state.talk = null;
+      state.thinking = false;
+      state.micro = null;
+      state.motionTransition = null;
+      clearTimeout(state.bubbleTimer);
+      speechBubble.classList.remove('visible', 'thinking');
+      bubbleText.textContent = '';
+      resetMorphs();
     } else if (forgiven && showsCharacter && state.ready && !reducedMotion.matches) {
       startReaction('forgive', { variant: { flip: -state.upset.side, said: 0 } });
     }

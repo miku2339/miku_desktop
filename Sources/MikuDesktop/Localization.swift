@@ -58,6 +58,11 @@ enum L10n {
         "statusOnline": [.traditionalChinese: "在線", .english: "Online", .japanese: "オンライン"],
         "statusOffline": [.traditionalChinese: "離線 · 未連上本機 AI", .english: "Offline · local AI unreachable", .japanese: "オフライン · ローカル AI 未接続"],
         "statusChecking": [.traditionalChinese: "連線中…", .english: "Connecting…", .japanese: "接続中…"],
+        "attachImage": [.traditionalChinese: "加入圖片（也可拖放或貼上）", .english: "Add a picture (or drag & drop / paste)", .japanese: "画像を追加（ドラッグ＆ドロップ・ペーストも可）"],
+        "removeImage": [.traditionalChinese: "移除圖片", .english: "Remove picture", .japanese: "画像を外す"],
+        "imagePrompt": [.traditionalChinese: "你看看這張圖片。", .english: "Take a look at this picture.", .japanese: "この画像を見て。"],
+        "imageUnreadable": [.traditionalChinese: "讀不到這張圖片。", .english: "Couldn't read that picture.", .japanese: "この画像を読み込めませんでした。"],
+        "errorImage": [.traditionalChinese: "目前的模型「%@」看不了圖片。請在設定改用支援圖片的模型（例如視覺版 VL 模型）。", .english: "The current model “%@” can't see pictures. Choose a vision (VL) model in Settings.", .japanese: "現在のモデル「%@」は画像を読めません。設定で画像対応（VL）モデルを選んでください。"],
         "clearChat": [.traditionalChinese: "清除對話", .english: "Clear chat", .japanese: "会話を消去"],
 
         // Errors

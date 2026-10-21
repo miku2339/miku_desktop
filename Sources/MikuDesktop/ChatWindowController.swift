@@ -10,6 +10,7 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
     private let memory = CompanionMemory.shared
     private var messages: [ChatMessage] = []
     private var failedText: String?
+    private var failedImage: Data?
     private var isSending = false
     private var connectionTask: Task<Void, Never>?
     private var hasPositionedWindow = false
@@ -37,6 +38,14 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
     private let inputCard = MikuCardView()
     private let inputField = NSTextField()
     private let sendButton = MikuPillButton(frame: .zero)
+    private let attachButton = MikuPillButton(frame: .zero)
+
+    // A picture waiting to be sent
+    private var pendingImage: Data?
+    private let previewCard = MikuCardView()
+    private let previewImage = NSImageView()
+    private let removeImageButton = MikuPillButton(frame: .zero)
+    private var pasteMonitor: Any?
 
     init(ai: LocalAI? = nil) {
         self.ai = ai ?? LocalAI(configuration: AIConfiguration.shared)
@@ -52,19 +61,78 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
         window.isMovableByWindowBackground = true
         window.minSize = NSSize(width: 380, height: 460)
         window.isReleasedWhenClosed = false
-        window.contentView = MikuBackgroundView()
+        let dropView = ChatDropView()
+        window.contentView = dropView
         super.init(window: window)
+        dropView.onDropImage = { [weak self] data in self?.attach(data) }
         window.delegate = self
         hasPositionedWindow = window.setFrameAutosaveName("MikuChatWindow") && UserDefaults.standard.string(forKey: "NSWindow Frame MikuChatWindow") != nil
         buildUI()
         showEmptyState()
         restoreConversation()
         NotificationCenter.default.addObserver(self, selector: #selector(memoryErased), name: .mikuMemoryErased, object: nil)
+        // ⌘V with a picture on the clipboard attaches it instead of pasting text.
+        pasteMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            let isPaste = event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command
+                && event.charactersIgnoringModifiers?.lowercased() == "v"
+            guard isPaste else { return event }
+            let window = event.window
+            let handled: Bool = MainActor.assumeIsolated { self?.pastePicture(in: window) ?? false }
+            return handled ? nil : event
+        }
+    }
+
+    /// Attaches a picture from the clipboard. Returns false when there's only text to paste.
+    private func pastePicture(in eventWindow: NSWindow?) -> Bool {
+        guard eventWindow === window, ChatImage.pasteboardHasPicture(.general) else { return false }
+        if let data = ChatImage.jpeg(from: .general) {
+            attach(data)
+        } else {
+            NSSound.beep()
+        }
+        return true
+    }
+
+    // MARK: - Pictures
+
+    private func attach(_ data: Data) {
+        guard !isSending else { return }
+        pendingImage = data
+        previewImage.image = NSImage(data: data)
+        previewCard.isHidden = false
+        updateSendButton()
+        window?.makeFirstResponder(inputField)
+    }
+
+    @objc private func removePendingImage() {
+        pendingImage = nil
+        previewImage.image = nil
+        previewCard.isHidden = true
+        updateSendButton()
+    }
+
+    @objc private func chooseImage() {
+        guard let window, !isSending else { return }
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.image]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.beginSheetModal(for: window) { [weak self] response in
+            MainActor.assumeIsolated {
+                guard response == .OK, let url = panel.url else { return }
+                if let data = ChatImage.jpeg(contentsOf: url) {
+                    self?.attach(data)
+                } else {
+                    self?.showError(L10n.text("imageUnreadable"))
+                }
+            }
+        }
     }
 
     @objc private func memoryErased() {
         messages.removeAll()
         failedText = nil
+        failedImage = nil
         removeErrorRow()
         if !isSending { showEmptyState() }
     }
@@ -102,6 +170,10 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
         clearButton.setAccessibilityLabel(L10n.text("clearChat"))
         settingsButton.toolTip = L10n.text("settingsButton")
         settingsButton.setAccessibilityLabel(L10n.text("settingsButton"))
+        attachButton.toolTip = L10n.text("attachImage")
+        attachButton.setAccessibilityLabel(L10n.text("attachImage"))
+        removeImageButton.toolTip = L10n.text("removeImage")
+        removeImageButton.setAccessibilityLabel(L10n.text("removeImage"))
         sendButton.toolTip = L10n.text("send")
         sendButton.setAccessibilityLabel(L10n.text("send"))
         greetingTitle.stringValue = L10n.text("chatGreetingTitle")
@@ -160,10 +232,11 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
 
     @objc private func sendCurrentMessage() {
         let text = inputField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, !isSending else { return }
+        let image = pendingImage
+        guard !text.isEmpty || image != nil, !isSending else { return }
         inputField.stringValue = ""
-        updateSendButton()
-        send(text)
+        removePendingImage()
+        send(text, image: image)
     }
 
     @objc private func suggestionTapped(_ sender: MikuPillButton) {
@@ -173,7 +246,7 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
 
     @objc private func retry() {
         guard let failedText else { return }
-        send(failedText, appendUser: false)
+        send(failedText, image: failedImage, appendUser: false)
     }
 
     @objc private func clearChat() {
@@ -188,19 +261,23 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
         onOpenSettings?()
     }
 
-    private func send(_ text: String, appendUser: Bool = true) {
+    private func send(_ text: String, image: Data? = nil, appendUser: Bool = true) {
         guard !isSending else { return }
         failedText = nil
+        failedImage = nil
         removeErrorRow()
         hideEmptyState()
         let userMessage: ChatMessage
         if appendUser {
-            userMessage = ChatMessage(role: .user, text: text)
+            let imageName = image.flatMap { memory.saveImage($0) }
+            userMessage = ChatMessage(role: .user, text: text, imageName: imageName)
             messages.append(userMessage)
-            appendBubble(userMessage)
+            appendBubble(userMessage, image: image.flatMap(NSImage.init(data:)))
         } else {
             userMessage = messages.last(where: { $0.role == .user && $0.text == text }) ?? ChatMessage(role: .user, text: text)
         }
+        // A picture on its own still needs a sentence for the model to answer.
+        let prompt = text.isEmpty && image != nil ? L10n.text("imagePrompt") : text
         // An apology can settle things before she answers, so the reply already knows.
         memory.noteUserMessage(text)
         let history = memory.recentHistory(from: completedHistory())
@@ -211,7 +288,7 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
         Task { [weak self] in
             guard let self else { return }
             do {
-                let reply = try await ai.reply(to: text, history: history, memory: context)
+                let reply = try await ai.reply(to: prompt, image: image, history: history, memory: context)
                 let assistantMessage = ChatMessage(role: .assistant, text: reply.text)
                 setSending(false)
                 messages.append(assistantMessage)
@@ -223,6 +300,7 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
             } catch {
                 setSending(false)
                 failedText = text
+                failedImage = image
                 let configuration = AIConfiguration.shared
                 showError(LocalAI.message(for: error, endpoint: configuration.endpoint, model: configuration.model))
                 refreshConnectionStatus()
@@ -257,7 +335,8 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
 
     private func updateSendButton() {
         let hasText = !inputField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        sendButton.isEnabled = hasText && !isSending
+        sendButton.isEnabled = (hasText || pendingImage != nil) && !isSending
+        attachButton.isEnabled = !isSending
     }
 
     // MARK: - Layout
@@ -342,6 +421,34 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
         inputField.translatesAutoresizingMaskIntoConstraints = false
         inputCard.addSubview(inputField)
 
+        attachButton.symbolName = "photo"
+        attachButton.iconOnly = true
+        attachButton.controlHeight = 34
+        attachButton.style = .soft
+        attachButton.target = self
+        attachButton.action = #selector(chooseImage)
+        attachButton.translatesAutoresizingMaskIntoConstraints = false
+        inputCard.addSubview(attachButton)
+
+        previewCard.cornerRadius = 12
+        previewCard.isHidden = true
+        previewCard.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(previewCard)
+        previewImage.imageScaling = .scaleProportionallyUpOrDown
+        previewImage.wantsLayer = true
+        previewImage.layer?.cornerRadius = 8
+        previewImage.layer?.masksToBounds = true
+        previewImage.translatesAutoresizingMaskIntoConstraints = false
+        previewCard.addSubview(previewImage)
+        removeImageButton.symbolName = "xmark"
+        removeImageButton.iconOnly = true
+        removeImageButton.controlHeight = 22
+        removeImageButton.style = .soft
+        removeImageButton.target = self
+        removeImageButton.action = #selector(removePendingImage)
+        removeImageButton.translatesAutoresizingMaskIntoConstraints = false
+        previewCard.addSubview(removeImageButton)
+
         sendButton.symbolName = "arrow.up"
         sendButton.iconOnly = true
         sendButton.controlHeight = 34
@@ -382,7 +489,23 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
             inputCard.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -14),
             inputCard.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -14),
             inputCard.heightAnchor.constraint(equalToConstant: 46),
-            inputField.leadingAnchor.constraint(equalTo: inputCard.leadingAnchor, constant: 18),
+            attachButton.leadingAnchor.constraint(equalTo: inputCard.leadingAnchor, constant: 6),
+            attachButton.centerYAnchor.constraint(equalTo: inputCard.centerYAnchor),
+            attachButton.widthAnchor.constraint(equalToConstant: 34),
+            attachButton.heightAnchor.constraint(equalToConstant: 34),
+            previewCard.leadingAnchor.constraint(equalTo: inputCard.leadingAnchor, constant: 4),
+            previewCard.bottomAnchor.constraint(equalTo: inputCard.topAnchor, constant: -8),
+            previewCard.widthAnchor.constraint(equalToConstant: 92),
+            previewCard.heightAnchor.constraint(equalToConstant: 92),
+            previewImage.leadingAnchor.constraint(equalTo: previewCard.leadingAnchor, constant: 6),
+            previewImage.trailingAnchor.constraint(equalTo: previewCard.trailingAnchor, constant: -6),
+            previewImage.topAnchor.constraint(equalTo: previewCard.topAnchor, constant: 6),
+            previewImage.bottomAnchor.constraint(equalTo: previewCard.bottomAnchor, constant: -6),
+            removeImageButton.topAnchor.constraint(equalTo: previewCard.topAnchor, constant: 2),
+            removeImageButton.trailingAnchor.constraint(equalTo: previewCard.trailingAnchor, constant: -2),
+            removeImageButton.widthAnchor.constraint(equalToConstant: 22),
+            removeImageButton.heightAnchor.constraint(equalToConstant: 22),
+            inputField.leadingAnchor.constraint(equalTo: attachButton.trailingAnchor, constant: 6),
             inputField.centerYAnchor.constraint(equalTo: inputCard.centerYAnchor),
             inputField.trailingAnchor.constraint(equalTo: sendButton.leadingAnchor, constant: -8),
             sendButton.trailingAnchor.constraint(equalTo: inputCard.trailingAnchor, constant: -6),
@@ -473,8 +596,13 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
 
     // MARK: - Rows
 
-    private func appendBubble(_ message: ChatMessage) {
+    private func appendBubble(_ message: ChatMessage, image: NSImage? = nil) {
         let isUser = message.role == .user
+        let picture = image ?? message.imageName.flatMap { memory.imageData(named: $0) }.flatMap(NSImage.init(data:))
+        if let picture {
+            addRow(content: pictureBubble(picture), fromMiku: !isUser)
+            if message.text.isEmpty { return }
+        }
         let label = NSTextField(wrappingLabelWithString: message.text)
         label.font = MikuTheme.font(14)
         label.textColor = isUser ? .white : MikuTheme.primaryText
@@ -498,6 +626,24 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
         ])
 
         addRow(content: bubble, fromMiku: !isUser)
+    }
+
+    /// A sent picture, shown at most 220 pt wide with its own proportions.
+    private func pictureBubble(_ image: NSImage) -> NSView {
+        let view = NSImageView(image: image)
+        view.imageScaling = .scaleProportionallyUpOrDown
+        view.wantsLayer = true
+        view.layer?.cornerRadius = 14
+        view.layer?.masksToBounds = true
+        view.translatesAutoresizingMaskIntoConstraints = false
+        let size = image.size
+        let width = min(220, max(60, size.width))
+        let height = size.width > 0 ? min(260, width * size.height / size.width) : width
+        NSLayoutConstraint.activate([
+            view.widthAnchor.constraint(equalToConstant: width),
+            view.heightAnchor.constraint(equalToConstant: height)
+        ])
+        return view
     }
 
     private func addRow(content: NSView, fromMiku: Bool) {

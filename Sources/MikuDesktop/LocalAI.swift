@@ -88,6 +88,7 @@ actor LocalAI {
         case serverResponse(Int)
         case emptyReply
         case unsupportedReply
+        case imageUnsupported
 
         var errorDescription: String? {
             switch self {
@@ -103,12 +104,17 @@ actor LocalAI {
                 return "The local AI returned an empty reply."
             case .unsupportedReply:
                 return "The local AI returned an unsupported emotion or action."
+            case .imageUnsupported:
+                return "The local AI could not read the picture."
             }
         }
     }
 
-    private static let allowedEmotions = Set(["happy", "curious", "sleepy", "calm"])
-    private static let allowedActions = Set(["wave", "stretch", "rest", "idle", "nod"])
+    private static let allowedEmotions = Set(["happy", "curious", "sleepy", "calm", "sad", "shy", "pout", "surprised"])
+    private static let allowedActions = Set([
+        "wave", "nod", "bow", "shakeHead", "laugh", "clap", "cheer", "shy", "sad", "pout", "surprised",
+        "think", "dance", "idolPose", "yawn", "stretch", "rest", "idle"
+    ])
     private static let songFacts: [SongFact] = [
         SongFact(
             titleAliases: ["ワールドイズマイン", "world is mine", "worldismine", "世界第一的公主殿下"],
@@ -223,7 +229,7 @@ actor LocalAI {
         )
     }
 
-    func reply(to text: String, history: [ChatMessage], memory: MemoryContext = .empty) async throws -> CompanionReply {
+    func reply(to text: String, image: Data? = nil, history: [ChatMessage], memory: MemoryContext = .empty) async throws -> CompanionReply {
         let snapshot = await configurationSnapshot()
         let language = resolvedReplyLanguage(snapshot, text: text, history: history)
         if let decision = memory.confessionDecision {
@@ -233,12 +239,22 @@ actor LocalAI {
         let knowledge = relevantKnowledge(for: text, history: history, language: language)
         let remembered = memoryInstruction(memory, language: language)
 
-        var messages = Array(history.suffix(12)).map {
-            ["role": $0.role.rawValue, "content": $0.text]
+        // Earlier pictures are only mentioned; only the one sent now is attached.
+        let picture = Self.picturePlaceholder(language)
+        var messages: [[String: Any]] = Array(history.suffix(12)).map { message -> [String: Any] in
+            let content = message.imageName == nil ? message.text : "\(picture) \(message.text)"
+            return ["role": message.role.rawValue, "content": content.trimmingCharacters(in: .whitespaces)]
         }
         let normalizedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if messages.last?["role"] != "user"
-            || messages.last?["content"]?.trimmingCharacters(in: .whitespacesAndNewlines) != normalizedText {
+        if let image {
+            let url = "data:image/jpeg;base64,\(image.base64EncodedString())"
+            let parts: [[String: Any]] = [
+                ["type": "text", "text": normalizedText],
+                ["type": "image_url", "image_url": ["url": url]]
+            ]
+            messages.append(["role": "user", "content": parts])
+        } else if messages.last?["role"] as? String != "user"
+            || (messages.last?["content"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) != normalizedText {
             messages.append(["role": "user", "content": normalizedText])
         }
 
@@ -252,12 +268,13 @@ actor LocalAI {
             "required": ["text", "emotion", "action"],
             "additionalProperties": false
         ]
+        let systemMessage: [String: Any] = [
+            "role": "system",
+            "content": systemPrompt(snapshot, language: language, knowledge: knowledge, memory: remembered)
+        ]
         let body: [String: Any] = [
             "model": snapshot.model,
-            "messages": [[
-                "role": "system",
-                "content": systemPrompt(snapshot, language: language, knowledge: knowledge, memory: remembered)
-            ]] + messages,
+            "messages": [systemMessage] + messages,
             "max_tokens": 320,
             "temperature": 0.2,
             "top_p": 0.9,
@@ -284,7 +301,7 @@ actor LocalAI {
             var attemptBody = body
             if attempt == 1 {
                 attemptBody.removeValue(forKey: "response_format")
-                attemptBody["messages"] = [[
+                let plainSystem: [String: Any] = [
                     "role": "system",
                     "content": systemPrompt(
                         snapshot,
@@ -293,7 +310,8 @@ actor LocalAI {
                         memory: remembered,
                         structured: false
                     )
-                ]] + messages
+                ]
+                attemptBody["messages"] = [plainSystem] + messages
             }
             request.httpBody = try JSONSerialization.data(withJSONObject: attemptBody)
 
@@ -302,7 +320,14 @@ actor LocalAI {
                 throw LocalAIError.invalidResponse
             }
             guard (200..<300).contains(httpResponse.statusCode) else {
-                throw LocalAIError.serverResponse(httpResponse.statusCode)
+                let status = httpResponse.statusCode
+                // Some vision servers refuse a JSON schema together with a picture: try once
+                // without it before deciding the model can't see pictures at all.
+                if image != nil, status != 401, status != 403, status != 404 {
+                    if attempt == 0 { continue }
+                    throw LocalAIError.imageUnsupported
+                }
+                throw LocalAIError.serverResponse(status)
             }
 
             let apiResponse = try JSONDecoder().decode(APIResponse.self, from: data)
@@ -328,6 +353,14 @@ actor LocalAI {
             }
         }
         throw LocalAIError.invalidReply
+    }
+
+    private static func picturePlaceholder(_ language: ReplyLanguage) -> String {
+        switch language {
+        case .traditionalChinese: return "［傳來一張圖片］"
+        case .english: return "[sent a picture]"
+        case .japanese: return "［画像を送った］"
+        }
     }
 
     // MARK: - Memory
@@ -416,7 +449,10 @@ actor LocalAI {
         case .english: languageName = "English"
         case .japanese: languageName = "Japanese"
         }
-        let transcript = messages.map { "\($0.role == .user ? "User" : "Miku"): \(String($0.text.prefix(400)))" }
+        let transcript = messages.map { message -> String in
+            let picture = message.imageName == nil ? "" : "[picture] "
+            return "\(message.role == .user ? "User" : "Miku"): \(picture)\(String(message.text.prefix(400)))"
+        }
             .joined(separator: "\n")
         let system = """
         You maintain a running summary of a long chat between the user and Miku (a desktop companion). Merge the previous summary with the new conversation into an updated summary.
@@ -721,6 +757,8 @@ actor LocalAI {
                 return L10n.format("errorHTTP", String(status))
             case .invalidResponse, .invalidReply, .emptyReply, .unsupportedReply:
                 return L10n.text("errorReply")
+            case .imageUnsupported:
+                return L10n.format("errorImage", model)
             }
         }
         if let urlError = error as? URLError {
@@ -1254,7 +1292,7 @@ actor LocalAI {
             let nicknameInstruction = nickname.isEmpty ? "" : "自然時稱呼對方為「\(nickname)」。"
             let format = structured ? """
             全部輸出必須是單一 JSON 物件，格式必須像 {"emotion":"happy","action":"wave","text":"回覆內容"}，物件外不得有任何文字或 Markdown。
-            每次都必須按 emotion、action、text 順序包含三個字串欄位。emotion 只可選 happy、curious、sleepy、calm；action 只可選 wave、stretch、rest、idle、nod。
+            每次都必須按 emotion、action、text 順序包含三個字串欄位。emotion 只可選 happy、curious、sleepy、calm、sad、shy、pout、surprised。action 選一個配合你這句話的動作：wave（打招呼／再見）、nod（同意）、bow（道謝、道歉、晚安）、shakeHead（不同意、拒絕）、laugh（覺得好笑）、clap（替對方高興）、cheer（打氣）、shy（被稱讚而害臊）、sad（難過）、pout（鬧彆扭）、surprised（驚訝）、think（思考）、dance（開心得想跳舞）、idolPose（偶像姿勢）、yawn（睏）、stretch（伸懶腰）、rest（休息）、idle（不做動作）。不要每次都用同一個動作。
             """ : "只用繁體中文寫回覆正文；即使先前對話使用其他語言，也跟隨這次的語言。不要輸出 JSON、欄位、Markdown、思考過程或任何格式說明。"
             let relevant = knowledge.isEmpty ? "" : "\n與當前問題直接相關的已核實資料：\n\(knowledge)"
             return """
@@ -1272,7 +1310,7 @@ actor LocalAI {
             let nicknameInstruction = nickname.isEmpty ? "" : " Address the user as \(nickname) when it feels natural."
             let format = structured ? """
             Your entire response must be one JSON object shaped exactly like {"emotion":"happy","action":"wave","text":"your reply"}. Do not add markdown or text outside that object.
-            Always include all three string fields in this order: emotion, action, text. Choose one emotion from happy, curious, sleepy, calm and one action from wave, stretch, rest, idle, nod.
+            Always include all three string fields in this order: emotion, action, text. Choose one emotion from happy, curious, sleepy, calm, sad, shy, pout, surprised. Choose one action that fits what you're saying: wave (hello/bye), nod (agree), bow (thanks, sorry, good night), shakeHead (disagree, refuse), laugh (something's funny), clap (happy for them), cheer (encourage), shy (embarrassed by praise), sad, pout (sulky), surprised, think, dance (so happy you want to dance), idolPose, yawn (sleepy), stretch, rest, idle (no gesture). Don't use the same action every time.
             """ : "Return only the reply itself in English, even if earlier messages used another language. Do not output JSON, field names, Markdown, reasoning, or formatting explanations."
             let relevant = knowledge.isEmpty ? "" : "\nVerified facts directly relevant to the current question:\n\(knowledge)"
             return """
@@ -1290,7 +1328,7 @@ actor LocalAI {
             let nicknameInstruction = nickname.isEmpty ? "" : "自然なときは相手を「\(nickname)」と呼んでください。"
             let format = structured ? """
             出力全体を必ず一つのJSONオブジェクトにし、{"emotion":"calm","action":"nod","text":"返事"}と同じ形にしてください。JSONの外に文章やMarkdownを追加しないでください。
-            必ずemotion、action、textの順で三つの文字列フィールドを全部含めてください。emotionはhappy、curious、sleepy、calmから、actionはwave、stretch、rest、idle、nodから一つだけ選んでください。
+            必ずemotion、action、textの順で三つの文字列フィールドを全部含めてください。emotionはhappy、curious、sleepy、calm、sad、shy、pout、surprisedから一つ。actionは言葉に合う動きを一つ：wave（あいさつ・バイバイ）、nod（同意）、bow（お礼・おわび・おやすみ）、shakeHead（反対・断る）、laugh（おかしい）、clap（相手を祝う）、cheer（応援）、shy（ほめられて照れる）、sad（悲しい）、pout（すねる）、surprised（驚く）、think（考える）、dance（うれしくて踊りたい）、idolPose（アイドルポーズ）、yawn（眠い）、stretch（伸び）、rest（休む）、idle（動かない）。毎回同じ動きにしないこと。
             """ : "返事の本文だけを日本語で書いてください。以前の会話が別の言語でも、今回は日本語で答えてください。JSON、フィールド名、Markdown、思考過程、形式の説明を出力しないでください。"
             let relevant = knowledge.isEmpty ? "" : "\n現在の質問に直接関係する確認済み情報：\n\(knowledge)"
             return """

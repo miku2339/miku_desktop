@@ -1051,6 +1051,50 @@ function applyStretch(progress, variant = null) {
 }
 
 /** Sideways skirt trail from horizontal motion (models with a full skirt rig). */
+// ---- Turning: a sequenced, springy turn instead of a rigid spin ----------------
+//
+// The gait asks for a body angle; she reaches it on a soft spring (eases in, settles
+// with a little overshoot). Whatever the body hasn't caught up with yet is "lead":
+// eyes and head point there first, shoulders follow, hips come last. The spin speed
+// throws the twintails and skirt outward and makes them trail behind.
+
+const turning = { yaw: { x: 0, v: 0 }, hair: { x: 0, v: 0 } };
+const TURN_ANGLE = 1.22;
+
+function applyTurnFollowThrough(gaitPose) {
+  const target = gaitPose.active ? gaitPose.direction * TURN_ANGLE * gaitPose.turn : 0;
+  if (reducedMotion.matches) {
+    turning.yaw.x = target;
+    turning.yaw.v = 0;
+    state.model.rotation.y = target;
+    return;
+  }
+  const yaw = springTo(turning.yaw, target, 1.55, 0.74);
+  const spin = THREE.MathUtils.clamp(turning.yaw.v, -7, 7); // rad/s, + = turning to her left
+  const lead = THREE.MathUtils.clamp(target - yaw, -0.9, 0.9);
+  state.model.rotation.y = yaw;
+
+  // Hair lags the spin a beat behind and swings back past centre when she stops.
+  const hair = springTo(turning.hair, spin, 2.1, 0.45);
+  if (Math.abs(lead) < 0.002 && Math.abs(spin) < 0.01 && Math.abs(hair) < 0.01) return;
+
+  // Eyes lead, then head and neck, then shoulders; the hips counter a little.
+  rotateBone('両目', 0, lead * 0.35, 0);
+  rotateBone('首', 0, lead * 0.28, 0);
+  rotateBone('頭', 0, lead * 0.3, -spin * 0.012);
+  rotateBone('上半身', 0, lead * 0.22, -spin * 0.022);
+  rotateBone('下半身', 0, -lead * 0.07, spin * 0.008);
+
+  // Twintails: lag behind the turn (swing front/back) and flare outward (centrifugal).
+  const lag = THREE.MathUtils.clamp(hair * 0.075, -0.32, 0.32);
+  const flare = THREE.MathUtils.clamp(Math.abs(hair) * 0.03, 0, 0.14);
+  const chain = [1, 0.6, 0.4];
+  ['左髪１', '左髪２', '左髪３'].forEach((name, index) => rotateBone(name, -lag * chain[index], 0, flare * chain[index]));
+  ['右髪１', '右髪２', '右髪３'].forEach((name, index) => rotateBone(name, lag * chain[index], 0, -flare * chain[index]));
+  // Skirt swings round with the hips and lags behind.
+  applySkirtTrail(THREE.MathUtils.clamp(-hair * 0.012, -0.045, 0.045));
+}
+
 function applySkirtTrail(amount) {
   const trail = THREE.MathUtils.clamp(amount, -0.045, 0.045);
   if (Math.abs(trail) < 0.001) return;
@@ -1462,6 +1506,7 @@ function updateModel(elapsed) {
   if (behaviorName === 'hum') applyHum(behavior.progress, elapsed, behavior.variant);
   if (behaviorName === 'rest-standing' || behaviorName === 'rest') applyRest(behavior.progress);
   if (gaitPose.active) applyWalk(gaitPose);
+  applyTurnFollowThrough(gaitPose);
   if (behaviorName === 'headPat' || behaviorName === 'headStroke') applyHeadPat(behavior.progress, behavior.variant);
   if (behaviorName === 'headStroke') rotateBone('頭', 0, 0, Math.sin(elapsed * 3.6) * 0.02 * gestureEnvelope(behavior.progress));
   if (behaviorName === 'hello') applyNod(behavior.progress, true, behavior.variant);
@@ -2047,6 +2092,8 @@ function status() {
     grounding: grounding?.status() ?? null,
     carry: carry.status(),
     walking: walking?.status() ?? null,
+    turnYaw: turning.yaw.x,
+    turnSpin: turning.yaw.v,
     reaction: state.reaction ? state.reaction.type : null,
     emotion: state.emotion,
     bones: requiredBones,

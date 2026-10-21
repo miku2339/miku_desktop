@@ -129,6 +129,11 @@ export function createGrounding(scene) {
     }
   }
 
+  /** No contact shadows (she's lying in bed, not standing on the floor). */
+  function hide() {
+    for (const shadow of shadows) shadow.visible = false;
+  }
+
   function dispose() {
     for (const shadow of shadows) {
       shadow.removeFromParent();
@@ -142,5 +147,5 @@ export function createGrounding(scene) {
     return { groundY: lastGroundY, lowestSoleY, soleGaps: [...soleGaps], sampleCounts: feet.map(foot => foot.samples.length) };
   }
 
-  return { attach, update, dispose, status };
+  return { attach, update, hide, dispose, status };
 }

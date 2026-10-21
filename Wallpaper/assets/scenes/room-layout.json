@@ -1,0 +1,95 @@
+{
+  "scene": "Miku's music room bedroom",
+  "sleepReady": false,
+  "files": {
+    "day": {
+      "file": "room-day.jpg",
+      "width": 2560,
+      "height": 1600,
+      "bytes": 900100,
+      "sha256": "550cd6c12270db998560c9b26a248c4c5ca14115771dca603306c3f843815b83"
+    },
+    "dusk": {
+      "file": "room-dusk.jpg",
+      "width": 2560,
+      "height": 1600,
+      "bytes": 912342,
+      "sha256": "c88dba40916b5e87c12d36e6559eb96d83d6931b178c0b1403a0eab911194d98"
+    },
+    "night": {
+      "file": "room-night.jpg",
+      "width": 2560,
+      "height": 1600,
+      "bytes": 806994,
+      "sha256": "cab1e11968bf28e9a2fe1325879e82dd80b15468371ff045b8dd2a3ea4ec6b0a"
+    }
+  },
+  "generation": {
+    "tool": "OpenAI built-in image_gen.imagegen",
+    "reference": "Original generated bedroom; existing musicroom-day.jpg used only as style reference",
+    "nativeSize": [
+      1586,
+      992
+    ],
+    "deliverySize": [
+      2560,
+      1600
+    ],
+    "upscaled": true,
+    "resampling": "Lanczos; dusk/night geometrically registered to day"
+  },
+  "coordinates": {
+    "units": "normalized image coordinates; visually measured for scene calibration",
+    "rectFormat": "x,y,width,height",
+    "windowBounds": [
+      0.128,
+      0.044,
+      0.254,
+      0.346
+    ],
+    "wallFloorBoundaryY": 0.546,
+    "clearForeground": [
+      0.05,
+      0.64,
+      0.36,
+      0.34
+    ],
+    "suggestedFootY": 0.915,
+    "mattressBounds": [
+      0.485,
+      0.616,
+      0.515,
+      0.19
+    ],
+    "bedHeadX": 0.95,
+    "bedSurfaceY": 0.655,
+    "pillowBounds": [
+      0.861,
+      0.592,
+      0.139,
+      0.094
+    ],
+    "blanketBounds": [
+      0.461,
+      0.607,
+      0.41,
+      0.27
+    ]
+  },
+  "alignment": {
+    "dusk": {
+      "matches": 689,
+      "inliers": 513,
+      "ransacThresholdNativePx": 1.0,
+      "registeredMedianPx": 0.694,
+      "registeredP95Px": 1.463
+    },
+    "night": {
+      "matches": 206,
+      "inliers": 169,
+      "ransacThresholdNativePx": 1.0,
+      "registeredMedianPx": 0.669,
+      "registeredP95Px": 1.414
+    }
+  }
+}

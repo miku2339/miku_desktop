@@ -27,7 +27,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
 
     private let configuration: AIConfiguration
     private let ai: LocalAI
-    private let sceneKeys = ["shibuya", "ikebukuro", "akihabara", "shinjuku", "hallway", "musicroom"]
+    private let sceneKeys = ["shibuya", "ikebukuro", "akihabara", "shinjuku", "hallway", "musicroom", "room"]
     private let personalityKeys = ["lively", "gentle", "quiet", "custom"]
     private let languageKeys = ["automatic", "traditionalChinese", "english", "japanese"]
     private let languageValues = ["auto", "zh-Hant", "en", "ja"]

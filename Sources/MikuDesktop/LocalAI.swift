@@ -117,6 +117,14 @@ actor LocalAI {
     ])
     private static let songFacts: [SongFact] = [
         SongFact(
+            titleAliases: ["ポールスター", "polestar", "pole star"],
+            creatorAliases: ["lamazep", "lamaze-p", "ラマーズp"],
+            traditionalChinese: "〈ポールスター〉— LamazeP（ラマーズP）作品，初音未來演唱。",
+            english: "“ポールスター” (Polestar) — by LamazeP, sung by Hatsune Miku.",
+            japanese: "「ポールスター」— ラマーズP（LamazeP）の曲、歌は初音ミク。",
+            featured: false
+        ),
+        SongFact(
             titleAliases: ["ワールドイズマイン", "world is mine", "worldismine", "世界第一的公主殿下"],
             creatorAliases: ["ryo", "supercell"],
             traditionalChinese: "〈ワールドイズマイン／World is Mine／世界第一的公主殿下〉— ryo（supercell）。",
@@ -237,7 +245,9 @@ actor LocalAI {
         }
         let endpoint = try chatCompletionsURL(from: snapshot.endpoint)
         let knowledge = relevantKnowledge(for: text, history: history, language: language)
-        let remembered = memoryInstruction(memory, language: language)
+        let remembered = [memoryInstruction(memory, language: language), Self.nowInstruction(language), Self.songHonesty(language)]
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n")
 
         // Earlier pictures are only mentioned; only the one sent now is attached.
         let picture = Self.picturePlaceholder(language)
@@ -387,6 +397,7 @@ actor LocalAI {
         Ignore greetings, questions, small talk, passing moods, anything Miku said, hypotheticals, and roleplay. Never record passwords, ID, card or account numbers, addresses, health details, or anything sexual.
         Write each fact as one short third-person sentence in the language the user wrote in (for example "用戶叫阿希。", "The user is studying in Chiba.", "ユーザーは猫を飼っている。"). Do not repeat facts that are already in memory.
         If the message clearly contradicts an existing memory, put that memory's number in "outdated".
+        Also record a correction the user gives about a song's producer or credit (for example "「ポールスター」是 LamazeP 的歌。") as category other.
         Category: name (what to call them), preference, life (school, work, home, people, pets), plan (upcoming things, promises), other.
         Most messages contain nothing worth remembering: then answer {"facts":[],"outdated":[]}.
         """
@@ -659,6 +670,38 @@ actor LocalAI {
         }
 
         return CompanionReply(text: text, emotion: emotion, action: action)
+    }
+
+    /// The user's local date and time, so she knows when it is.
+    private static func nowInstruction(_ language: ReplyLanguage, now: Date = Date()) -> String {
+        let formatter = DateFormatter()
+        formatter.timeZone = .current
+        switch language {
+        case .traditionalChinese:
+            formatter.locale = Locale(identifier: "zh_Hant")
+            formatter.dateFormat = "yyyy年M月d日 EEEE HH:mm"
+            return "現在是對方當地時間 \(formatter.string(from: now))（\(TimeZone.current.identifier)）。被問到時間或日期時照此回答；深夜可以關心對方早點休息。"
+        case .english:
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.dateFormat = "EEEE, d MMMM yyyy, HH:mm"
+            return "It is now \(formatter.string(from: now)) in the user's local time (\(TimeZone.current.identifier)). Use this when asked about the time or date; late at night you can gently tell them to get some rest."
+        case .japanese:
+            formatter.locale = Locale(identifier: "ja_JP")
+            formatter.dateFormat = "yyyy年M月d日（EEEE）HH:mm"
+            return "今は相手の現地時間で\(formatter.string(from: now))（\(TimeZone.current.identifier)）です。時間や日付を聞かれたらこれで答え、夜遅ければ早めに休むよう気づかってください。"
+        }
+    }
+
+    /// Vocaloid producers are easy to mix up: say so rather than guess, and trust a correction.
+    private static func songHonesty(_ language: ReplyLanguage) -> String {
+        switch language {
+        case .traditionalChinese:
+            return "談到歌曲時，除非上面有已核實資料或你記得對方告訴過你，否則不要說出作者（P主）、年份或細節；不肯定就直接說不肯定，可以請對方告訴你。對方糾正作者時，坦白說謝謝、你會記住，不要編理由。"
+        case .english:
+            return "When a song comes up, don't name its producer, year or details unless they're in the verified facts above or the user told you before; if you're not sure, say so and ask them. When the user corrects a credit, thank them and say you'll remember it, without making up excuses."
+        case .japanese:
+            return "曲の話では、上の確認済み情報か相手から以前教わったこと以外、作者（P）や年、詳細を言わないでください。自信がなければそう言って教えてもらいましょう。作者を訂正されたら、言い訳せずお礼を言って覚えると伝えてください。"
+        }
     }
 
     private func touchDescription(_ counts: [String: Int], language: ReplyLanguage) -> String {
@@ -958,11 +1001,10 @@ actor LocalAI {
     private func detectedReplyLanguage(in text: String) -> ReplyLanguage? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !looksLikeHexColor(trimmed) else { return nil }
+        // A Chinese sentence that mentions a Japanese song title is still Chinese.
+        if containsHan(trimmed), containsChineseLanguageMarker(trimmed) { return .traditionalChinese }
         if containsKana(trimmed) { return .japanese }
         if containsHan(trimmed) {
-            if containsChineseLanguageMarker(trimmed) {
-                return .traditionalChinese
-            }
             let recognizer = NLLanguageRecognizer()
             recognizer.processString(trimmed)
             let hypotheses = recognizer.languageHypotheses(withMaximum: 3)
@@ -976,7 +1018,8 @@ actor LocalAI {
             if chineseConfidence >= 0.8 {
                 return .traditionalChinese
             }
-            return nil
+            // Japanese almost never comes without any kana: Han characters alone are Chinese.
+            return .traditionalChinese
         }
         if trimmed.range(of: #"[A-Za-z]"#, options: .regularExpression) != nil {
             return .english
@@ -996,7 +1039,8 @@ actor LocalAI {
     private func containsChineseLanguageMarker(_ text: String) -> Bool {
         ["你", "您", "嗎", "吗", "咩", "係", "這首", "这首", "這個", "这个",
          "什麼", "什么", "邊度", "边度", "哪裡", "哪里", "多少", "是誰", "是谁",
-         "為什麼", "为什么"].contains { text.contains($0) }
+         "為什麼", "为什么", "不是", "那是", "就是", "我們", "我们", "他們", "怎麼", "怎么",
+         "嘅", "唔", "冇", "佢", "啲", "喺", "知道", "聽過", "听过", "首歌", "的歌", "了"].contains { text.contains($0) }
     }
 
     private func looksLikeHexColor(_ text: String) -> Bool {
@@ -1278,10 +1322,14 @@ actor LocalAI {
     }
 
     private func isSongQuestion(_ text: String) -> Bool {
-        containsAny(text, [
+        if containsAny(text, [
             "歌曲", "首歌", "這首", "这首", "呢首", "嗰首", "song", "music",
-            "楽曲", "この曲", "その曲", "作曲", "作詞", "作词", "作者", "creator"
-        ])
+            "楽曲", "この曲", "その曲", "作曲", "作詞", "作词", "作者", "creator", "p主", "ボカロp"
+        ]) { return true }
+        // "Do you know ポールスター?": a quoted or katakana title with a "do you know".
+        let asks = containsAny(text, ["知道", "知唔知", "聽過", "听过", "識唔識", "知ってる", "知って", "聴いた", "do you know", "heard of"])
+        let title = text.range(of: #"[「『〈《].+[」』〉》]|[ァ-ヶー]{3,}"#, options: .regularExpression) != nil
+        return asks && title
     }
 
     private func systemPrompt(

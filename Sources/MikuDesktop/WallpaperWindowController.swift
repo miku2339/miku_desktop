@@ -49,6 +49,7 @@ final class WallpaperWindowController: NSObject, WKNavigationDelegate, WKScriptM
     private var screenObserver: NSObjectProtocol?
     private var wakeObserver: NSObjectProtocol?
     private var memoryObserver: NSObjectProtocol?
+    private var sleepObserver: NSObjectProtocol?
 
     // Pixel-accurate mouse pass-through state.
     private var hitTestInFlight = false
@@ -108,6 +109,13 @@ final class WallpaperWindowController: NSObject, WKNavigationDelegate, WKScriptM
         backgroundWebView.load(URLRequest(url: backgroundURL, cachePolicy: .reloadIgnoringLocalCacheData))
         webView.load(URLRequest(url: characterURL, cachePolicy: .reloadIgnoringLocalCacheData))
         startPointerPolling()
+        sleepObserver = NotificationCenter.default.addObserver(
+            forName: .mikuSleepChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.pushSleep() }
+        }
         memoryObserver = NotificationCenter.default.addObserver(
             forName: .mikuMemoryChanged,
             object: nil,
@@ -199,6 +207,14 @@ final class WallpaperWindowController: NSObject, WKNavigationDelegate, WKScriptM
         call(webView: webView, function: "setRelationship", payload: CompanionMemory.shared.relationshipPayload())
     }
 
+    /// When she should be asleep, for both layers (the background switches to her room).
+    @MainActor
+    func pushSleep() {
+        let payload = SleepSchedule.shared.payload
+        if pageReady { call(webView: webView, function: "setSleep", payload: payload) }
+        if backgroundReady { call(webView: backgroundWebView, function: "setSleep", payload: payload) }
+    }
+
     func receiveReply(_ reply: CompanionReply) {
         call(webView: webView, function: "receiveReply", payload: [
             "text": reply.text,
@@ -223,6 +239,7 @@ final class WallpaperWindowController: NSObject, WKNavigationDelegate, WKScriptM
             applyWeather(to: webView)
             if webView === backgroundWebView { setAmbientEnabled(WeatherService.ambientEnabled) }
             else { MainActor.assumeIsolated { self.pushRelationship() } }
+            MainActor.assumeIsolated { self.pushSleep() }
         }
     }
 
@@ -266,6 +283,11 @@ final class WallpaperWindowController: NSObject, WKNavigationDelegate, WKScriptM
         case "drag":
             dragActive = (payload["active"] as? Bool) ?? false
             if dragActive { panel.ignoresMouseEvents = false }
+        case "sleep":
+            // She was woken up by a touch: stay up for a while (the other layer follows).
+            guard (payload["asleep"] as? Bool) == false else { return }
+            let minutes = max(1, min(120, number(payload["minutes"]) ?? 20))
+            MainActor.assumeIsolated { SleepSchedule.shared.wake(minutes: minutes) }
         case "touch":
             guard let kind = payload["kind"] as? String, kind.count <= 24 else { return }
             let part = (payload["part"] as? String).flatMap { ["chest", "skirt"].contains($0) ? $0 : nil }

@@ -9,12 +9,20 @@ import { createRoutine, createVariety } from './variety.js';
 import { characterEnvironment, defaultWeather, normalizeWeather, timeAnchors } from './environment.js';
 import { createAmbient } from './ambient.js';
 import { createRelationship, RELATIONSHIP_TOUCH_KINDS } from './relationship.js';
+import { canUseRoomBed, DEFAULT_ROOM_LAYOUT, loadRoomLayout, roomViewportGeometry } from './room-layout.js';
+import { createSleepCycle, isAsleep, normalizeOverride, scheduledAsleep } from './sleep.js';
 import { OutlineEffect } from './vendor/effects/OutlineEffect.js';
 
 const canvas = document.querySelector('#webglCanvas');
 const sceneRoot = document.querySelector('#sceneRoot');
 const fallbackPortrait = document.querySelector('#fallbackPortrait');
 const speechBubble = document.querySelector('#speechBubble');
+const bedOverlay = document.querySelector('#bedOverlay');
+if (bedOverlay) {
+  // The blanket layer ships with the room pictures; without it she just lies on the bed.
+  bedOverlay.addEventListener('load', () => { bedOverlay.dataset.ok = 'true'; });
+  bedOverlay.addEventListener('error', () => { bedOverlay.dataset.ok = 'false'; });
+}
 const ambientCanvas = document.querySelector('#ambientCanvas');
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 const hasNativeBridge = () => Boolean(window.webkit?.messageHandlers?.miku?.postMessage);
@@ -94,6 +102,13 @@ const SCENE_CONFIGS = [
     night: '../assets/scenes/hallway-night.jpg'
   },
   {
+    // Miku's own room: where she sleeps. Not part of the automatic scene rotation.
+    id: 'room',
+    day: '../assets/scenes/room-day.jpg',
+    dusk: '../assets/scenes/room-dusk.jpg',
+    night: '../assets/scenes/room-night.jpg'
+  },
+  {
     id: 'musicroom',
     day: '../assets/scenes/musicroom-day.jpg',
     dusk: '../assets/scenes/musicroom-dusk.jpg',
@@ -106,6 +121,11 @@ const GROUND_SCREEN_Y = 0.915;
 const FPS_CAP = 30;
 const POSITION_ANCHORS = [0.22, 0.43, 0.62];
 const CYCLE_SECONDS = 150;
+// Scenes that only appear when chosen (or when she goes to bed), never in the rotation.
+const BEDROOM_ONLY = new Set(['room']);
+let roomLayout = DEFAULT_ROOM_LAYOUT;
+let roomGeometry = roomViewportGeometry(roomLayout, window.innerWidth, window.innerHeight);
+
 const ALLOWED_EMOTIONS = new Set(['happy', 'curious', 'sleepy', 'calm', 'dizzy', 'pout', 'sad', 'shy', 'surprised']);
 // Body language the chat reply can ask for (see LocalAI.allowedActions).
 const REPLY_GESTURES = ['bow', 'shakeHead', 'laugh', 'clap', 'shy', 'sad', 'pout', 'surprised'];
@@ -237,7 +257,11 @@ const TOUCH_PHRASES = {
     headStrokeDistant: ['欸？我們還沒那麼熟吧…', '嗯…頭髮會亂掉啦。', '…一下下就好喔。'],
     handHoldDistant: ['突、突然牽手？…有點怪怪的。', '嗯…先不要啦。', '…你的手好冰。'],
     pokeDistant: ['…幹嘛？', '有事嗎？', '不要亂戳啦。'],
-    carryDistant: ['欸？！放我下來！', '不要隨便抱起來啦！', '我、我自己會走！']
+    carryDistant: ['欸？！放我下來！', '不要隨便抱起來啦！', '我、我自己會走！'],
+    goodnight: ['好睏…我先去睡囉，晚安～', '呼啊…眼睛睜不開了，晚安。', '今天也辛苦了，我去睡了喔，晚安♪'],
+    sleepMumble: ['嗯…再睡一下下…', '…蔥…好多蔥…', '唔…別吵啦…', '…Zzz…嗯？…'],
+    wokenUp: ['嗯…？你把我叫醒了啦…', '呼啊…現在幾點了…？', '…好睏…有什麼事嗎？'],
+    morning: ['早安！睡得好舒服～', '嗯～早安！今天也一起加油吧♪', '呼啊…早安，你起得真早呢。']
   },
   en: {
     headStroke: ['Hehe~ one more pat? ♪', 'Gentle with the twintails!', 'That feels nice… ♪', 'I could get used to this~', 'Mmm~ ♪', "You're extra gentle today."],
@@ -263,7 +287,11 @@ const TOUCH_PHRASES = {
     headStrokeDistant: ["Huh? We're not that close yet…", "Mm… you'll mess up my hair.", '…Just for a second, okay?'],
     handHoldDistant: ["H-holding hands, all of a sudden? …That's a bit weird.", 'Mm… not yet.', '…Your hand is cold.'],
     pokeDistant: ['…What?', 'Need something?', "Don't just poke me."],
-    carryDistant: ['Hey?! Put me down!', "Don't just pick me up!", 'I-I can walk by myself!']
+    carryDistant: ['Hey?! Put me down!', "Don't just pick me up!", 'I-I can walk by myself!'],
+    goodnight: ["So sleepy… I'm off to bed. Good night~", "Hwaah… can't keep my eyes open. Night.", "Good work today. I'm going to sleep now, good night ♪"],
+    sleepMumble: ['Mm… five more minutes…', '…leeks… so many leeks…', "Mmh… don't…", '…Zzz… hm?…'],
+    wokenUp: ['Mm…? You woke me up…', 'Hwaah… what time is it…?', '…So sleepy… what is it?'],
+    morning: ['Good morning! I slept so well~', "Mm~ morning! Let's do our best today ♪", "Hwaah… morning. You're up early."]
   },
   ja: {
     headStroke: ['えへへ、もう一回♪', '髪は優しくなでてね。', 'きもちいい…♪', 'くせになっちゃうよ～', 'ふにゃ～♪', '今日はとっても優しいね。'],
@@ -289,7 +317,11 @@ const TOUCH_PHRASES = {
     headStrokeDistant: ['え？まだそんなに仲良くないよね…', 'ん…髪くずれちゃう。', '…ちょっとだけだよ？'],
     handHoldDistant: ['て、手？いきなりはちょっと…', 'ん…まだダメ。', '…手、つめたいね。'],
     pokeDistant: ['…なに？', 'なにか用？', 'つつかないでよ。'],
-    carryDistant: ['えっ？！おろして！', 'いきなり持ち上げないで！', 'じ、自分で歩けるから！']
+    carryDistant: ['えっ？！おろして！', 'いきなり持ち上げないで！', 'じ、自分で歩けるから！'],
+    goodnight: ['ねむい…先に寝るね、おやすみ～', 'ふぁ…目が開かない…おやすみ。', '今日もおつかれさま。もう寝るね、おやすみ♪'],
+    sleepMumble: ['ん…あと五分…', '…ネギ…いっぱい…', 'むにゃ…やめてよぉ…', '…すぅ…ん？…'],
+    wokenUp: ['ん…？起こされちゃった…', 'ふぁ…いま何時…？', '…ねむい…どうしたの？'],
+    morning: ['おはよう！よく眠れた～', 'ん～おはよう！今日もがんばろうね♪', 'ふぁ…おはよう、早起きだね。']
   }
 };
 
@@ -454,8 +486,11 @@ async function prepareScenes() {
 }
 
 function sceneWeightsAt(elapsed) {
-  const ids = state.loadedScenes;
-  if (state.forcedScene && ids.includes(state.forcedScene)) return { [state.forcedScene]: 1 };
+  // In bed, or up in the middle of the night: her room, whatever else is selected.
+  const bedtime = sleepState.lying || (sleepState.phase === 'awake' && scheduledAsleep(currentHour()));
+  if (bedtime && state.loadedScenes.includes('room')) return { room: 1 };
+  if (state.forcedScene && state.loadedScenes.includes(state.forcedScene)) return { [state.forcedScene]: 1 };
+  const ids = state.loadedScenes.filter(id => !BEDROOM_ONLY.has(id));
   if (ids.length <= 1 || reducedMotion.matches) return { [ids[0] || 'shibuya']: 1 };
 
   const slot = Math.max(30, state.sceneSlotSeconds);
@@ -603,6 +638,12 @@ function setThinking(thinking) {
 
 // How she feels about you; the app sends the remembered values (see setRelationship).
 const relationship = createRelationship();
+// Going to bed and getting up (see sleep.js). Both page layers run the same cycle so the
+// background switches to her room exactly when the character lies down.
+const sleepCycle = createSleepCycle();
+let sleepState = { phase: 'awake', since: 0, visibility: 1, lying: false };
+let sleepOverride = null;
+const sleepTouch = { stirs: [], lastMumble: -Infinity, pendingBoundary: null, stirStart: -Infinity, stirSide: 1 };
 const wrapAngle = angle => Math.atan2(Math.sin(angle), Math.cos(angle));
 
 /** Tell the app about a touch so it can remember it (friendship, today's count). */
@@ -838,6 +879,7 @@ function setupRenderer() {
 }
 
 function resize() {
+  roomGeometry = roomViewportGeometry(roomLayout, window.innerWidth, window.innerHeight);
   if (!renderer || !camera) return;
   const width = Math.max(1, window.innerWidth);
   const height = Math.max(1, window.innerHeight);
@@ -955,6 +997,15 @@ function raycastCharacter(clientX, clientY) {
   const limb = LIMB_BONE.test(bone);
   const hair = HAIR_BONE.test(bone);
   let zone = 'body';
+  if (sleepState.lying) {
+    // Lying down, heights mean nothing: go by the bone alone.
+    if (hair || /頭|首|目/.test(bone)) zone = 'head';
+    else if (limb) zone = 'hand';
+    else if (CHEST_BONE.test(bone)) zone = 'chest';
+    else if (SKIRT_BONE.test(bone)) zone = 'skirt';
+    state.model.worldToLocal(hitLocalPosition.copy(hit.point));
+    return { hit, zone, normalizedHeight, lateral, side: hitLocalPosition.x >= 0 ? '左' : '右' };
+  }
   if (normalizedHeight >= 0.82) zone = 'head';
   else if (normalizedHeight >= 0.43 && (limb || lateral >= 0.19)) zone = 'hand';
   else if (!hair && normalizedHeight >= 0.66 && (CHEST_BONE.test(bone) || (bone === '上半身' && normalizedHeight >= 0.72))) zone = 'chest';
@@ -1718,6 +1769,10 @@ function updateHoverBlend(elapsed, motionActive) {
 
 function updateModel(elapsed) {
   if (!state.model) return;
+  if (sleepState.lying) {
+    updateSleepingModel(elapsed);
+    return;
+  }
   carryPose = carry.update({ time: elapsed, reducedMotion: reducedMotion.matches });
   const carrying = carryPose.phase !== 'idle';
   if (carryPose.impact) {
@@ -1731,6 +1786,7 @@ function updateModel(elapsed) {
   state.hopLift = 0;
   let routineBehavior = behaviorAt(elapsed);
   if (relationship.offended && CHEERFUL_ACTIONS.has(routineBehavior.name)) routineBehavior = { name: 'idle', progress: 0 };
+  if (sleepState.phase !== 'awake' && !['yawn', 'idle'].includes(routineBehavior.name)) routineBehavior = { name: 'idle', progress: 0 };
   let routineAnchor = anchorAt(elapsed, routineBehavior);
   if (state.pinnedAnchor !== null) {
     // Pinned by the user: keep the idle gestures but don't walk away.
@@ -1762,7 +1818,7 @@ function updateModel(elapsed) {
   updateMotionSource(source, elapsed);
   resetSkeleton();
   resetMorphs();
-  state.model.rotation.y = 0;
+  state.model.rotation.set(0, 0, 0);
   let anchor = reducedMotion.matches
     ? (state.pinnedAnchor ?? POSITION_ANCHORS[1])
     : heldAnchorAt(routineAnchor, elapsed);
@@ -1775,6 +1831,10 @@ function updateModel(elapsed) {
   }
   const dragging = Boolean(state.pointer?.dragging);
   if (dragging) anchor = state.anchorHold?.anchor ?? anchor;
+  else if (state.activeScene === 'room') {
+    const [left, , width] = roomGeometry.clearForeground;
+    anchor = THREE.MathUtils.clamp(anchor, left, left + width);
+  }
   // Follow the target position with a soft spring: she trails the cursor while
   // dragged and sways to a stop when released.
   if (springs.anchor.x === null) springs.anchor.x = anchor;
@@ -1841,6 +1901,7 @@ function updateModel(elapsed) {
   if (behaviorName === 'boundary') applyBoundary(behavior.progress, elapsed, behavior.variant);
   if (behaviorName === 'snub') applySnub(behavior.progress, elapsed, behavior.variant);
   if (behaviorName === 'forgive') applyForgive(behavior.progress, elapsed, behavior.variant);
+  if (sleepState.phase === 'dozing') applyStandingDoze(elapsed);
   applyTalking(elapsed);
   // A reply's mood lingers for a while, then she settles back down.
   if (state.emotion !== 'calm' && elapsed - (state.emotionAt ?? elapsed) > 40) state.emotion = 'calm';
@@ -2073,6 +2134,174 @@ function sayOnce(variant, step, key, emotion) {
   if (speechBubble.classList.contains('visible')) {
     window.setTimeout(() => sayNow(key, emotion), 900);
   } else sayNow(key, emotion);
+}
+
+// ---- Sleeping ------------------------------------------------------------------
+//
+// At night (or after you say good night) she yawns, says good night and goes to bed in
+// her room: the character fades out, the scene changes, and she's lying on her side under
+// the blanket, breathing slowly with little "z"s. Touching her head makes her stir and
+// mumble; keep at it and she wakes up (sleepily). Touching her chest or skirt wakes her
+// at once, and she's cross about it. In the morning she gets up by herself.
+
+function updateSleep(elapsed, hour) {
+  const wantAsleep = isAsleep({ hour, nowMs: Date.now(), override: sleepOverride });
+  const busy = showsCharacter && Boolean(state.pointer || carry.status().phase !== 'idle'
+    || ['boundary', 'snub', 'dizzy', 'ouch'].includes(state.reaction?.type));
+  const previous = sleepState.phase;
+  sleepState = sleepCycle.step({
+    time: elapsed,
+    wantAsleep,
+    busy,
+    canLie: canUseRoomBed(roomLayout, state.loadedScenes.includes('room'))
+  });
+  if (!showsCharacter || previous === sleepState.phase) return;
+  if (sleepState.phase === 'windingDown') {
+    if (!reducedMotion.matches) startReaction('yawn', { variant: { ...chooseVariant('yawn'), said: 0, talk: false } });
+    sayNow('goodnight', 'sleepy');
+  } else if (sleepState.phase === 'awake' && previous === 'brightening') {
+    sleepTouch.stirs = [];
+    if (sleepTouch.pendingBoundary) {
+      const part = sleepTouch.pendingBoundary;
+      sleepTouch.pendingBoundary = null;
+      reactToBoundary(part === 'skirt' ? '右' : '左', part);
+    } else {
+      if (!reducedMotion.matches) startReaction('stretch', { variant: { ...chooseVariant('stretch'), style: 'yawn' } });
+      const morning = hour >= 5 && hour < 12 && !sleepTouch.wokenEarly;
+      sayNow(morning ? 'morning' : 'wokenUp', 'sleepy');
+    }
+    sleepTouch.wokenEarly = false;
+  } else if (sleepState.phase === 'awake' && previous === 'windingDown') {
+    // Changed her mind (you said good morning, or the override ended).
+    state.reaction = null;
+  }
+}
+
+/** Fades the character (and the blanket over her) for the swap between standing and lying. */
+let bedOverlayPeriod = null;
+function applySleepVisibility(periodWeights) {
+  if (!showsCharacter) return;
+  const visibility = reducedMotion.matches ? (sleepState.phase === 'dimming' || sleepState.phase === 'brightening' ? 0 : 1) : sleepState.visibility;
+  // Driven frame by frame here, so the stylesheet's own fade must not lag behind.
+  canvas.style.transition = visibility >= 0.999 ? '' : 'none';
+  canvas.style.opacity = visibility >= 0.999 ? '' : String(visibility);
+  const inBed = sleepState.lying && state.activeScene === 'room';
+  if (!bedOverlay) return;
+  if (inBed) {
+    const period = ['day', 'dusk', 'night'].reduce((best, key) => (periodWeights[key] ?? 0) > (periodWeights[best] ?? 0) ? key : best, 'day');
+    if (period !== bedOverlayPeriod) {
+      bedOverlayPeriod = period;
+      bedOverlay.src = `../assets/scenes/room-blanket-${period}.png`;
+    }
+  }
+  bedOverlay.style.opacity = inBed && bedOverlay.dataset.ok !== 'false' ? String(visibility) : '0';
+}
+
+function updateSleepingModel(elapsed) {
+  updateHoverBlend(elapsed, true);
+  resetSkeleton();
+  resetMorphs();
+  state.behavior = 'sleeping';
+  state.turnOffset = 0;
+  turning.yaw.x = turning.yaw.v = 0;
+  walking?.reset();
+  // On her side facing you, head on the pillow at the right end of the bed.
+  const model = state.model;
+  if (!state.standingHeight) {
+    model.rotation.set(0, 0, 0);
+    model.position.set(0, 0, 0);
+    model.updateMatrixWorld(true);
+    modelBox.setFromObject(model);
+    state.standingHeight = Math.max(1, modelBox.max.y - modelBox.min.y);
+  }
+  model.rotation.set(0, 0, -Math.PI / 2);
+  const height = state.standingHeight;
+  model.position.x = screenAnchorToWorld(roomGeometry.bedHeadX) - height * 0.97;
+  model.position.y = camera.position.y + CAMERA_HEIGHT * (0.5 - roomGeometry.bedSurfaceY) + height * SLEEP_BODY_HALF;
+  model.position.z = 0;
+
+  const breath = Math.sin(elapsed * Math.PI * 2 / 4.2);
+  // Curled up a little: knees drawn up, hands together in front of her chest.
+  for (const [index, side] of ['左', '右'].entries()) {
+    const s = index === 0 ? 1 : -1;
+    rotateBone(`${side}足`, -0.45, 0, 0);
+    rotateBone(`${side}ひざ`, 0.75, 0, 0);
+    rotateBone(`${side}足首`, 0.2, 0, 0);
+    rotateBone(`${side}腕`, 0, -s * 0.85, s * 0.2);
+    rotateBone(`${side}ひじ`, 0, -s * 1.7, 0);
+    rotateBone(`${side}手首`, 0, 0, s * 0.3);
+  }
+  rotateBone('上半身', 0.12 + 0.015 * breath, 0, 0);
+  rotateBone('首', 0.08, 0, 0.05);
+  rotateBone('頭', 0.06, 0.05, 0.12);
+  // Twintails fall onto the bed behind her instead of standing out sideways.
+  // (A hanging tail swings outwards with +z on her left, so inwards is -z there.)
+  for (const [side, sign] of [['左', 1], ['右', -1]]) {
+    rotateBone(`${side}髪１`, -0.3, 0, -sign * SLEEP_TAIL_SWING);
+    rotateBone(`${side}髪２`, 0, 0, -sign * 0.15);
+  }
+
+  // Stirring when you touch her: a frown, a little turn of the head, a mumble.
+  const stir = Math.max(0, 1 - (elapsed - sleepTouch.stirStart) / 1.6);
+  if (stir > 0) {
+    rotateBone('頭', 0, sleepTouch.stirSide * 0.12 * stir, -0.06 * stir);
+    rotateBone('上半身', 0, 0, 0.03 * stir);
+    setMorph('困る', 0.6 * stir);
+    setMorph('う', 0.35 * stir * (0.5 + 0.5 * Math.sin(elapsed * 9)));
+  }
+  setMorph('まばたき', 1);
+  setMorph('なごみ', 0.35 * (1 - stir));
+  setMorph('お', 0.06 + 0.06 * Math.max(0, breath));
+  if (Math.floor(elapsed / 1.7) !== Math.floor((elapsed - 0.05) / 1.7) && sleepState.visibility > 0.9) {
+    floatSymbol(variety.chance(0.3) ? 'Z' : 'z', 'sleep', 0, 0.02);
+  }
+  state.model.updateMatrixWorld(true);
+}
+
+// How far her side sticks out below her centre line when lying (fraction of her height),
+// and how far the twintails swing in towards her back. Calibrated against the model.
+const SLEEP_BODY_HALF = 0;
+const SLEEP_TAIL_SWING = 0.45;
+
+function applyStandingDoze(elapsed) {
+  // No bed in this scene: she nods off on her feet.
+  const nod = 0.5 + 0.5 * Math.sin(elapsed * 0.8);
+  rotateBone('首', 0.18 + 0.08 * nod, 0, 0.04);
+  rotateBone('頭', 0.12 + 0.06 * nod, 0, 0.06);
+  rotateBone('上半身', 0.05, 0, 0);
+  setMorph('まばたき', 1);
+  setMorph('なごみ', 0.3);
+  if (Math.floor(elapsed / 2) !== Math.floor((elapsed - 0.05) / 2)) floatSymbol('z', 'sleep', 0, 0.02);
+}
+
+/** A touch while she's asleep. Returns true if it was handled. */
+function touchSleeping(result) {
+  if (!sleepState.lying || sleepState.phase !== 'lying') return Boolean(sleepState.lying);
+  const elapsed = currentElapsed();
+  postNative({ type: 'haptic' });
+  if (result.zone === 'chest' || result.zone === 'skirt') {
+    sleepTouch.pendingBoundary = result.zone;
+    wakeUp(20);
+    return true;
+  }
+  sleepTouch.stirs = sleepTouch.stirs.filter(time => elapsed - time < 40);
+  sleepTouch.stirs.push(elapsed);
+  sleepTouch.stirStart = elapsed;
+  sleepTouch.stirSide = variety.chance(0.5) ? 1 : -1;
+  if (sleepTouch.stirs.length >= 3) {
+    sleepTouch.wokenEarly = true;
+    wakeUp(20);
+  } else if (elapsed - sleepTouch.lastMumble > 4) {
+    sleepTouch.lastMumble = elapsed;
+    sayNow('sleepMumble', 'sleepy');
+  }
+  return true;
+}
+
+/** She's up for a while; the app keeps the override so the other layer follows. */
+function wakeUp(minutes) {
+  sleepOverride = { asleep: false, until: Date.now() + minutes * 60000 };
+  postNative({ type: 'sleep', asleep: false, minutes });
 }
 
 // ---- Boundaries ---------------------------------------------------------------
@@ -2500,6 +2729,7 @@ function currentHour() {
 function renderState(timestamp) {
   const elapsed = currentElapsed();
   const hour = currentHour();
+  updateSleep(elapsed, hour);
   const background = applyBackground(hour, elapsed);
   if (ambient) {
     ambient.update(timestamp, {
@@ -2524,11 +2754,16 @@ function renderState(timestamp) {
     applyLighting(background.periodWeights, env);
     reactToLightning(env.flash, elapsed);
     updateModel(elapsed);
-    grounding.update(
-      camera.position.y + CAMERA_HEIGHT * (0.5 - GROUND_SCREEN_Y),
-      mixNumber(background.periodWeights, 'shadowOpacity') * 1.5 * env.shadowScale,
-      carryPose.height + state.hopLift
-    );
+    if (sleepState.lying) grounding.hide();
+    else {
+      const groundScreenY = state.activeScene === 'room' ? roomGeometry.suggestedFootY : GROUND_SCREEN_Y;
+      grounding.update(
+        camera.position.y + CAMERA_HEIGHT * (0.5 - groundScreenY),
+        mixNumber(background.periodWeights, 'shadowOpacity') * 1.5 * env.shadowScale,
+        carryPose.height + state.hopLift
+      );
+    }
+    applySleepVisibility(background.periodWeights);
     (outline || renderer).render(scene, camera);
     updateCharacterBounds(timestamp);
   }
@@ -2617,6 +2852,10 @@ function handlePointerDown(event) {
   if (!result || result.zone === 'none') return;
   const point = normalizedPointer(event);
   touchGestures.reset();
+  if (sleepState.phase !== 'awake' && sleepState.phase !== 'windingDown' && sleepState.phase !== 'dozing') {
+    touchSleeping(result);
+    return;
+  }
   if (result.zone === 'chest' || result.zone === 'skirt') {
     reactToBoundary(result.side, result.zone);
     return;
@@ -2795,6 +3034,10 @@ function pickPhrase(zone) {
 /** Called for every pointer position over (or near) Miku; drives the hover reaction. */
 function updateHover(hit, x, y) {
   const elapsed = currentElapsed();
+  if (sleepState.lying) {
+    if (state.hover) endHover();
+    return;
+  }
   // Hovering isn't touching: over her chest or skirt just counts as "near her".
   if (hit?.zone === 'chest' || hit?.zone === 'skirt') hit = { ...hit, zone: 'body' };
   if (!hit) {
@@ -2929,6 +3172,7 @@ function status() {
     bounds: state.bounds ? { ...state.bounds } : null,
     pinnedAnchor: state.pinnedAnchor,
     relationship: relationship.snapshot(),
+    sleep: { ...sleepState, override: sleepOverride },
     loopRestarts: state.loopRestarts,
     sceneSlotSeconds: state.sceneSlotSeconds,
     thinking: state.thinking,
@@ -3011,6 +3255,11 @@ window.mikuCompanion = Object.freeze({
   setThinking(thinking) {
     setThinking(thinking);
     return true;
+  },
+  /** When she should sleep: { override: { asleep, until } | null } from the app. */
+  setSleep(payload = {}) {
+    sleepOverride = normalizeOverride(payload?.override);
+    return { phase: sleepState.phase, override: sleepOverride };
   },
   /** What the app remembers about the two of you (friendship, whether she's upset). */
   setRelationship(payload = {}) {
@@ -3158,6 +3407,9 @@ reducedMotion.addEventListener('change', () => {
 });
 
 try {
+  roomLayout = await loadRoomLayout('../assets/scenes/room-layout.json');
+  roomGeometry = roomViewportGeometry(roomLayout, window.innerWidth, window.innerHeight);
+  ambient?.setRoomLayout(roomLayout);
   await prepareScenes();
   if (showsCharacter) {
     fallbackPortrait.src = fallbackPortrait.dataset.src;

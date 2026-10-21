@@ -33,6 +33,7 @@ enum L10n {
         "shinjuku": [.traditionalChinese: "新宿", .english: "Shinjuku", .japanese: "新宿"],
         "hallway": [.traditionalChinese: "校園走廊", .english: "School Hallway", .japanese: "学校の廊下"],
         "musicroom": [.traditionalChinese: "音樂教室", .english: "Music Room", .japanese: "音楽室"],
+        "room": [.traditionalChinese: "Miku 的房間", .english: "Miku's Room", .japanese: "ミクの部屋"],
         "settings": [.traditionalChinese: "設定…", .english: "Settings…", .japanese: "設定…"],
         "settingsButton": [.traditionalChinese: "設定", .english: "Settings", .japanese: "設定"],
         "resetPositionMenu": [.traditionalChinese: "讓 Miku 自由走動", .english: "Let Miku Roam Freely", .japanese: "ミクを自由に歩かせる"],

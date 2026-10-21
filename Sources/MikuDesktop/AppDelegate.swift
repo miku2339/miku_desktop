@@ -123,7 +123,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             (L10n.text("akihabara"), "akihabara"),
             (L10n.text("shinjuku"), "shinjuku"),
             (L10n.text("hallway"), "hallway"),
-            (L10n.text("musicroom"), "musicroom")
+            (L10n.text("musicroom"), "musicroom"),
+            (L10n.text("room"), "room")
         ]
         let selectedScene = UserDefaults.standard.string(forKey: "selectedScene") ?? "auto"
         for (title, value) in sceneChoices {

@@ -13,6 +13,7 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
     private var failedImage: Data?
     private var isSending = false
     private var chatTask: Task<Void, Never>?
+    private let bedtimeScheduler = BedtimeScheduler()
     private var conversationGeneration = 0
     private var connectionTask: Task<Void, Never>?
     private var hasPositionedWindow = false
@@ -289,6 +290,7 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
 
     private func send(_ text: String, image: Data? = nil, appendUser: Bool = true) {
         guard !isSending else { return }
+        cancelPendingBedtime()
         failedText = nil
         failedImage = nil
         removeErrorRow()
@@ -304,6 +306,15 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
         }
         // A picture on its own still needs a sentence for the model to answer.
         let prompt = text.isEmpty && image != nil ? L10n.text("imagePrompt") : text
+        // Talking to her wakes her up; "good morning" gets her up for the day.
+        let sleep = SleepSchedule.shared
+        let goodNight = SleepSchedule.isGoodNight(text)
+        if SleepSchedule.isGoodMorning(text) {
+            sleep.goodMorning()
+        } else if sleep.isAsleep(), !goodNight {
+            sleep.wake(minutes: 30)
+        }
+        let sleepRevision = sleep.revision
         // An apology can settle things before she answers, so the reply already knows.
         memory.noteUserMessage(text)
         let history = memory.recentHistory(from: completedHistory())
@@ -325,6 +336,14 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
                 memory.record(messages)
                 memory.didExchange(user: userMessage, reply: assistantMessage, ai: ai)
                 onReply?(reply)
+                // After saying good night back, she goes to bed (once you've read her reply).
+                if goodNight {
+                    scheduleBedtime(
+                        sleep: sleep,
+                        sleepRevision: sleepRevision,
+                        conversationGeneration: generation
+                    )
+                }
                 if statusDot.color != MikuTheme.online { refreshConnectionStatus() }
             } catch {
                 guard !Task.isCancelled, generation == conversationGeneration else { return }
@@ -343,7 +362,27 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
         conversationGeneration &+= 1
         chatTask?.cancel()
         chatTask = nil
+        cancelPendingBedtime()
         setSending(false)
+    }
+
+    private func scheduleBedtime(
+        sleep: SleepSchedule,
+        sleepRevision: Int,
+        conversationGeneration generation: Int
+    ) {
+        bedtimeScheduler.schedule(
+            afterNanoseconds: 6_000_000_000,
+            ifStillCurrent: { [weak self] in
+                guard let self else { return false }
+                return generation == conversationGeneration && sleepRevision == sleep.revision
+            },
+            action: { sleep.goToBed() }
+        )
+    }
+
+    private func cancelPendingBedtime() {
+        bedtimeScheduler.cancel()
     }
 
     /// Only user turns that received an answer are sent back as context, so a failed

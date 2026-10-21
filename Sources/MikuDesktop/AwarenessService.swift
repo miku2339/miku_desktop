@@ -57,6 +57,7 @@ final class AwarenessService {
     private var timer: Timer?
     private var activationObserver: NSObjectProtocol?
     private var memoryObservers: [NSObjectProtocol] = []
+    private var sleepObserver: NSObjectProtocol?
     private var started = false
     private var generation = 0
     private var collecting = false
@@ -107,6 +108,13 @@ final class AwarenessService {
             ) { [weak self] _ in
                 MainActor.assumeIsolated { self?.invalidatePendingWork() }
             })
+        }
+        sleepObserver = NotificationCenter.default.addObserver(
+            forName: .mikuSleepChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.invalidatePendingWork() }
         }
         refreshMonitoring(resetFrontApp: true)
     }
@@ -186,6 +194,11 @@ final class AwarenessService {
 
     private func tick() {
         let enabled = Set(Source.allCases.filter(Self.isEnabled))
+        // She's asleep: she doesn't notice anything until she's up again.
+        if SleepSchedule.shared.isAsleep() {
+            if collecting || thinking { invalidatePendingWork() }
+            return
+        }
         guard !enabled.isEmpty, !collecting, !thinking else { return }
         collecting = true
         let requestGeneration = generation
@@ -350,7 +363,7 @@ final class AwarenessService {
     }
 
     private func canDeliver(source: Source, generation: Int) -> Bool {
-        AwarenessPolicy.canDeliver(
+        !SleepSchedule.shared.isAsleep() && AwarenessPolicy.canDeliver(
             requestGeneration: generation,
             currentGeneration: self.generation,
             sourceEnabled: Self.isEnabled(source),

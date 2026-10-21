@@ -4,6 +4,7 @@
 // `background-size: cover` transform the scene images use.
 
 import { lightningFlash, normalizeWeather, sunDirection } from './environment.js';
+import { roomAmbientFeatures } from './room-layout.js';
 import { createTraffic, drawTrainCar, drawVehicle3D, pointOnPath, vehicleLook } from './vehicles.js';
 
 const IMAGE_WIDTH = 1586;
@@ -96,6 +97,12 @@ const SCENE_FEATURES = {
     indoor: true,
     windows: [[0, 0.02, 0.19, 0.37], [0.86, 0, 1, 0.34]],
     beams: { from: 'right', floor: 0.55 }
+  },
+  // Her room (room-handoff.md): one window on the left wall. Recalibrate with room-layout.json.
+  room: {
+    indoor: true,
+    windows: [[0.06, 0.1, 0.36, 0.46]],
+    beams: { from: 'left', floor: 0.62 }
   }
 };
 
@@ -876,6 +883,12 @@ export function createAmbient(canvas) {
   return {
     resize,
     update,
+    setRoomLayout(layout) {
+      const room = roomAmbientFeatures(layout);
+      SCENE_FEATURES.room.size = room.size;
+      SCENE_FEATURES.room.windows = room.windows;
+      SCENE_FEATURES.room.beams.floor = room.floor;
+    },
     setEnabled(value) {
       enabled = Boolean(value);
       if (!enabled) context.clearRect(0, 0, width, height);

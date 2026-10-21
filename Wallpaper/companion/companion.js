@@ -3,6 +3,7 @@ import { createGrounding } from './grounding.js';
 import { createWalking } from './walking.js';
 import { createCarry } from './carry.js';
 import { createTouchGestures } from './touch-gestures.js';
+import { createShake, shakeAftermath } from './shake.js';
 import { createRoutine, createVariety } from './variety.js';
 import { characterEnvironment, defaultWeather, normalizeWeather, timeAnchors } from './environment.js';
 import { createAmbient } from './ambient.js';
@@ -102,9 +103,9 @@ const GROUND_SCREEN_Y = 0.915;
 const FPS_CAP = 30;
 const POSITION_ANCHORS = [0.22, 0.43, 0.62];
 const CYCLE_SECONDS = 150;
-const ALLOWED_EMOTIONS = new Set(['happy', 'curious', 'sleepy', 'calm']);
+const ALLOWED_EMOTIONS = new Set(['happy', 'curious', 'sleepy', 'calm', 'dizzy', 'pout']);
 const ALLOWED_REPLY_ACTIONS = new Set(['wave', 'stretch', 'rest', 'idle', 'nod']);
-const INTERACTION_TYPES = new Set(['headPat', 'headStroke', 'poke', 'wave', 'stretch', 'rest', 'hello', 'look', 'move']);
+const INTERACTION_TYPES = new Set(['headPat', 'headStroke', 'poke', 'wave', 'stretch', 'rest', 'hello', 'look', 'move', 'dizzy', 'ouch']);
 const CONTROLLED_BONES = [
   'センター', '上半身', '下半身', '首', '頭', '両目',
   '左肩', '左腕', '左腕捩', '左ひじ', '左手捩', '左手首',
@@ -163,6 +164,10 @@ const state = {
   nextHoverGreeting: 0,
   nextHoverHaptic: 0,
   nextTouchSpeech: 0,
+  shakeTimes: [],
+  pendingShake: null,
+  lastImpact: 0,
+  turnOffset: 0,
   language: 'zh-Hant'
 };
 
@@ -190,21 +195,48 @@ const TOUCH_PHRASES = {
     handHold: ['牽好囉♪', '一起待一會吧。', '你的手好暖。', '不要放開喔～', '嘿嘿，有點害羞…'],
     poke: ['嗯？是你呀♪', '嘿，別鬧啦～♪', '戳什麼戳～', '好癢！', '哼，偷襲！', '要我陪你玩嗎？'],
     carry: ['哇！要帶我去哪？', '好、好高！', '放我下來啦～', '飛起來囉♪', '小心不要摔到我喔！'],
-    teased: ['今天好黏人呢～♪', '再摸下去我會害羞的…', '你是不是很閒呀？♪', '好啦好啦，我知道你喜歡我♪', '休息一下吧，我又不會跑掉。']
+    teased: ['今天好黏人呢～♪', '再摸下去我會害羞的…', '你是不是很閒呀？♪', '好啦好啦，我知道你喜歡我♪', '休息一下吧，我又不會跑掉。'],
+    shaking: ['哇哇哇哇—！', '等、等一下啦！', '不要甩啦～！', '呀啊啊啊—', '停、停下來！'],
+    dizzyHeld: ['要、要暈了…', '眼睛在轉圈圈～', '世界在旋轉…', '嗚…頭好暈…'],
+    dizzy: ['天旋地轉～@_@', '星星在飛…☆', '我、我站不穩…', '好暈呀～', '地板在轉圈圈…'],
+    recover: ['呼…終於停下來了。', '下次要溫柔一點喔。', '嗯…好了好了，我沒事♪', '剛才看到好多星星…'],
+    giggle: ['嘿嘿，其實有點好玩♪', '再來一次？…才怪！', '頭暈暈的…嘻嘻♪'],
+    pout: ['哼！不要再甩我了啦！', '你是故意的吧！', '再甩我就生氣囉！', '人家是偶像，不是搖搖樂！'],
+    sulk: ['哼，不理你了！', '我生氣了，不准跟我說話！', '……哼。'],
+    forgive: ['…好啦，原諒你一次。', '下不為例喔。', '…只原諒你一點點而已。', '要請我吃大蔥才行！'],
+    ouch: ['好痛…', '輕一點放我下來嘛！', '嗚…摔到了啦。', '痛痛痛…', '要接住我啦！']
   },
   en: {
     headStroke: ['Hehe~ one more pat? ♪', 'Gentle with the twintails!', 'That feels nice… ♪', 'I could get used to this~', 'Mmm~ ♪', "You're extra gentle today."],
     handHold: ["I've got your hand! ♪", "Let's stay like this a little.", 'Your hand is warm.', "Don't let go, okay?", 'Hehe, this is a bit embarrassing…'],
     poke: ['Hm? Oh, you! ♪', 'Hey, that tickles~ ♪', 'Poke poke~', 'Eek! Sneak attack!', 'Want me to play with you?', 'Hmph!'],
     carry: ['Whoa! Where are we going?', "S-so high!", 'Put me down~', "I'm flying! ♪", "Don't drop me!"],
-    teased: ["You're so clingy today~ ♪", "If you keep that up I'll get shy…", "Haven't you got work to do? ♪", 'Okay okay, I know you like me ♪', "Take a break — I'm not going anywhere."]
+    teased: ["You're so clingy today~ ♪", "If you keep that up I'll get shy…", "Haven't you got work to do? ♪", 'Okay okay, I know you like me ♪', "Take a break — I'm not going anywhere."],
+    shaking: ['Waaaah—!', 'W-wait a second!', "Don't shake me~!", 'Eeeek—', 'S-stop!'],
+    dizzyHeld: ["I-I'm getting dizzy…", 'My eyes are spinning~', 'The world is going round…', 'Ugh… my head…'],
+    dizzy: ['Everything is spinning~ @_@', 'I see stars… ☆', "I-I can't stand straight…", 'So dizzy~', 'The floor is spinning…'],
+    recover: ['Phew… it finally stopped.', 'Be gentler next time, okay?', "Okay, okay, I'm fine ♪", 'I saw so many stars just now…'],
+    giggle: ['Hehe, that was kind of fun ♪', 'Again? …As if!', 'All woozy… hehe ♪'],
+    pout: ["Hmph! Stop shaking me!", 'You did that on purpose!', "Shake me again and I'll get mad!", "I'm an idol, not a snow globe!"],
+    sulk: ["Hmph. I'm not talking to you!", "I'm cross. No talking to me!", '…Hmph.'],
+    forgive: ['…Fine. I forgive you, once.', "Don't do it again, okay?", 'I only forgive you a little bit.', 'You owe me a leek!'],
+    ouch: ['Ow…', 'Put me down gently!', 'Ugh… that hurt.', 'Ow ow ow…', 'You were supposed to catch me!']
   },
   ja: {
     headStroke: ['えへへ、もう一回♪', '髪は優しくなでてね。', 'きもちいい…♪', 'くせになっちゃうよ～', 'ふにゃ～♪', '今日はとっても優しいね。'],
     handHold: ['手、つないだね♪', 'もう少しこのままでいよう。', 'きみの手、あったかい。', '離さないでね？', 'えへへ、ちょっと照れる…'],
     poke: ['ん？きみかぁ♪', 'もう、くすぐったいよ～♪', 'つんつん～', 'ひゃっ！不意打ち！', '遊んでほしいの？', 'むー！'],
     carry: ['わっ！どこ行くの？', 'た、高い！', 'おろして～', '飛んでる～♪', '落とさないでね！'],
-    teased: ['今日は甘えんぼさんだね～♪', 'そんなにされたら照れちゃう…', 'ひまなの？♪', 'はいはい、わたしのこと好きなんだね♪', '少し休もう？わたしはどこにも行かないよ。']
+    teased: ['今日は甘えんぼさんだね～♪', 'そんなにされたら照れちゃう…', 'ひまなの？♪', 'はいはい、わたしのこと好きなんだね♪', '少し休もう？わたしはどこにも行かないよ。'],
+    shaking: ['わわわわ—！', 'ちょ、ちょっと待って！', '振らないで～！', 'きゃあああ—', 'と、止まって！'],
+    dizzyHeld: ['め、目が回る…', '目がぐるぐる～', '世界が回ってる…', 'うぅ…頭が…'],
+    dizzy: ['ぐるぐる～@_@', 'お星さまが見える…☆', 'ま、まっすぐ立てない…', '目が回る～', '床が回ってる…'],
+    recover: ['ふぅ…やっと止まった。', '次はやさしくしてね。', 'うん…もう大丈夫♪', 'お星さまいっぱい見えたよ…'],
+    giggle: ['えへへ、ちょっと楽しかった♪', 'もう一回？…なんてね！', 'ふわふわする…えへへ♪'],
+    pout: ['もう！振らないでってば！', 'わざとでしょ！', '次やったら怒るよ！', 'わたしはアイドル！シェイカーじゃないの！'],
+    sulk: ['ふんっ、もう知らない！', '怒ったからね、話しかけないで！', '……ふん。'],
+    forgive: ['…しょうがないなぁ、許してあげる。', '次はないからね。', 'ちょっとだけ許してあげる。', 'ネギおごってくれたら許す！'],
+    ouch: ['いたた…', 'もっとそっと降ろしてよ！', 'うぅ…ぶつけた。', 'いたいいたい…', 'ちゃんと受け止めてよ！']
   }
 };
 
@@ -487,7 +519,9 @@ function startReaction(type, options = {}) {
     rest: 5.5,
     hello: 3.2,
     look: 2.4,
-    move: 4.2
+    move: 4.2,
+    dizzy: 4.5,
+    ouch: 3
   };
   const targetAnchor = Number.isFinite(Number(options.x))
     ? THREE.MathUtils.clamp(Number(options.x), 0.16, 0.68)
@@ -495,7 +529,7 @@ function startReaction(type, options = {}) {
   const distance = Math.abs(targetAnchor - state.currentAnchor);
   const duration = type === 'move'
     ? THREE.MathUtils.clamp(2.8 + distance * 10, 2.8, 6.2)
-    : durations[type] * variety.range(0.88, 1.14);
+    : Number.isFinite(options.duration) ? options.duration : durations[type] * variety.range(0.88, 1.14);
   if (options.touch) variety.noteTouch(elapsed);
 
   if (type === 'headStroke' && state.reaction?.type === type && elapsed < state.reaction.end) {
@@ -568,6 +602,8 @@ const EMISSIVE_NIGHT = [0.78, 0.88, 1.08];
 let grounding;
 let walking;
 const carry = createCarry({ maxHeight: 6 });
+// Notices when she's being shaken rather than just carried.
+const shake = createShake();
 const touchGestures = createTouchGestures();
 // Separate detector for rubbing her head while the button is held.
 const rubGestures = createTouchGestures();
@@ -1062,7 +1098,7 @@ const turning = { yaw: { x: 0, v: 0 }, hair: { x: 0, v: 0 } };
 const TURN_ANGLE = 1.22;
 
 function applyTurnFollowThrough(gaitPose) {
-  const target = gaitPose.active ? gaitPose.direction * TURN_ANGLE * gaitPose.turn : 0;
+  const target = (gaitPose.active ? gaitPose.direction * TURN_ANGLE * gaitPose.turn : 0) + state.turnOffset;
   if (reducedMotion.matches) {
     turning.yaw.x = target;
     turning.yaw.v = 0;
@@ -1371,7 +1407,9 @@ const springs = {
   bob: { x: 0, v: 0 },
   jolt: { x: 0, v: 0 },
   hair: { x: 0, v: 0 },
-  skirt: { x: 0, v: 0 }
+  skirt: { x: 0, v: 0 },
+  lollX: { x: 0, v: 0 },
+  lollY: { x: 0, v: 0 }
 };
 let springDelta = 0;
 
@@ -1410,7 +1448,14 @@ function updateModel(elapsed) {
   if (!state.model) return;
   carryPose = carry.update({ time: elapsed, reducedMotion: reducedMotion.matches });
   const carrying = carryPose.phase !== 'idle';
-  if (carryPose.impact) postNative({ type: 'haptic' });
+  if (carryPose.impact) {
+    postNative({ type: 'haptic' });
+    state.lastImpact = Math.max(state.lastImpact, carryPose.impact);
+  }
+  const shaken = shake.update(elapsed);
+  if (carrying) reactToShaking(shaken);
+  else if (state.pendingShake) startShakeAftermath(elapsed);
+  state.turnOffset = 0;
   let routineBehavior = behaviorAt(elapsed);
   let routineAnchor = anchorAt(elapsed, routineBehavior);
   if (state.pinnedAnchor !== null) {
@@ -1488,6 +1533,9 @@ function updateModel(elapsed) {
     if (carrying) {
       applyCarryPose(carryPose, elapsed);
       applyCarryStyle(carryPose, elapsed);
+      applyShaken(shaken, carryPose, velocity, elapsed);
+    } else {
+      springs.lollX.x = springs.lollX.v = springs.lollY.x = springs.lollY.v = 0;
     }
   }
   else {
@@ -1505,6 +1553,8 @@ function updateModel(elapsed) {
   if (behaviorName === 'lookAround') applyLookAround(behavior.progress, behavior.variant);
   if (behaviorName === 'hum') applyHum(behavior.progress, elapsed, behavior.variant);
   if (behaviorName === 'rest-standing' || behaviorName === 'rest') applyRest(behavior.progress);
+  if (behaviorName === 'dizzy') applyDizzy(behavior.progress, elapsed, behavior.variant);
+  if (behaviorName === 'ouch') applyOuch(behavior.progress, elapsed, behavior.variant);
   if (gaitPose.active) applyWalk(gaitPose);
   applyTurnFollowThrough(gaitPose);
   if (behaviorName === 'headPat' || behaviorName === 'headStroke') applyHeadPat(behavior.progress, behavior.variant);
@@ -1519,6 +1569,253 @@ function updateModel(elapsed) {
   blendMotionTransition(elapsed);
   if (!gaitDisabled) walking?.solve();
   state.model.updateMatrixWorld(true);
+}
+
+// ---- Being shaken ----------------------------------------------------------
+
+function sayNow(key, emotion = 'happy') {
+  // Urgent lines (being shaken, landing hard) cut in over whatever she was saying.
+  if (state.thinking || !showsCharacter) return;
+  const language = TOUCH_PHRASES[state.language] ? state.language : 'zh-Hant';
+  const phrases = TOUCH_PHRASES[language][key];
+  if (!phrases?.length) return;
+  state.nextTouchSpeech = currentElapsed() + variety.range(2.5, 4);
+  showBubble(variety.line(`${language}-${key}`, phrases), emotion, 2600);
+}
+
+function reactToShaking(shaken) {
+  const pointer = state.pointer;
+  if (!pointer?.dragging) return;
+  const elapsed = currentElapsed();
+  if (pointer.shakeLines === 0 && shaken.dizziness > 0.22 && shaken.shaking) {
+    pointer.shakeLines = 1;
+    pointer.shakeLineAt = elapsed;
+    sayNow('shaking', 'dizzy');
+    postNative({ type: 'haptic' });
+  } else if (pointer.shakeLines === 1 && shaken.dizziness > 0.68 && elapsed - pointer.shakeLineAt > 1.3) {
+    pointer.shakeLines = 2;
+    sayNow('dizzyHeld', 'dizzy');
+    postNative({ type: 'haptic' });
+  }
+}
+
+function startShakeAftermath(elapsed) {
+  const pending = state.pendingShake;
+  state.pendingShake = null;
+  // Hard shakes in the last two minutes make her less forgiving.
+  state.shakeTimes = state.shakeTimes.filter(stamp => elapsed - stamp < 120 && stamp <= elapsed);
+  const plan = shakeAftermath({
+    peak: pending.peak,
+    recentShakes: state.shakeTimes.length,
+    impact: state.lastImpact,
+    mood: variety.mood(elapsed),
+    random: variety.random
+  });
+  state.lastImpact = 0;
+  if (!plan) return;
+  if (plan.type === 'dizzy') state.shakeTimes.push(elapsed);
+  const variant = { ...chooseVariant(plan.type), style: plan.style, peak: pending.peak, said: 0 };
+  startReaction(plan.type, { touch: true, variant, duration: plan.duration });
+  postNative({ type: 'haptic' });
+  if (plan.type === 'ouch') sayNow('ouch', 'sleepy');
+  // Sulking starts cross straight away; otherwise she's dizzy first and has her say once it clears.
+  else if (plan.style === 'sulk') sayNow('sulk', 'pout');
+  else sayNow('dizzy', 'dizzy');
+}
+
+function scaleMorph(name, factor) {
+  const index = state.morphs[name];
+  const influences = state.model?.morphTargetInfluences;
+  if (index === undefined || !influences) return;
+  influences[index] *= factor;
+}
+
+function spinningEyes(elapsed, amount) {
+  // Blank round "@_@" eyes: the classic cartoon dizzy look.
+  for (const name of ['まばたき', 'はぅ', '笑い', 'なごみ', 'じと目']) scaleMorph(name, 1 - amount);
+  setMorph('はちゅ目', amount);
+}
+
+function spawnDizzyStars(elapsed, amount, every = 0.32) {
+  if (amount < 0.35 || elapsed - (state.lastDizzyStar ?? -Infinity) < every) return;
+  state.lastDizzyStar = elapsed;
+  const face = projectedFaceAnchor();
+  if (!face) return;
+  const symbols = ['☆', '✦', '★', '@'];
+  const angle = elapsed * 5.3;
+  const note = spawnHoverNote(face.x + Math.cos(angle) * 0.035, face.y - 0.05 + Math.sin(angle) * 0.012, 'dizzy');
+  if (note) note.textContent = symbols[Math.floor(variety.random() * symbols.length)];
+}
+
+function applyShaken(shaken, pose, velocity, elapsed) {
+  // Her head and arms flop around with the motion; the harder the shake, the floppier.
+  const level = THREE.MathUtils.clamp(shaken.dizziness / 0.55, 0, 1);
+  const airborne = Math.min(1, pose.height / 0.45);
+  const floppy = (0.35 + 0.65 * level) * airborne;
+  const lollX = springTo(springs.lollX, THREE.MathUtils.clamp(-velocity * 0.9, -0.42, 0.42), 2.2, 0.28);
+  const lollY = springTo(springs.lollY, THREE.MathUtils.clamp(pose.velocity * 0.045, -0.3, 0.3), 2.6, 0.3);
+  rotateBone('首', lollY * 0.4 * floppy, 0, lollX * 0.4 * floppy);
+  rotateBone('頭', lollY * 0.6 * floppy, lollX * 0.25 * floppy, lollX * 0.6 * floppy);
+  rotateBone('上半身', 0, 0, lollX * 0.25 * floppy);
+  const chain = [1, 0.7, 0.45];
+  ['左髪１', '左髪２', '左髪３'].forEach((name, index) => rotateBone(name, lollY * 0.5 * chain[index] * floppy, 0, -lollX * 0.5 * chain[index] * floppy));
+  ['右髪１', '右髪２', '右髪３'].forEach((name, index) => rotateBone(name, lollY * 0.5 * chain[index] * floppy, 0, -lollX * 0.5 * chain[index] * floppy));
+  if (level <= 0.02) return;
+  // Arms flail, out of step with each other.
+  const flail = Math.sin(elapsed * 13) * 0.32 * level * airborne;
+  const flail2 = Math.sin(elapsed * 11 + 1.7) * 0.32 * level * airborne;
+  rotateBone('左腕', flail2 * 0.5, 0, (0.35 * level + flail) * airborne);
+  rotateBone('右腕', -flail * 0.5, 0, -(0.35 * level + flail2) * airborne);
+  rotateBone('左ひじ', 0, 0, 0.35 * level * airborne + flail2 * 0.4);
+  rotateBone('右ひじ', 0, 0, -0.35 * level * airborne - flail * 0.4);
+  // Face: squeezed-shut eyes and a wail, turning into spinning eyes as she gets dizzy.
+  for (const name of ['びっくり', '笑い', '照れ', 'にこり', '口角上げ', 'にっこり']) scaleMorph(name, 1 - level);
+  const swirl = THREE.MathUtils.clamp((shaken.dizziness - 0.55) / 0.3, 0, 1);
+  setMorph('はぅ', 0.9 * level * (1 - swirl));
+  if (swirl > 0) spinningEyes(elapsed, swirl);
+  setMorph('困る', 0.8 * level);
+  setMorph('あ', (0.35 + 0.2 * Math.sin(elapsed * 17)) * level);
+  setMorph('口横広げ', 0.3 * level);
+  spawnDizzyStars(elapsed, swirl, 0.4);
+}
+
+function sayOnce(variant, step, key, emotion) {
+  if (!state.reaction || state.reaction.variant !== variant || (variant.said ?? 0) >= step) return;
+  variant.said = step;
+  // Wait for the previous line to be read before following up.
+  if (speechBubble.classList.contains('visible')) {
+    window.setTimeout(() => sayNow(key, emotion), 900);
+  } else sayNow(key, emotion);
+}
+
+function applyDizzy(progress, elapsed, variant = null) {
+  const style = variant?.style ?? 'recover';
+  const strength = THREE.MathUtils.clamp(0.6 + (variant?.peak ?? 0.6) * 0.6, 0.6, 1.2);
+  const fadeIn = easeBetween(progress, 0, 0.06);
+  const fadeOut = 1 - easeBetween(progress, 0.86, 1);
+  // How long the actual dizziness lasts before her own feelings take over.
+  const clearAt = style === 'sulk' ? 0.28 : style === 'pout' ? 0.42 : 0.62;
+  const dizzy = fadeIn * (1 - easeBetween(progress, clearAt, clearAt + 0.14)) * strength;
+
+  if (dizzy > 0.001) {
+    // Unsteady on her feet: the body wanders round in a slow circle with the head lagging.
+    const angle = elapsed * Math.PI * 2 * 0.8;
+    offsetBone('センター', Math.sin(angle) * 0.22 * dizzy, -0.12 * dizzy, Math.cos(angle) * 0.08 * dizzy);
+    rotateBone('下半身', 0, 0, -Math.sin(angle) * 0.05 * dizzy);
+    rotateBone('上半身', Math.cos(angle) * 0.05 * dizzy, 0, Math.sin(angle) * 0.09 * dizzy);
+    rotateBone('首', 0, 0, Math.sin(angle - 0.5) * 0.06 * dizzy);
+    rotateBone('頭', Math.cos(angle * 1.3) * 0.08 * dizzy + 0.04 * dizzy, 0, Math.sin(angle - 0.9) * 0.15 * dizzy);
+    for (const [index, side] of ['左', '右'].entries()) {
+      const sign = index === 0 ? 1 : -1;
+      rotateBone(`${side}足`, -0.3 * dizzy, 0, 0);
+      rotateBone(`${side}ひざ`, 0.6 * dizzy, 0, 0);
+      rotateBone(`${side}足首`, -0.3 * dizzy, 0, 0);
+      rotateBone(`${side}腕`, Math.sin(angle + index * 1.4) * 0.12 * dizzy, 0, sign * (0.18 + Math.sin(angle + index) * 0.12) * dizzy);
+      rotateBone(`${side}ひじ`, 0, 0, sign * 0.25 * dizzy);
+    }
+    spinningEyes(elapsed, Math.min(1, dizzy));
+    setMorph('困る', 0.85 * Math.min(1, dizzy));
+    setMorph('∧', 0.45 * Math.min(1, dizzy));
+    setMorph('あ', 0.12 * Math.min(1, dizzy) * (0.5 + 0.5 * Math.sin(elapsed * 5)));
+    spawnDizzyStars(elapsed, Math.min(1, dizzy));
+  }
+
+  // Shaking it off: a quick shake of the head as the dizziness clears.
+  const shakeOff = easeBetween(progress, clearAt - 0.04, clearAt + 0.04) * (1 - easeBetween(progress, clearAt + 0.1, clearAt + 0.18));
+  if (shakeOff > 0.001) {
+    rotateBone('頭', 0, Math.sin(elapsed * 24) * 0.16 * shakeOff, 0);
+    setMorph('はぅ', 0.9 * shakeOff);
+  }
+  const after = easeBetween(progress, clearAt + 0.08, clearAt + 0.22) * fadeOut;
+  const flip = variant?.flip ?? 1;
+  switch (style) {
+    case 'giggle': {
+      const bounce = Math.abs(Math.sin(elapsed * 7)) * after;
+      offsetBone('センター', 0, 0.06 * bounce, 0);
+      rotateBone('頭', 0, 0, 0.08 * flip * after);
+      setMorph('笑い', 0.8 * after);
+      setMorph('照れ', 0.5 * after);
+      setSmile(Math.max(0.12, 0.85 * after));
+      if (progress > clearAt + 0.1) sayOnce(variant, 1, 'giggle', 'happy');
+      break;
+    }
+    case 'pout': {
+      // Hands on hips, chin up and looking away: "hmph!"
+      rotateBone('頭', -0.08 * after, -0.28 * flip * after, 0.06 * flip * after);
+      rotateBone('上半身', -0.03 * after, -0.1 * flip * after, 0);
+      for (const [index, side] of ['左', '右'].entries()) {
+        const sign = index === 0 ? 1 : -1;
+        rotateBone(`${side}腕`, 0, sign * 0.35 * after, sign * 0.1 * after);
+        rotateBone(`${side}ひじ`, 0, sign * 0.9 * after, sign * 0.5 * after);
+      }
+      setMorph('怒り', 0.7 * after);
+      setMorph('じと目', 0.55 * after);
+      setMorph('∧', 0.5 * after);
+      setMorph('照れ', 0.35 * after);
+      if (progress > clearAt + 0.12) sayOnce(variant, 1, 'pout', 'pout');
+      break;
+    }
+    case 'sulk': {
+      // Turns her back on you, then peeks over her shoulder and forgives you.
+      const away = easeBetween(progress, 0.24, 0.36) * (1 - easeBetween(progress, 0.8, 0.94));
+      state.turnOffset = flip * 2.0 * away;
+      const peek = easeBetween(progress, 0.6, 0.68) * (1 - easeBetween(progress, 0.86, 0.94));
+      rotateBone('首', 0.06 * away, -flip * 0.35 * peek, 0);
+      rotateBone('頭', 0.1 * away * (1 - peek), -flip * 0.45 * peek, 0);
+      rotateBone('上半身', 0.04 * away, -flip * 0.12 * peek, 0);
+      setMorph('怒り', 0.6 * after * (1 - peek));
+      setMorph('じと目', 0.5 * after * (1 - peek));
+      setMorph('∧', 0.45 * after * (1 - peek));
+      setMorph('照れ', 0.7 * peek);
+      setMorph('困る', 0.4 * peek);
+      setSmile(0.35 * peek);
+      if (progress > 0.66) sayOnce(variant, 1, 'forgive', 'happy');
+      break;
+    }
+    default:
+      setMorph('困る', Math.max(0.3 * after, 0));
+      setMorph('まばたき', blinkAmount(elapsed) * after);
+      setSmile(Math.max(0.12, 0.5 * after));
+      if (progress > clearAt + 0.12) sayOnce(variant, 1, 'recover', 'happy');
+  }
+}
+
+function applyOuch(progress, elapsed, variant = null) {
+  // A hard landing: crumples, clutches the sore spot and tears up, then straightens up.
+  const weight = easeBetween(progress, 0, 0.05) * (1 - easeBetween(progress, 0.7, 1));
+  const crouch = easeBetween(progress, 0, 0.05) * (1 - easeBetween(progress, 0.35, 0.7));
+  const tremble = Math.sin(elapsed * 31) * 0.012 * weight;
+  // Knees bend towards the camera, so it takes a real squat to read from the front.
+  for (const [index, side] of ['左', '右'].entries()) {
+    const splay = index === 0 ? 1 : -1;
+    // Knees kept together (and the skirt held down) so it stays a modest little crouch.
+    rotateBone(`${side}足`, -1.05 * crouch, splay * 0.08 * crouch, -splay * 0.1 * crouch);
+    rotateBone(`${side}ひざ`, 2.0 * crouch, 0, 0);
+    rotateBone(`${side}足首`, -0.95 * crouch, 0, splay * 0.1 * crouch);
+  }
+  applySkirtFollow(-0.6 * crouch, -0.6 * crouch);
+  rotateBone('上半身', (0.2 + 0.25 * crouch) * weight, 0, tremble);
+  rotateBone('頭', 0.16 * weight, 0, tremble * 2);
+  const flip = variant?.flip ?? 1;
+  const side = flip > 0 ? '左' : '右';
+  const sign = flip > 0 ? 1 : -1;
+  if (variant?.style === 'head') {
+    // One hand up rubbing the top of her head.
+    const rub = Math.sin(elapsed * 9) * 0.1 * weight;
+    rotateBone(`${side}肩`, 0, 0, sign * 0.12 * weight);
+    rotateBone(`${side}腕`, 0, -sign * 0.3 * weight, sign * (1.7 + rub) * weight);
+    rotateBone(`${side}ひじ`, 0, 0, sign * 1.75 * weight);
+  } else {
+    // Hand round the back, rubbing where she landed.
+    const rub = Math.sin(elapsed * 8) * 0.12 * weight;
+    rotateBone(`${side}腕`, 0, sign * (0.8 + rub) * weight, -sign * 0.12 * weight);
+    rotateBone(`${side}ひじ`, 0, 0, sign * 0.35 * weight);
+  }
+  setMorph('はぅ', 0.85 * weight * (1 - easeBetween(progress, 0.5, 0.7)));
+  setMorph('涙', 0.8 * weight);
+  setMorph('困る', 0.9 * weight);
+  setMorph('∧', 0.5 * weight);
+  setMorph('まばたき', blinkAmount(elapsed) * easeBetween(progress, 0.5, 0.7));
 }
 
 function applyCarryStyle(pose, elapsed) {
@@ -1907,6 +2204,10 @@ function moveGrabbedPointer(pointer, event, elapsed) {
     pointer.dragging = true;
     endHover();
     if (!reducedMotion.matches) carry.begin({ pointerY: pointer.startWorldY, time: elapsed });
+    shake.begin(elapsed);
+    state.pendingShake = null;
+    state.lastImpact = 0;
+    pointer.shakeLines = 0;
     state.carryStyle = chooseVariant('carry').style;
     variety.noteTouch(elapsed);
     if (variety.chance(0.55)) showTouchPhrase('carry');
@@ -1914,6 +2215,9 @@ function moveGrabbedPointer(pointer, event, elapsed) {
   state.reaction = null;
   holdAnchor(pointer.startAnchor + point.x - pointer.startPointX, elapsed, 15);
   if (!reducedMotion.matches) carry.move({ pointerY: -point.y * CAMERA_HEIGHT, time: elapsed });
+  // Measure in screen heights on both axes so a wide screen doesn't count double.
+  const aspect = window.innerWidth / Math.max(1, window.innerHeight);
+  shake.sample({ x: point.x * aspect, y: point.y, time: elapsed });
 }
 
 function finishPointer(event = null, { reset = false } = {}) {
@@ -1929,6 +2233,8 @@ function finishPointer(event = null, { reset = false } = {}) {
     state.pinnedAnchor = THREE.MathUtils.clamp(anchor, 0.16, 0.68);
     state.anchorHold = null;
     postNative({ type: 'pin', x: state.pinnedAnchor });
+    const shaken = shake.release(currentElapsed());
+    state.pendingShake = { peak: shaken.peak, at: currentElapsed() };
   } else if (event?.type === 'pointerup' && pointer.cheek) {
     startReaction('poke', { touch: true, side: pointer.side });
     showTouchPhrase('poke');
@@ -1950,6 +2256,7 @@ function spawnHoverNote(x, y, zone) {
   note.style.setProperty('--spin', `${(Math.random() - 0.5) * 40}deg`);
   note.addEventListener('animationend', () => note.remove(), { once: true });
   document.body.appendChild(note);
+  return note;
 }
 
 function pickPhrase(zone) {
@@ -2091,6 +2398,7 @@ function status() {
     hover: state.hover ? state.hover.zone : null,
     grounding: grounding?.status() ?? null,
     carry: carry.status(),
+    shake: shake.status(),
     walking: walking?.status() ?? null,
     turnYaw: turning.yaw.x,
     turnSpin: turning.yaw.v,

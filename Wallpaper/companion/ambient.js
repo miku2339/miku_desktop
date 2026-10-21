@@ -4,6 +4,7 @@
 // `background-size: cover` transform the scene images use.
 
 import { lightningFlash, normalizeWeather, sunDirection } from './environment.js';
+import { drawVehicle, drawVehicleGround, spawnVehicle, vehicleAlpha, vehicleLook, vehiclePosition } from './vehicles.js';
 
 const IMAGE_WIDTH = 1586;
 const IMAGE_HEIGHT = 992;
@@ -26,9 +27,14 @@ const SCENE_FEATURES = {
     roads: [{
       kind: 'perspective',
       vanish: [0.5, 0.636],
+      // At the reference row `refY`, each lane's centre is at `x` and a car is `carWidth` wide.
+      // Japan drives on the left: the left lane heads away from us, the right lane comes towards us.
+      refY: 0.78,
+      carWidth: 0.125,
+      wet: 0.55,
       lanes: [
-        { bottom: [0.33, 0.78], width: 0.11, direction: 'away' },
-        { bottom: [0.67, 0.78], width: 0.11, direction: 'toward' }
+        { x: 0.408, direction: 'away' },
+        { x: 0.588, direction: 'toward' }
       ]
     }],
     birds: true
@@ -87,11 +93,19 @@ export function createAmbient(canvas) {
   const sceneState = new Map();
   const stars = new Map();
   let activeLevel = 0;
+  let pixelRatio = 1;
+  // Scratch canvases: each vehicle is painted once per frame, then stamped onto the
+  // scene and again, flipped and fading, as its reflection in the wet road.
+  const sprite = document.createElement('canvas');
+  const spriteContext = sprite.getContext('2d');
+  const mirror = document.createElement('canvas');
+  const mirrorContext = mirror.getContext('2d');
 
   function resize() {
     width = Math.max(1, window.innerWidth);
     height = Math.max(1, window.innerHeight);
     const ratio = Math.min(window.devicePixelRatio || 1, 1.5);
+    pixelRatio = ratio;
     canvas.width = Math.round(width * ratio);
     canvas.height = Math.round(height * ratio);
     context.setTransform(ratio, 0, 0, ratio, 0, 0);
@@ -394,56 +408,65 @@ export function createAmbient(canvas) {
     context.restore();
   }
 
-  function drawPerspectiveCar(car, road, env, now) {
-    const lane = road.lanes[car.lane];
-    let t = (now - car.start) / car.duration; // 0 at the far end
-    if (lane.direction === 'away') t = 1 - t;
-    t = Math.min(1, Math.max(0, t));
-    const depth = t * t; // accelerate as it gets closer
-    const x = px(road.vanish[0] + (lane.bottom[0] - road.vanish[0]) * depth);
-    const y = py(road.vanish[1] + (lane.bottom[1] - road.vanish[1]) * depth);
-    const w = size(lane.width) * Math.max(0.03, depth);
-    const h = w * 0.62;
-    const fade = Math.min(1, t / 0.12) * Math.min(1, (1 - t) / 0.18);
-    if (fade <= 0 || w < 1.5) return;
-    const light = lightLevel(env);
-    const night = env.periodWeights.night + env.periodWeights.dusk * 0.5 + env.weather.intensity * 0.3;
-    context.save();
-    context.globalAlpha = fade;
-    context.fillStyle = shade(car.color, light);
-    context.beginPath();
-    context.roundRect(x - w / 2, y - h, w, h * 0.62, w * 0.08);
-    context.fill();
-    context.beginPath();
-    context.roundRect(x - w * 0.38, y - h * 1.28, w * 0.76, h * 0.4, w * 0.1);
-    context.fill();
-    context.fillStyle = shade('#2b3742', light);
-    context.fillRect(x - w * 0.32, y - h * 1.2, w * 0.64, h * 0.28);
-    context.fillStyle = shade('#121315', light);
-    context.fillRect(x - w * 0.46, y - h * 0.4, w * 0.16, h * 0.4);
-    context.fillRect(x + w * 0.3, y - h * 0.4, w * 0.16, h * 0.4);
-    const toward = lane.direction === 'toward';
-    const lampColor = toward ? '255 246 214' : '255 45 55';
-    const lampAlpha = toward ? Math.min(1, 0.25 + night) : Math.min(1, 0.45 + night);
-    for (const side of [-1, 1]) {
-      const lx = x + side * w * 0.36;
-      const ly = y - h * 0.7;
-      context.fillStyle = `rgb(${lampColor} / ${lampAlpha})`;
-      context.fillRect(lx - w * 0.07, ly - h * 0.06, w * 0.14, h * 0.12);
-      if (night > 0.3) {
-        const glow = context.createRadialGradient(lx, ly, 0, lx, ly, w * 0.5);
-        glow.addColorStop(0, `rgb(${lampColor} / ${0.5 * night})`);
-        glow.addColorStop(1, `rgb(${lampColor} / 0)`);
-        context.fillStyle = glow;
-        context.fillRect(lx - w * 0.5, ly - w * 0.5, w, w);
-        // Reflection on the wet road.
-        const reflection = context.createLinearGradient(0, y, 0, y + h * 1.4);
-        reflection.addColorStop(0, `rgb(${lampColor} / ${0.35 * night})`);
-        reflection.addColorStop(1, `rgb(${lampColor} / 0)`);
-        context.fillStyle = reflection;
-        context.fillRect(lx - w * 0.05, y, w * 0.1, h * 1.4);
-      }
+  function fitScratch(target, cssWidth, cssHeight) {
+    const w = Math.ceil(cssWidth * pixelRatio);
+    const h = Math.ceil(cssHeight * pixelRatio);
+    if (target.width < w || target.height < h) {
+      target.width = Math.max(target.width, w);
+      target.height = Math.max(target.height, h);
     }
+    return [w, h];
+  }
+
+  function drawPerspectiveCar(car, road, env, now, sceneAlpha) {
+    const { z, scale } = vehiclePosition(car, now);
+    const fade = vehicleAlpha(z);
+    const lane = road.lanes[car.lane];
+    const cx = px(road.vanish[0] + (lane.x - road.vanish[0]) * scale);
+    const ground = py(road.vanish[1] + (road.refY - road.vanish[1]) * scale);
+    const w = size(road.carWidth) * scale * (car.typeWidth ?? 1);
+    if (fade <= 0.01 || w < 2) return;
+    const wet = Math.min(1, road.wet + (['rain', 'storm'].includes(env.weather.kind) ? env.weather.intensity * 0.6 : 0)
+      + (env.weather.kind === 'snow' ? -0.3 : 0));
+    const look = vehicleLook(env, lightLevel(env), scale, Math.max(0, wet), now);
+
+    const above = w * 1.5;
+    const below = w * 0.06;
+    const spanX = w * 0.78;
+    const [spriteW, spriteH] = fitScratch(sprite, spanX * 2, above + below);
+    spriteContext.setTransform(1, 0, 0, 1, 0, 0);
+    spriteContext.clearRect(0, 0, spriteW, spriteH);
+    spriteContext.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    drawVehicle(spriteContext, car, spanX, above, w, look);
+
+    context.save();
+    context.globalAlpha = sceneAlpha * fade;
+    drawVehicleGround(context, car, cx, ground, w, look);
+    if (look.wet > 0.05) {
+      // Reflection: the sprite flipped about the road line, fading out with distance.
+      fitScratch(mirror, spanX * 2, above + below);
+      mirrorContext.setTransform(1, 0, 0, 1, 0, 0);
+      mirrorContext.globalCompositeOperation = 'source-over';
+      mirrorContext.clearRect(0, 0, spriteW, spriteH);
+      mirrorContext.setTransform(1, 0, 0, -1, 0, spriteH);
+      mirrorContext.drawImage(sprite, 0, 0, spriteW, spriteH, 0, 0, spriteW, spriteH);
+      mirrorContext.setTransform(1, 0, 0, 1, 0, 0);
+      mirrorContext.globalCompositeOperation = 'destination-in';
+      const groundRow = below * pixelRatio;
+      const mask = mirrorContext.createLinearGradient(0, groundRow, 0, groundRow + w * 0.7 * pixelRatio);
+      mask.addColorStop(0, 'rgb(0 0 0 / 1)');
+      mask.addColorStop(1, 'rgb(0 0 0 / 0)');
+      mirrorContext.fillStyle = mask;
+      mirrorContext.fillRect(0, 0, spriteW, spriteH);
+      mirrorContext.globalCompositeOperation = 'source-over';
+      context.globalAlpha = sceneAlpha * fade * 0.32 * look.wet;
+      context.drawImage(mirror, 0, 0, spriteW, spriteH, cx - spanX, ground - below, spanX * 2, above + below);
+      context.globalAlpha = sceneAlpha * fade;
+    }
+    // A hint of softness so the vector shapes sit in the painted scene (more with distance).
+    context.filter = `blur(${(0.25 + look.haze * 0.9).toFixed(2)}px)`;
+    context.drawImage(sprite, 0, 0, spriteW, spriteH, cx - spanX, ground - above, spanX * 2, above + below);
+    context.filter = 'none';
     context.restore();
   }
 
@@ -486,24 +509,38 @@ export function createAmbient(canvas) {
       for (const train of s.trains) drawTrain(train, features.tracks[train.track], env, now);
     }
     for (const road of features.roads || []) {
-      if (s.nextCar === null) s.nextCar = now + 1500 + random() * 4000;
-      if (now >= s.nextCar) {
-        const color = CAR_COLORS[Math.floor(random() * CAR_COLORS.length)];
-        if (road.kind === 'side') {
+      if (road.kind === 'side') {
+        if (s.nextCar === null) s.nextCar = now + 1500 + random() * 4000;
+        if (now >= s.nextCar) {
+          const color = CAR_COLORS[Math.floor(random() * CAR_COLORS.length)];
           const direction = random() < 0.5 ? 1 : -1;
           s.cars.push({ road, start: now, duration: 4200 + random() * 2200, direction, lane: direction > 0 ? 0 : 1, color });
-        } else {
-          s.cars.push({ road, start: now, duration: 6500 + random() * 3500, lane: Math.floor(random() * road.lanes.length), color });
+          s.nextCar = now + 3500 + random() * 8000;
         }
-        s.nextCar = now + 3500 + random() * 8000;
+        continue;
       }
+      // Each lane has its own rhythm: sometimes a little queue, sometimes an empty road.
+      s.laneTimers ??= road.lanes.map(() => now + 800 + random() * 5000);
+      road.lanes.forEach((lane, index) => {
+        if (now < s.laneTimers[index]) return;
+        const ahead = s.cars.filter(car => car.road === road && car.lane === index).at(-1) ?? null;
+        const vehicle = spawnVehicle({ ...lane, index }, now, random, ahead);
+        if (vehicle) {
+          vehicle.road = road;
+          s.cars.push(vehicle);
+          s.laneTimers[index] = now + (random() < 0.3 ? 1500 + random() * 2000 : 4500 + random() * 9000);
+        } else s.laneTimers[index] = now + 700;
+      });
     }
-    s.cars = s.cars.filter(car => now - car.start < car.duration);
-    // Far cars first so near ones overlap them.
-    const sorted = [...s.cars].sort((a, b) => (a.road.kind === 'perspective' ? progressOf(a, now) - progressOf(b, now) : 0));
+    s.cars = s.cars.filter(car => (car.road.kind === 'side'
+      ? now - car.start < car.duration
+      : !vehiclePosition(car, now).done));
+    // Far vehicles first so near ones overlap them.
+    const depth = car => (car.road.kind === 'side' ? 0 : vehiclePosition(car, now).z);
+    const sorted = [...s.cars].sort((a, b) => depth(b) - depth(a));
     for (const car of sorted) {
       if (car.road.kind === 'side') drawSideCar(car, car.road, env, now);
-      else drawPerspectiveCar(car, car.road, env, now);
+      else drawPerspectiveCar(car, car.road, env, now, alpha);
     }
     if (features.birds && features.sky && env.periodWeights.night < 0.6 && ['clear', 'cloudy'].includes(env.weather.kind)) {
       if (s.nextBirds === null) s.nextBirds = now + 15000 + random() * 30000;
@@ -526,12 +563,6 @@ export function createAmbient(canvas) {
       if (s.birds && !drawBirds(s.birds, features, env, now)) s.birds = null;
     }
     return s.trains.length > 0 || s.cars.length > 0 || Boolean(s.birds);
-  }
-
-  function progressOf(car, now) {
-    const lane = car.road.lanes[car.lane];
-    const t = (now - car.start) / car.duration;
-    return lane.direction === 'away' ? 1 - t : t;
   }
 
   // ---- weather particles ---------------------------------------------------

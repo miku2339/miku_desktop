@@ -219,6 +219,28 @@
       --bubble-accent: rgb(150 128 205);
     }
 
+    #speechBubble[data-emotion="dizzy"] {
+      --bubble-accent: rgb(232 150 30);
+    }
+
+    #speechBubble[data-emotion="dizzy"] .bubble-text {
+      display: inline-block;
+      animation: bubble-wobble 0.8s ease-in-out infinite;
+    }
+
+    #speechBubble[data-emotion="pout"] {
+      --bubble-accent: rgb(226 70 80);
+    }
+
+    @keyframes bubble-wobble {
+      0%, 100% { transform: rotate(-3deg) translateX(-1px); }
+      50% { transform: rotate(3deg) translateX(1px); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      #speechBubble[data-emotion="dizzy"] .bubble-text { animation: none; }
+    }
+
     #speechBubble.thinking .bubble-text {
       color: rgb(57 197 187);
       font-weight: 800;
@@ -258,6 +280,30 @@
       text-shadow:
         0 0 6px rgb(255 255 255 / 0.95),
         0 0 14px rgb(229 48 126 / 0.5);
+    }
+
+    .hover-note.zone-dizzy {
+      color: rgb(245 186 40);
+      font-size: 19px;
+      text-shadow:
+        0 0 6px rgb(255 255 255 / 0.95),
+        0 0 12px rgb(245 186 40 / 0.6);
+      animation: dizzy-star 1.15s cubic-bezier(0.3, 0.7, 0.4, 1) forwards;
+    }
+
+    @keyframes dizzy-star {
+      0% {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(0.4) rotate(0deg);
+      }
+      20% {
+        opacity: 1;
+        transform: translate(calc(-50% + var(--drift) * 0.5), -80%) scale(1.1) rotate(120deg);
+      }
+      100% {
+        opacity: 0;
+        transform: translate(calc(-50% - var(--drift)), -150%) scale(0.7) rotate(420deg);
+      }
     }
 
     @keyframes hover-note-float {

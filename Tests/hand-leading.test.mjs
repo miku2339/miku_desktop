@@ -120,7 +120,32 @@ test('an offended relationship excludes hand leading', () => {
   assert.equal(calls.carryBegin, 1);
 });
 
-test('release pins the reached position and discards the unfinished target before waving', () => {
+test('a hand tap shorter than 0.6 seconds still waves', () => {
+  const { api, calls, context } = harness();
+  const held = pointer();
+  held.started = 4.5;
+  held.greeted = false;
+  context.state.pointer = held;
+  api.finishPointer({
+    type: 'pointerup', pointerId: 1, clientX: 100, clientY: 100, point: { x: 0.3, y: 0.5 }
+  });
+  assert.ok(5 - held.started < 0.6);
+  assert.deepEqual(calls.reactions, ['wave']);
+});
+
+test('releasing a stationary hand hold does not wave', () => {
+  const { api, calls, context } = harness();
+  const held = pointer();
+  context.state.pointer = held;
+  api.finishPointer({
+    type: 'pointerup', pointerId: 1, clientX: 100, clientY: 100, point: { x: 0.3, y: 0.5 }
+  });
+  assert.equal(held.dragging, false);
+  assert.equal(held.leading, undefined);
+  assert.deepEqual(calls.reactions, []);
+});
+
+test('release pins the reached position and discards the unfinished target without waving', () => {
   const { api, calls, context } = harness();
   const held = pointer();
   held.leading = true;
@@ -132,8 +157,8 @@ test('release pins the reached position and discards the unfinished target befor
   });
   assert.equal(context.state.pinnedAnchor, 0.37);
   assert.deepEqual(calls.pin, [0.37]);
-  assert.deepEqual(calls.reactions, ['wave']);
-  assert.equal(context.state.anchorHold.anchor, 0.37, 'wave holds the reached position, not the stale target');
+  assert.deepEqual(calls.reactions, [], 'letting go of her hand is not a wave');
+  assert.equal(context.state.anchorHold, null, 'the unfinished target is dropped');
 });
 
 test('room leading uses the clear-floor boundary for hold, pin and gait destination', () => {

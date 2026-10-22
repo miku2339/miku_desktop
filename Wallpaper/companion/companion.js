@@ -3727,6 +3727,9 @@ function finishPointer(event = null, { reset = false } = {}) {
       showTouchPhrase('poke');
       reportTouch('poke');
     }
+  } else if (event?.type === 'pointerup' && pointer.zone === 'hand' && (pointer.greeted || pointer.leading)) {
+    // You held her hand (or led her by it) and let go: she just lets go too. Waving is only
+    // her answer to a quick tap on the hand.
   } else if (event?.type === 'pointerup' && pointer.zone === 'hand') {
     if (relationship.snubs('wave')) {
       if (!pointer.greeted) snubTouch(pointer.side);

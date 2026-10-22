@@ -8,6 +8,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var desktopControlsController: DesktopControlsWindowController?
     private var chatController: ChatWindowController?
     private var settingsController: SettingsWindowController?
+    private var notebookController: DiaryWindowController?
+    private var rhythmController: RhythmGameWindowController?
     private var settingsObserver: NSObjectProtocol?
     private let weatherService = WeatherService()
 
@@ -21,7 +23,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let awareness = AwarenessService.shared
         awareness.onSpeak = { [weak self] reply in self?.deliverProactive(reply) }
         awareness.isChatting = { [weak self] in self?.chatController?.isChatting ?? false }
+        awareness.onMusicChanged = { [weak self] song in self?.wallpaperController?.setMusic(song) }
         awareness.start()
+        EventCalendar.shared.start()
+        CompanionDiary.shared.start()
 
         settingsObserver = NotificationCenter.default.addObserver(
             forName: .mikuSettingsChanged,
@@ -109,6 +114,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let chat = NSMenuItem(title: L10n.text("chat"), action: #selector(openChat(_:)), keyEquivalent: "")
         chat.target = self
         menu.addItem(chat)
+
+        let notebook = NSMenuItem(title: L10n.text("notebookMenu"), action: #selector(openNotebook(_:)), keyEquivalent: "")
+        notebook.target = self
+        menu.addItem(notebook)
 
         let interaction = NSMenuItem(title: L10n.text("interaction"), action: #selector(toggleInteraction(_:)), keyEquivalent: "")
         interaction.target = self
@@ -216,6 +225,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             controller.onOpenSettings = { [weak self] in
                 self?.openSettings(nil)
             }
+            controller.onGameEvent = { [weak self] event in
+                switch event {
+                case let .rps(hand, outcome):
+                    self?.wallpaperController?.playRPS(hand: hand, outcome: outcome)
+                case .rhythm:
+                    self?.openRhythmGame()
+                }
+            }
             chatController = controller
         }
         chatController?.present()
@@ -262,6 +279,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             settingsController = controller
         }
         settingsController?.present()
+    }
+
+    private func openRhythmGame() {
+        if rhythmController == nil {
+            let controller = RhythmGameWindowController()
+            controller.onBeat = { [weak self] in self?.wallpaperController?.rhythmBeat() }
+            controller.onFinish = { [weak self] score, _ in self?.chatController?.finishRhythmGame(score: score) }
+            rhythmController = controller
+        }
+        rhythmController?.start()
+    }
+
+    @objc private func openNotebook(_ sender: Any?) {
+        if notebookController == nil { notebookController = DiaryWindowController() }
+        notebookController?.present()
     }
 
     @objc private func resetMemory(_ sender: Any?) {

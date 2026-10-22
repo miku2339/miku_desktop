@@ -5,6 +5,7 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
     var onReply: ((CompanionReply) -> Void)?
     var onThinking: ((Bool) -> Void)?
     var onOpenSettings: (() -> Void)?
+    var onGameEvent: ((GameEvent) -> Void)?
 
     private let ai: LocalAI
     private let memory = CompanionMemory.shared
@@ -25,6 +26,9 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
     private let statusLabel = NSTextField.mikuLabel("", size: 11.5, color: MikuTheme.secondaryText)
     private let clearButton = MikuPillButton(frame: .zero)
     private let settingsButton = MikuPillButton(frame: .zero)
+    private let gameButton = MikuPillButton(frame: .zero)
+    private var activeGame: GameSession?
+    private var choiceRow: NSView?
 
     // Conversation
     private let scrollView = NSScrollView()
@@ -112,6 +116,130 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
         isSending || (window?.isKeyWindow == true && !inputField.stringValue.isEmpty)
     }
 
+    // MARK: - Mini games
+
+    enum GameEvent {
+        /// Her rock-paper-scissors hand and how the round went for her.
+        case rps(hand: String, outcome: String)
+        /// Open the rhythm game window.
+        case rhythm
+    }
+
+    @objc private func showGames(_ sender: NSButton) {
+        let menu = NSMenu()
+        for game in MiniGame.allCases {
+            let item = NSMenuItem(title: L10n.text(game.titleKey), action: #selector(gameChosen(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = game.rawValue
+            menu.addItem(item)
+        }
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height + 4), in: sender)
+    }
+
+    @objc private func gameChosen(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let game = MiniGame(rawValue: raw) else { return }
+        startGame(game)
+    }
+
+    /// Starts a game in the chat (also when you ask for one by typing).
+    func startGame(_ game: MiniGame) {
+        guard !isSending else { return }
+        hideEmptyState()
+        removeChoiceRow()
+        activeGame = nil
+        switch game {
+        case .rps:
+            let session = RPSSession()
+            activeGame = session
+            showGameLines(session.start())
+        case .quiz:
+            let session = QuizSession()
+            activeGame = session
+            showGameLines(session.start())
+        case .rhythm:
+            showGameLines([GameLine(
+                text: MiniGame.text("打拍子！數完 1、2、3、4，就跟住拍子撳空白鍵～", "Rhythm time! After 1, 2, 3, 4, tap the space bar on every beat~", "リズムゲーム！1、2、3、4のあと、拍に合わせてスペースキーを押してね～"),
+                emotion: "happy", action: "clap"
+            )])
+            onGameEvent?(.rhythm)
+        }
+    }
+
+    /// The rhythm game finished: she tells you how it went.
+    func finishRhythmGame(score: Int) {
+        memory.recordPlay()
+        showGameLines([RhythmJudge.comment(score: score)])
+    }
+
+    private func showGameLines(_ lines: [GameLine]) {
+        for line in lines {
+            let message = ChatMessage(role: .assistant, text: line.text)
+            messages.append(message)
+            appendBubble(message)
+        }
+        memory.record(messages)
+        if let last = lines.last {
+            onReply?(CompanionReply(text: last.text, emotion: last.emotion, action: last.rps == nil ? last.action : "idle"))
+        }
+        if let rps = lines.compactMap(\.rps).last {
+            onGameEvent?(.rps(hand: rps.hand, outcome: rps.outcome))
+        }
+        if let choices = lines.last?.choices, !choices.isEmpty {
+            showChoices(choices)
+        }
+        DispatchQueue.main.async { [weak self] in self?.scrollToBottom() }
+    }
+
+    private func showChoices(_ choices: [GameLine.Choice]) {
+        removeChoiceRow()
+        let buttons = choices.map { choice -> NSView in
+            let button = MikuPillButton(frame: .zero)
+            button.title = choice.title
+            button.style = .soft
+            button.controlHeight = 28
+            button.font = MikuTheme.font(13, .semibold)
+            button.identifier = NSUserInterfaceItemIdentifier(choice.id)
+            button.target = self
+            button.action = #selector(choiceTapped(_:))
+            return button
+        }
+        let stack = NSStackView(views: buttons)
+        // Long answers (song titles) go one per line; short ones side by side.
+        let long = choices.contains { $0.title.count > 8 }
+        stack.orientation = long ? .vertical : .horizontal
+        stack.alignment = .leading
+        stack.spacing = 6
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        addRow(content: stack, fromMiku: true)
+        choiceRow = stack.superview
+    }
+
+    private func removeChoiceRow() {
+        guard let choiceRow else { return }
+        messageStack.removeArrangedSubview(choiceRow)
+        choiceRow.removeFromSuperview()
+        self.choiceRow = nil
+    }
+
+    @objc private func choiceTapped(_ sender: NSButton) {
+        guard let game = activeGame, let id = sender.identifier?.rawValue, !isSending else { return }
+        removeChoiceRow()
+        let (said, lines) = game.choose(id)
+        guard !lines.isEmpty else { return }
+        let message = ChatMessage(role: .user, text: said)
+        messages.append(message)
+        appendBubble(message)
+        memory.record(messages)
+        if game.isOver {
+            activeGame = nil
+            memory.recordPlay()
+        }
+        // A short pause, as if she's thinking (or throwing her hand).
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
+            MainActor.assumeIsolated { self?.showGameLines(lines) }
+        }
+    }
+
     // MARK: - Pictures
 
     private func attach(_ data: Data) {
@@ -195,6 +323,8 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
         setPlaceholder()
         clearButton.toolTip = L10n.text("clearChat")
         clearButton.setAccessibilityLabel(L10n.text("clearChat"))
+        gameButton.toolTip = L10n.text("gamesMenu")
+        gameButton.setAccessibilityLabel(L10n.text("gamesMenu"))
         settingsButton.toolTip = L10n.text("settingsButton")
         settingsButton.setAccessibilityLabel(L10n.text("settingsButton"))
         attachButton.toolTip = L10n.text("attachImage")
@@ -263,6 +393,16 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
         guard !text.isEmpty || image != nil, !isSending else { return }
         inputField.stringValue = ""
         removePendingImage()
+        // "Let's play rock-paper-scissors!": straight into the game.
+        if image == nil, let game = MiniGame.requested(in: text) {
+            hideEmptyState()
+            let message = ChatMessage(role: .user, text: text)
+            messages.append(message)
+            appendBubble(message)
+            memory.record(messages)
+            startGame(game)
+            return
+        }
         send(text, image: image)
     }
 
@@ -278,6 +418,8 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
 
     @objc private func clearChat() {
         guard !isSending else { return }
+        activeGame = nil
+        choiceRow = nil
         messages.removeAll()
         failedText = nil
         memory.clearConversation()
@@ -441,11 +583,12 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
 
         configureIconButton(clearButton, symbol: "sparkles", action: #selector(clearChat))
         configureIconButton(settingsButton, symbol: "gearshape.fill", action: #selector(openSettings))
+        configureIconButton(gameButton, symbol: "gamecontroller.fill", action: #selector(showGames(_:)))
 
         let spacer = NSView()
         spacer.setContentHuggingPriority(NSLayoutConstraint.Priority(1), for: .horizontal)
         spacer.setContentCompressionResistancePriority(NSLayoutConstraint.Priority(1), for: .horizontal)
-        let headerStack = NSStackView(views: [headerAvatar, titleStack, spacer, clearButton, settingsButton])
+        let headerStack = NSStackView(views: [headerAvatar, titleStack, spacer, gameButton, clearButton, settingsButton])
         headerStack.orientation = .horizontal
         headerStack.distribution = .fill
         headerStack.alignment = .centerY
@@ -661,6 +804,8 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
         bubbleLabels.removeAll()
         typingRow = nil
         errorRow = nil
+        choiceRow = nil
+        activeGame = nil
         messageStack.addArrangedSubview(emptyState)
         emptyState.widthAnchor.constraint(equalTo: messageStack.widthAnchor, constant: -32).isActive = true
     }

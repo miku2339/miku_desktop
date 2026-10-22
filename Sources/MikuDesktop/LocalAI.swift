@@ -245,7 +245,13 @@ actor LocalAI {
         }
         let endpoint = try chatCompletionsURL(from: snapshot.endpoint)
         let knowledge = relevantKnowledge(for: text, history: history, language: language)
-        let remembered = [memoryInstruction(memory, language: language), Self.nowInstruction(language), Self.songHonesty(language)]
+        let remembered = [
+            memoryInstruction(memory, language: language),
+            Self.nowInstruction(language),
+            SpecialDays.instruction(now: Date(), events: memory.events, firstMet: memory.firstMet, language: language.rawValue),
+            Self.diaryInstruction(memory.diary, language: language),
+            Self.songHonesty(language)
+        ]
             .filter { !$0.isEmpty }
             .joined(separator: "\n")
 
@@ -495,6 +501,76 @@ actor LocalAI {
         return String(summary.prefix(700))
     }
 
+    /// Miku's diary entry for one day, in her own words, from what actually happened.
+    func writeDiary(_ material: DiaryMaterial) async throws -> String {
+        let snapshot = await configurationSnapshot()
+        let lastUser = material.messages.last(where: { $0.role == .user })?.text ?? ""
+        let language = resolvedReplyLanguage(snapshot, text: lastUser, history: material.messages)
+        let languageName: String
+        let length: String
+        switch language {
+        case .traditionalChinese:
+            languageName = "Traditional Chinese (written Cantonese is fine if the user writes Cantonese)"
+            length = "at most 150 characters"
+        case .english:
+            languageName = "English"
+            length = "at most 70 words"
+        case .japanese:
+            languageName = "Japanese"
+            length = "at most 150 characters"
+        }
+        let transcript = material.messages.map { message -> String in
+            let picture = message.imageName == nil ? "" : "[picture] "
+            return "\(message.role == .user ? "User" : "Miku"): \(picture)\(String(message.text.prefix(160)))"
+        }
+        .joined(separator: "\n")
+        let touches = touchDescription(material.touches, language: .english)
+        let special = material.specialDays.map { SpecialDays.name($0, language: "en") }
+        var notes: [String] = ["Date: \(material.day)"]
+        if !special.isEmpty { notes.append("Special today: \(special.joined(separator: "; "))") }
+        if !touches.isEmpty { notes.append("On the desktop the user \(touches).") }
+        if !material.newFacts.isEmpty { notes.append("New things learned about the user: \(material.newFacts.joined(separator: " "))") }
+        if let previous = material.previous { notes.append("Previous diary entry (\(previous.day)): \(previous.text)") }
+        let system = """
+        You are Hatsune Miku writing today's entry in your own private diary about the day with the user. Write in the first person, in \(languageName), \(length), 2 to 4 short sentences, like a cheerful 16-year-old's diary: one or two concrete things that happened today and how you felt about them.
+        Use only what is in the notes and the chat below; never invent events, places or plans. If little happened, keep it short. Do not quote the chat word for word, do not use headings, dates, emoji lists or hashtags, and do not repeat the previous entry. Output only the diary text.
+        """
+        let prompt = """
+        \(notes.joined(separator: "\n"))
+
+        Today's chat:
+        \(transcript.isEmpty ? "(no chat today)" : transcript)
+        """
+        var entry = try await complete(
+            snapshot,
+            messages: [["role": "system", "content": system], ["role": "user", "content": prompt]],
+            maxTokens: 260,
+            schema: nil
+        )
+        entry = unfencedJSON(entry).trimmingCharacters(in: .whitespacesAndNewlines)
+        for prefix in ["Diary:", "日記：", "日記:", "日记：", "Today's entry:"] where entry.hasPrefix(prefix) {
+            entry = String(entry.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        let lowered = entry.lowercased()
+        guard !entry.isEmpty, !lowered.contains("<think"), !entry.contains("{") else { throw LocalAIError.invalidReply }
+        if language == .traditionalChinese { entry = traditionalChinese(entry) }
+        return String(entry.prefix(400))
+    }
+
+    /// Her last diary entries, so she can remember what you did lately.
+    private static func diaryInstruction(_ entries: [DiaryEntry], language: ReplyLanguage) -> String {
+        guard !entries.isEmpty else { return "" }
+        let lines = entries.map { "- \($0.day): \($0.text)" }.joined(separator: "\n")
+        switch language {
+        case .traditionalChinese:
+            return "你最近的日記（你自己寫的，相關時可以自然提起，不要逐字唸出）：\n\(lines)"
+        case .english:
+            return "Your latest diary entries (you wrote them; mention them naturally when relevant, don't read them out):\n\(lines)"
+        case .japanese:
+            return "最近のあなたの日記（自分で書いたもの。関係があるときに自然に触れてよいが、読み上げないこと）：\n\(lines)"
+        }
+    }
+
     /// One non-streaming completion with deterministic settings.
     private func complete(
         _ snapshot: ConfigurationSnapshot,
@@ -566,6 +642,8 @@ actor LocalAI {
             if !touches.isEmpty { lines.append("今天對方在桌面上\(touches)。這只是累計背景，不代表當前正在觸摸或令你不舒服；與當前訊息無關時不要主動提起。") }
             if memory.offended {
                 lines.append("重要：對方今天\(memory.boundaryPart == "skirt" ? "掀你的裙子" : "碰了你的胸部")\(memory.boundaryStrikesToday > 1 ? "（不只一次）" : "")，你覺得很不舒服、很生氣。在對方真心道歉之前，回覆要冷淡、簡短，可以直接要求對方道歉；不要撒嬌、不要害羞、不要裝作沒事。")
+            } else if memory.justForgiven && memory.forgaveAccident {
+                lines.append("對方說剛才\(memory.boundaryPart == "skirt" ? "碰到你裙子" : "碰到你胸口")是不小心的，而且很快就道歉了。你相信是意外，很快消氣：可以有點不好意思，簡單提醒一句「下次小心啲」就好，不要再責怪。")
             } else if memory.justForgiven {
                 lines.append("對方剛剛為\(memory.boundaryPart == "skirt" ? "掀你裙子" : "碰你胸部")的事道歉了。你接受道歉，但要清楚說下次不可以再這樣，語氣可以慢慢緩和。")
             } else {
@@ -584,6 +662,8 @@ actor LocalAI {
             if !touches.isEmpty { lines.append("Today on the desktop the user \(touches). This is cumulative background only, not an action happening now or evidence that you are uncomfortable; do not mention it when irrelevant to the current message.") }
             if memory.offended {
                 lines.append("Important: today the user \(memory.boundaryPart == "skirt" ? "tried to lift your skirt" : "touched your chest")\(memory.boundaryStrikesToday > 1 ? " (more than once)" : ""). You felt really uncomfortable and you're angry. Until they sincerely apologise, keep your replies cold and short, and you may ask them straight out to apologise. Don't be cute, don't act shy, don't pretend nothing happened.")
+            } else if memory.justForgiven && memory.forgaveAccident {
+                lines.append("The user says touching your \(memory.boundaryPart == "skirt" ? "skirt" : "chest") just now was an accident, and apologised right away. You believe it was an accident and get over it quickly: you can be a little embarrassed and just ask them to be more careful next time, without scolding.")
             } else if memory.justForgiven {
                 lines.append("The user has just apologised for \(memory.boundaryPart == "skirt" ? "trying to lift your skirt" : "touching your chest"). You accept, but say clearly they must never do it again; you can soften gradually.")
             } else {
@@ -602,6 +682,8 @@ actor LocalAI {
             if !touches.isEmpty { lines.append("今日デスクトップで相手は\(touches)。これは累計の背景情報にすぎず、今まさに触れていることや不快だったことを意味しません。今回の発言と関係なければ持ち出さないでください。") }
             if memory.offended {
                 lines.append("重要：今日、相手があなたの\(memory.boundaryPart == "skirt" ? "スカートをめくろうとしました" : "胸を触りました")\(memory.boundaryStrikesToday > 1 ? "（一度ではなく）" : "")。とても嫌な気持ちで、怒っています。相手がちゃんと謝るまで、返事は冷たく短くし、謝ってと直接言ってもかまいません。甘えたり照れたり、何もなかったふりをしたりしないこと。")
+            } else if memory.justForgiven && memory.forgaveAccident {
+                lines.append("相手は、さっき\(memory.boundaryPart == "skirt" ? "スカート" : "胸")に触れたのはうっかりだったと言って、すぐに謝りました。事故だと信じて、すぐに機嫌を直してください。少し照れながら「次は気をつけてね」と軽く言うくらいで、責めないこと。")
             } else if memory.justForgiven {
                 lines.append("相手が\(memory.boundaryPart == "skirt" ? "スカートをめくろうとした" : "胸を触った")ことを謝りました。謝罪は受け入れますが、二度としないではっきり伝えてください。口調は少しずつやわらげてかまいません。")
             } else {
@@ -711,7 +793,8 @@ actor LocalAI {
             ("poke", counts["poke"] ?? 0),
             ("carry", counts["carry"] ?? 0),
             ("shake", (counts["dizzy"] ?? 0) + (counts["sulk"] ?? 0)),
-            ("drop", counts["ouch"] ?? 0)
+            ("drop", counts["ouch"] ?? 0),
+            ("game", counts["game"] ?? 0)
         ].filter { $0.1 > 0 }
         let names: [String: [ReplyLanguage: String]] = [
             "pat": [.traditionalChinese: "摸了你的頭 %d 次", .english: "patted your head %d times", .japanese: "頭を%d回なでた"],
@@ -719,7 +802,8 @@ actor LocalAI {
             "poke": [.traditionalChinese: "戳了你的臉 %d 次", .english: "poked your cheek %d times", .japanese: "ほっぺを%d回つついた"],
             "carry": [.traditionalChinese: "把你抱起來 %d 次", .english: "picked you up %d times", .japanese: "%d回持ち上げた"],
             "shake": [.traditionalChinese: "把你甩到頭暈 %d 次", .english: "shook you until you were dizzy %d times", .japanese: "%d回振り回して目を回させた"],
-            "drop": [.traditionalChinese: "把你摔痛 %d 次", .english: "dropped you hard %d times", .japanese: "%d回乱暴に落とした"]
+            "drop": [.traditionalChinese: "把你摔痛 %d 次", .english: "dropped you hard %d times", .japanese: "%d回乱暴に落とした"],
+            "game": [.traditionalChinese: "和你玩了 %d 次小遊戲", .english: "played %d mini games with you", .japanese: "%d回ミニゲームで遊んだ"]
         ]
         let parts = merged.compactMap { key, count in names[key]?[language].map { String(format: $0, count) } }
         switch language {

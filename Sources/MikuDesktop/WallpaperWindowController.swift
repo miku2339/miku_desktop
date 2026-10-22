@@ -50,6 +50,8 @@ final class WallpaperWindowController: NSObject, WKNavigationDelegate, WKScriptM
     private var wakeObserver: NSObjectProtocol?
     private var memoryObserver: NSObjectProtocol?
     private var sleepObserver: NSObjectProtocol?
+    private var eventsObserver: NSObjectProtocol?
+    private var specialDayTimer: Timer?
 
     // Pixel-accurate mouse pass-through state.
     private var hitTestInFlight = false
@@ -123,6 +125,19 @@ final class WallpaperWindowController: NSObject, WKNavigationDelegate, WKScriptM
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.pushRelationship() }
         }
+        eventsObserver = NotificationCenter.default.addObserver(
+            forName: .mikuEventsChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.pushSpecialDays() }
+        }
+        // Special days change at midnight; checking every quarter hour is plenty.
+        let specialDayTimer = Timer(timeInterval: 15 * 60, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.pushSpecialDays() }
+        }
+        RunLoop.main.add(specialDayTimer, forMode: .common)
+        self.specialDayTimer = specialDayTimer
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
             object: nil,
@@ -140,6 +155,7 @@ final class WallpaperWindowController: NSObject, WKNavigationDelegate, WKScriptM
     }
 
     deinit {
+        specialDayTimer?.invalidate()
         if let memoryObserver { NotificationCenter.default.removeObserver(memoryObserver) }
         pointerTimer?.invalidate()
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
@@ -215,6 +231,39 @@ final class WallpaperWindowController: NSObject, WKNavigationDelegate, WKScriptM
         if backgroundReady { call(webView: backgroundWebView, function: "setSleep", payload: payload) }
     }
 
+    private var music: String?
+
+    /// Music playing on the Mac: now and then she listens along with a hand on her headphones.
+    @MainActor
+    func setMusic(_ title: String?) {
+        music = title
+        guard pageReady else { return }
+        call(webView: webView, function: "setMusic", payload: ["playing": title != nil, "title": title ?? ""])
+    }
+
+    /// Rock-paper-scissors from the chat: she throws her hand on the desktop.
+    @MainActor
+    func playRPS(hand: String, outcome: String) {
+        guard pageReady else { return }
+        call(webView: webView, function: "playRPS", payload: ["hand": hand, "outcome": outcome])
+    }
+
+    /// A beat of the rhythm game: she bounces along.
+    @MainActor
+    func rhythmBeat() {
+        guard pageReady else { return }
+        evaluate("window.mikuCompanion?.rhythmBeat()", in: webView)
+    }
+
+    /// Festivals, her birthday, your anniversary…: greetings and dressing up on the day.
+    @MainActor
+    func pushSpecialDays() {
+        guard pageReady else { return }
+        let memory = CompanionMemory.shared
+        let payload = EventCalendar.shared.payload(firstMet: memory.isEnabled ? memory.firstMet : nil)
+        call(webView: webView, function: "setSpecialDays", payload: payload)
+    }
+
     func receiveReply(_ reply: CompanionReply) {
         call(webView: webView, function: "receiveReply", payload: [
             "text": reply.text,
@@ -238,7 +287,7 @@ final class WallpaperWindowController: NSObject, WKNavigationDelegate, WKScriptM
             guard let self, let webView else { return }
             applyWeather(to: webView)
             if webView === backgroundWebView { setAmbientEnabled(WeatherService.ambientEnabled) }
-            else { MainActor.assumeIsolated { self.pushRelationship() } }
+            else { MainActor.assumeIsolated { self.pushRelationship(); self.pushSpecialDays(); self.setMusic(self.music) } }
             MainActor.assumeIsolated { self.pushSleep() }
         }
     }

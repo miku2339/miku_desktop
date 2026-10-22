@@ -168,7 +168,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         screenIntervalPopup.isEnabled = AwarenessService.isEnabled(.screen)
         if #unavailable(macOS 14.0) { screenIntervalPopup.isEnabled = false }
         for (item, minutes) in zip(screenIntervalPopup.itemArray, AwarenessService.screenMinuteChoices) {
-            item.title = L10n.format("everyMinutes", String(minutes))
+            item.title = AwarenessService.screenChoiceTitle(minutes)
         }
         select(String(AwarenessService.screenMinutes), in: screenIntervalPopup)
         var hint = L10n.text("awarenessHint")
@@ -189,6 +189,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
     @objc private func screenIntervalChanged() {
         guard let value = screenIntervalPopup.selectedItem?.representedObject as? String, let minutes = Int(value) else { return }
         UserDefaults.standard.set(minutes, forKey: AwarenessService.screenMinutesKey)
+        AwarenessService.shared.screenIntervalChanged()
     }
 
     // MARK: - Memory
@@ -533,7 +534,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
             if source == .screen {
                 configurePopup(
                     screenIntervalPopup,
-                    titles: AwarenessService.screenMinuteChoices.map { L10n.format("everyMinutes", String($0)) },
+                    titles: AwarenessService.screenMinuteChoices.map(AwarenessService.screenChoiceTitle),
                     values: AwarenessService.screenMinuteChoices.map(String.init),
                     action: #selector(screenIntervalChanged)
                 )

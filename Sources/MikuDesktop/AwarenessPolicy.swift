@@ -19,6 +19,8 @@ final class AwarenessCancellationToken: @unchecked Sendable {
 
 enum AwarenessSource: String, CaseIterable, Hashable {
     case activity, media, video, screen
+    /// Little things she does on her own at random times (hums, asks you something, wants to play).
+    case random
 }
 
 enum AwarenessPolicy {
@@ -59,9 +61,14 @@ enum AwarenessPolicy {
         requestGeneration == currentGeneration && sourceEnabled && !isChatting
     }
 
-    static func canSpeak(lastSpoke: Date, now: Date, urgent: Bool) -> Bool {
-        now.timeIntervalSince(lastSpoke) >= (urgent ? 3 * 60 : 20 * 60)
+    /// `casualGap` is how long she waits between casual remarks (randomised by the service
+    /// so she doesn't speak up like clockwork).
+    static func canSpeak(lastSpoke: Date, now: Date, urgent: Bool, casualGap: TimeInterval = 20 * 60) -> Bool {
+        now.timeIntervalSince(lastSpoke) >= (urgent ? 3 * 60 : casualGap)
     }
+
+    /// The things that can happen at random; the model turns one into a line of her own.
+    static let randomEvents = ["hum", "question", "game", "snack", "idea", "stretch", "remember", "daydream"]
 
     static func appleScriptStringLiteral(_ value: String) -> String? {
         guard !value.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains) else { return nil }

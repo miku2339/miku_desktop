@@ -16,7 +16,8 @@ final class AwarenessService {
     typealias Source = AwarenessSource
 
     static let screenMinutesKey = "awareness.screenMinutes"
-    static let screenMinuteChoices = [5, 10, 15, 30]
+    /// 0 means "at random" (somewhere between 5 and 30 minutes each time).
+    static let screenMinuteChoices = [0, 5, 10, 15, 30]
 
     nonisolated static func isEnabled(_ source: Source) -> Bool {
         UserDefaults.standard.bool(forKey: "awareness.\(source.rawValue)")
@@ -30,18 +31,55 @@ final class AwarenessService {
         shared.sourcesChanged(source, enabled: enabled)
     }
 
-    static var screenMinutes: Int {
+    nonisolated static var screenMinutes: Int {
+        guard UserDefaults.standard.object(forKey: screenMinutesKey) != nil else { return 10 }
         let stored = UserDefaults.standard.integer(forKey: screenMinutesKey)
-        return screenMinuteChoices.contains(stored) ? stored : 10
+        return [0, 5, 10, 15, 30].contains(stored) ? stored : 10
+    }
+
+    static func screenChoiceTitle(_ minutes: Int) -> String {
+        minutes == 0 ? L10n.text("randomInterval") : L10n.format("everyMinutes", String(minutes))
+    }
+
+    /// The wait before the next glance at the screen.
+    nonisolated static func nextScreenGap() -> TimeInterval {
+        let minutes = screenMinutes
+        return minutes == 0 ? Double.random(in: 5...30) * 60 : Double(minutes) * 60
+    }
+
+    /// Between casual remarks: about 15–35 minutes, never the same twice.
+    nonisolated static func nextCasualGap() -> TimeInterval {
+        Double.random(in: 15...35) * 60
+    }
+
+    /// Between random little moments: 25–70 minutes.
+    nonisolated static func nextRandomEventGap() -> TimeInterval {
+        Double.random(in: 25...70) * 60
+    }
+
+    /// After the interval is changed in Settings.
+    func screenIntervalChanged() {
+        screenGap = Self.nextScreenGap()
     }
 
     /// Shows a line she decided to say (speech bubble and chat).
     var onSpeak: ((CompanionReply) -> Void)?
     /// True while you're typing to her in the chat window: no need to interrupt then.
     var isChatting: (() -> Bool)?
+    /// The song playing now (nil when nothing is, or music awareness is off).
+    var onMusicChanged: ((String?) -> Void)?
+    private var reportedMusic: String?
+    private var musicReported = false
+
+    private func reportMusic(_ song: String?) {
+        guard !musicReported || song != reportedMusic else { return }
+        musicReported = true
+        reportedMusic = song
+        onMusicChanged?(song)
+    }
 
     private struct Observation {
-        enum Kind { case welcomeBack, breakTime, app, song, video, screen }
+        enum Kind { case welcomeBack, breakTime, app, song, video, screen, randomEvent }
         let kind: Kind
         let detail: String
         let source: Source
@@ -74,6 +112,10 @@ final class AwarenessService {
     private var lastTrack: String?
     private var lastVideo: String?
     private var lastScreenLook = Date()
+    private var screenGap: TimeInterval = AwarenessService.nextScreenGap()
+    private var casualGap: TimeInterval = AwarenessService.nextCasualGap()
+    private var nextRandomEvent = Date().addingTimeInterval(AwarenessService.nextRandomEventGap())
+    private var lastRandomEvent: String?
 
     private static let browsers: [String: String] = [
         "com.apple.Safari": "Safari",
@@ -123,6 +165,9 @@ final class AwarenessService {
         invalidatePendingWork()
         // Start counting afresh so switching a source on doesn't trigger a remark at once.
         lastScreenLook = Date()
+        screenGap = Self.nextScreenGap()
+        if source == .random { nextRandomEvent = Date().addingTimeInterval(Self.nextRandomEventGap()) }
+        if source == .media, !enabled { reportMusic(nil) }
         lastTrack = nil
         lastVideo = nil
         if source == .activity {
@@ -213,6 +258,12 @@ final class AwarenessService {
         }
         // Music, videos and the screen only matter while you're actually there.
         let present = idle < 120
+        if enabled.contains(.random), present, now >= nextRandomEvent {
+            let choices = AwarenessPolicy.randomEvents.filter { $0 != lastRandomEvent }
+            if let event = choices.randomElement() {
+                observations.append(Observation(kind: .randomEvent, detail: event, source: .random))
+            }
+        }
         let group = DispatchGroup()
         let heard = Heard()
         if enabled.contains(.media) {
@@ -242,6 +293,7 @@ final class AwarenessService {
                 var found = noticed
                 let song = heard.song
                 let video = heard.video
+                if Self.isEnabled(.media) { self.reportMusic(song) }
                 if Self.isEnabled(.media), let song, song != self.lastTrack {
                     found.append(Observation(kind: .song, detail: song, source: .media))
                 }
@@ -260,15 +312,16 @@ final class AwarenessService {
             speak(about: urgent, generation: generation)
             return
         }
-        guard AwarenessPolicy.canSpeak(lastSpoke: lastSpoke, now: now, urgent: false) else { return }
+        guard AwarenessPolicy.canSpeak(lastSpoke: lastSpoke, now: now, urgent: false, casualGap: casualGap) else { return }
         // Prefer what's new (a song, a video) over the general "what are you doing".
         if let casual = observations.first(where: { $0.kind == .video })
             ?? observations.first(where: { $0.kind == .song })
+            ?? observations.first(where: { $0.kind == .randomEvent })
             ?? observations.first(where: { $0.kind == .app }) {
             speak(about: casual, generation: generation)
             return
         }
-        if screen, now.timeIntervalSince(lastScreenLook) >= Double(Self.screenMinutes * 60) {
+        if screen, now.timeIntervalSince(lastScreenLook) >= screenGap {
             glanceAtScreen(generation: generation)
         }
     }
@@ -304,6 +357,7 @@ final class AwarenessService {
               canDeliver(source: .screen, generation: generation), !thinking,
               !frontmostApplicationIsPrivate else { return }
         lastScreenLook = Date()
+        screenGap = Self.nextScreenGap()
         thinking = true
         responseTask = Task { [weak self] in
             defer { self?.finishResponse(generation: generation) }
@@ -350,6 +404,7 @@ final class AwarenessService {
         onSpeak(reply)
         let deliveredAt = Date()
         lastSpoke = deliveredAt
+        casualGap = Self.nextCasualGap()
         switch observation.kind {
         case .app:
             if let key = observation.throttleKey { appComments[key] = deliveredAt }
@@ -357,6 +412,9 @@ final class AwarenessService {
             lastTrack = observation.detail
         case .video:
             lastVideo = observation.detail
+        case .randomEvent:
+            lastRandomEvent = observation.detail
+            nextRandomEvent = deliveredAt.addingTimeInterval(Self.nextRandomEventGap())
         case .screen, .welcomeBack, .breakTime:
             break
         }
@@ -386,6 +444,9 @@ final class AwarenessService {
     /// What she noticed, phrased for the model. It's marked as her own observation, not
     /// something the user said, and she's asked to speak like a friend sitting nearby.
     private static func instruction(for observation: Observation, app: String?) -> String {
+        if observation.kind == .randomEvent {
+            return randomEventInstruction(observation.detail)
+        }
         let detail = String(observation.detail.prefix(160))
         switch language {
         case "en":
@@ -396,6 +457,7 @@ final class AwarenessService {
             case .app: what = "The user has been using \(detail) for a while."
             case .song: what = "The user is listening to: \(detail)."
             case .video: what = "The user is watching this video: \(detail)."
+            case .randomEvent: what = ""
             case .screen: what = "This picture is the user's screen right now\(app.map { " (\($0) in front)" } ?? "")."
             }
             return """
@@ -410,6 +472,7 @@ final class AwarenessService {
             case .app: what = "相手はしばらく\(detail)を使っている。"
             case .song: what = "相手が聴いている曲：\(detail)。"
             case .video: what = "相手が見ている動画：\(detail)。"
+            case .randomEvent: what = ""
             case .screen: what = "この画像は相手の今の画面\(app.map { "（前面は\($0)）" } ?? "")。"
             }
             return """
@@ -424,11 +487,60 @@ final class AwarenessService {
             case .app: what = "對方用 \(detail) 用了一段時間。"
             case .song: what = "對方正在聽：\(detail)。"
             case .video: what = "對方正在看這部影片：\(detail)。"
+            case .randomEvent: what = ""
             case .screen: what = "這張圖是對方現在的畫面\(app.map { "（前景是 \($0)）" } ?? "")。"
             }
             return """
             （這不是對方說的話，是你自己留意到的：\(what)）
             就這件事，像坐在旁邊的朋友碰巧看到一樣，主動跟對方說一句簡短自然的話（二十五字以內），可以表示興趣、關心或聊聊。不要詳細描述畫面、不要念出個人資料，也不要提到截圖或監視。若沒什麼好說，text 留空。
+            """
+        }
+    }
+
+    /// A random little moment, phrased for the model as something happening to her.
+    private static func randomEventInstruction(_ event: String) -> String {
+        let moments: [String: (zh: String, en: String, ja: String)] = [
+            "hum": ("你突然很想唱歌，正在小聲哼歌。可以說說你在哼的感覺，不要說出你不肯定的歌曲作者。",
+                    "You suddenly feel like singing and start humming softly. Say something about it; don't name song credits you're unsure of.",
+                    "急に歌いたくなって、小さく鼻歌を歌っている。そのことをひと言。自信のない曲の作者名は出さないこと。"),
+            "question": ("你突然好奇，想多了解對方一點，問一個輕鬆的小問題（例如喜歡吃什麼、最近在忙什麼、今天過得怎樣），不要問私隱。",
+                         "You suddenly get curious about the user and ask one light question (favourite food, what they've been up to, how their day is going) — nothing private.",
+                         "ふと相手のことをもっと知りたくなって、気軽な質問をひとつする（好きな食べ物、最近がんばっていること、今日どうだったか など）。プライベートなことは聞かない。"),
+            "game": ("你有點悶，想邀對方一起玩個小遊戲：包剪揼、Vocaloid 歌曲問答或者打拍子，揀一個問對方要不要玩。",
+                     "You're a bit bored and want to play a little game with the user: rock-paper-scissors, a Vocaloid song quiz or a rhythm tapping game. Pick one and ask if they want to play.",
+                     "ちょっと退屈で、相手と小さなゲームをしたくなった：じゃんけん、ボカロ曲クイズ、リズムタップのどれかを選んで、やらないか誘う。"),
+            "snack": ("你突然肚子有點餓，很想吃東西（例如大蔥或甜點），跟對方說說。",
+                      "You suddenly feel a little hungry and crave a snack (leeks, or something sweet). Tell the user.",
+                      "急に小腹がすいて、何か食べたくなった（ネギや甘いものなど）。それを相手に言う。"),
+            "idea": ("你剛剛想到一句新歌的歌詞靈感（自己即興想一句短句），想跟對方分享並問意見。",
+                     "You just had an idea for a lyric (make up one short line yourself) and want to share it and ask what the user thinks.",
+                     "新しい歌詞のアイデアを思いついた（自分で短い一節を考える）。相手に聞かせて感想をたずねる。"),
+            "stretch": ("你坐久了想伸展一下，順便叫對方一起放鬆、飲口水。",
+                        "You've been sitting a while and want to stretch; invite the user to relax and have some water too.",
+                        "座りっぱなしで体を伸ばしたくなった。相手にも一緒にひと休みして水を飲もうと誘う。"),
+            "remember": ("你突然想起之前和對方聊過的一件事（只用記憶或摘要裡真的有的事；沒有的話就問對方近況）。",
+                         "You suddenly remember something you talked about with the user before (only something really in your memory or summary; if there's nothing, ask how they've been).",
+                         "前に相手と話したことをふと思い出した（記憶や要約に本当にあることだけ。なければ最近どうかたずねる）。"),
+            "daydream": ("你在發呆，想到一個有趣的小念頭（例如如果可以去旅行想去哪裡、雲像什麼），跟對方分享。",
+                         "You were daydreaming and had a fun little thought (where you'd travel if you could, what a cloud looks like…). Share it.",
+                         "ぼんやりしていて、ちょっと楽しいことを思いついた（旅行するならどこへ行きたいか、雲が何に見えるか など）。相手に話す。")
+        ]
+        let moment = moments[event] ?? moments["daydream"]!
+        switch language {
+        case "en":
+            return """
+            (Not something the user said — this just happened to you: \(moment.en))
+            Say one short, natural line to the user (under 25 words), as yourself, and pick a matching action.
+            """
+        case "ja":
+            return """
+            （相手の発言ではなく、あなたに起きたこと：\(moment.ja)）
+            自分から相手に、短く自然なひと言をかけてください（三十五文字以内）。合う動作も選ぶこと。
+            """
+        default:
+            return """
+            （這不是對方說的話，是你自己發生的事：\(moment.zh)）
+            主動跟對方說一句簡短自然的話（三十字以內），並選一個配合的動作。
             """
         }
     }

@@ -22,6 +22,28 @@ struct MemoryFact: Codable, Identifiable, Equatable, Sendable {
     var updated: Date
 }
 
+/// A short entry Miku writes in her diary at the end of a day you spent together.
+struct DiaryEntry: Codable, Identifiable, Equatable, Sendable {
+    var id: String { day }
+    /// yyyy-MM-dd. A diary day starts at 5:00, so a late night still counts as the evening before.
+    let day: String
+    var text: String
+    var written: Date
+}
+
+/// What happened on one diary day, for writing the entry.
+struct DiaryMaterial: Sendable {
+    let day: String
+    let messages: [ChatMessage]
+    let touches: [String: Int]
+    let newFacts: [String]
+    let friendship: Int
+    let specialDays: [SpecialDay]
+    /// The entry before this one, so the diary reads as one diary.
+    let previous: DiaryEntry?
+    let lastActivity: Date?
+}
+
 /// Everything the model is given about the past: kept small so it fits a small local model.
 struct MemoryContext: Sendable {
     var summary: String
@@ -30,6 +52,8 @@ struct MemoryContext: Sendable {
     var level: Int
     var offended: Bool
     var justForgiven: Bool
+    /// She was forgiving it as an accident (a quick apology, or you said you didn't mean to).
+    var forgaveAccident: Bool = false
     var boundaryStrikesToday: Int
     /// Where she was touched last time ("chest" or "skirt").
     var boundaryPart: String?
@@ -38,6 +62,11 @@ struct MemoryContext: Sendable {
     var hoursSinceLastChat: Double?
     var relationshipStatus: RelationshipStatus = .friends
     var confessionDecision: ConfessionDecision? = nil
+    /// The last diary entries (newest first), when memory is on.
+    var diary: [DiaryEntry] = []
+    /// For special days: event dates from the official sites and the day you met.
+    var events: [FetchedEvent] = []
+    var firstMet: Date? = nil
 
     static let empty = MemoryContext(
         summary: "", facts: [], friendship: 30, level: 1, offended: false, justForgiven: false,
@@ -82,6 +111,8 @@ final class CompanionMemory {
         var boundaryStrikes: Int = 0
         var lastBoundary: Date?
         var lastBoundaryPart: String?
+        /// What the last boundary cost (so an accident can be partly forgiven). Optional for old files.
+        var lastBoundaryPenalty: Double?
         var dailyGain: [String: Double] = [:]
     }
 
@@ -95,12 +126,17 @@ final class CompanionMemory {
         var facts: [MemoryFact] = []
         var touchDays: [TouchDay] = []
         var relationship = Relationship()
+        /// Optional so memory files from before the diary still load.
+        var diary: [DiaryEntry]?
+        /// Days whose entry you deleted: she doesn't write them again.
+        var deletedDiaryDays: [String]?
     }
 
     private var store = Store()
     private var saveWork: DispatchWorkItem?
     private var maintenance: Task<Void, Never>?
     private var justForgiven = false
+    private var forgaveAccident = false
     private var confessionDecision: ConfessionDecision?
     /// The next relationship update is a reset, not her forgiving you.
     private var resetPending = false
@@ -165,13 +201,17 @@ final class CompanionMemory {
             level: Self.level(for: relationship.friendship),
             offended: relationship.offendedSince != nil,
             justForgiven: justForgiven,
+            forgaveAccident: forgaveAccident,
             boundaryStrikesToday: strikesToday,
             boundaryPart: relationship.lastBoundaryPart,
             touchesToday: today.filter { $0.key != "boundary" },
             daysKnown: max(0, days),
             hoursSinceLastChat: hours,
             relationshipStatus: relationshipStatus,
-            confessionDecision: confessionDecision
+            confessionDecision: confessionDecision,
+            diary: isEnabled ? Array(diary.prefix(2)) : [],
+            events: EventCalendar.shared.events,
+            firstMet: isEnabled ? store.firstMet : nil
         )
     }
 
@@ -198,12 +238,25 @@ final class CompanionMemory {
     @discardableResult
     func noteUserMessage(_ text: String) -> Bool {
         justForgiven = false
+        forgaveAccident = false
         confessionDecision = nil
         if store.firstMet == nil { store.firstMet = Date() }
-        if isOffended, Self.isApology(text) {
-            store.relationship.offendedSince = nil
-            store.relationship.friendship = min(100, store.relationship.friendship + 2)
-            justForgiven = true
+        if isOffended, Self.isApology(text) || Self.isAccidentExplanation(text) {
+            let relationship = store.relationship
+            let accident = Self.isAccident(
+                text: text,
+                since: relationship.lastBoundary,
+                firstStrike: (relationship.lastBoundaryPenalty ?? 8) <= Self.boundaryPenalty
+                    && touchCounts(for: Self.dayKey(Date()))["boundary", default: 0] <= 1
+            )
+            if accident || Self.isApology(text) {
+                store.relationship.offendedSince = nil
+                // An accident she believes: most of what it cost comes back.
+                let regained = accident ? Self.accidentRefund : 2
+                store.relationship.friendship = min(100, store.relationship.friendship + regained)
+                justForgiven = true
+                forgaveAccident = accident
+            }
         }
         confessionDecision = ConfessionPolicy.evaluate(
             text,
@@ -326,7 +379,9 @@ final class CompanionMemory {
 
         if kind == "boundary" {
             let again = store.relationship.offendedSince != nil
-            store.relationship.friendship = max(0, store.relationship.friendship - (again ? 12 : 8))
+            let penalty = again ? Self.boundaryRepeatPenalty : Self.boundaryPenalty
+            store.relationship.friendship = max(0, store.relationship.friendship - penalty)
+            store.relationship.lastBoundaryPenalty = penalty
             store.relationship.offendedSince = store.relationship.offendedSince ?? Date()
             store.relationship.boundaryStrikes += 1
             store.relationship.lastBoundary = Date()
@@ -341,6 +396,84 @@ final class CompanionMemory {
                 gainFriendship(change, kind: "touch", dailyCap: 5)
             }
         }
+        scheduleSave()
+        notify()
+    }
+
+    /// A game played together (rock-paper-scissors, the quiz, the rhythm game).
+    func recordPlay() {
+        if store.firstMet == nil { store.firstMet = Date() }
+        if !isOffended { gainFriendship(0.5, kind: "game", dailyCap: 2) }
+        let day = Self.dayKey(Date())
+        if let index = store.touchDays.firstIndex(where: { $0.day == day }) {
+            store.touchDays[index].counts["game", default: 0] += 1
+        } else {
+            store.touchDays.append(TouchDay(day: day, counts: ["game": 1]))
+            store.touchDays = Array(store.touchDays.suffix(14))
+        }
+        scheduleSave()
+        notify()
+    }
+
+    // MARK: - Diary
+
+    /// Diary days start at 5:00 (staying up past midnight still belongs to the evening before).
+    static let diaryDayStartHour = 5
+
+    static func diaryDay(for date: Date) -> String {
+        dayKey(date.addingTimeInterval(-Double(diaryDayStartHour) * 3600))
+    }
+
+    var diary: [DiaryEntry] { (store.diary ?? []).sorted { $0.day > $1.day } }
+    var firstMet: Date? { store.firstMet }
+
+    /// What happened on `day`, or nil when nothing did (no diary for days you weren't around).
+    func diaryMaterial(for day: String) -> DiaryMaterial? {
+        guard isEnabled else { return nil }
+        let messages = store.messages.filter { Self.diaryDay(for: $0.date) == day }
+        let touches = touchCounts(for: day).filter { $0.key != "boundary" && $0.value > 0 }
+        let touchTotal = touches.values.reduce(0, +)
+        guard messages.contains(where: { $0.role == .user }) || touchTotal >= 3 else { return nil }
+        let facts = store.facts.filter { Self.diaryDay(for: $0.created) == day }.map(\.text)
+        let date = SpecialDays.parseDay(day) ?? Date()
+        let previous = diary.first { $0.day < day }
+        return DiaryMaterial(
+            day: day,
+            messages: Array(messages.suffix(40)),
+            touches: touches,
+            newFacts: facts,
+            friendship: friendship,
+            specialDays: SpecialDays.today(date, events: EventCalendar.shared.events, firstMet: store.firstMet),
+            previous: previous,
+            lastActivity: messages.map(\.date).max()
+        )
+    }
+
+    /// No entry yet, or there was more chatting after she wrote it.
+    func needsDiary(for day: String) -> Bool {
+        guard !(store.deletedDiaryDays ?? []).contains(day) else { return false }
+        guard let material = diaryMaterial(for: day) else { return false }
+        guard let entry = (store.diary ?? []).first(where: { $0.day == day }) else { return true }
+        guard let last = material.lastActivity else { return false }
+        return last > entry.written
+    }
+
+    func saveDiary(day: String, text: String) {
+        // Not for a day you deleted (an entry that was still being written when you did).
+        guard isEnabled, !(store.deletedDiaryDays ?? []).contains(day) else { return }
+        var entries = store.diary ?? []
+        entries.removeAll { $0.day == day }
+        entries.append(DiaryEntry(day: day, text: text, written: Date()))
+        store.diary = Array(entries.sorted { $0.day < $1.day }.suffix(366))
+        scheduleSave()
+        notify()
+    }
+
+    func deleteDiary(day: String) {
+        store.diary?.removeAll { $0.day == day }
+        var deleted = store.deletedDiaryDays ?? []
+        if !deleted.contains(day) { deleted.append(day) }
+        store.deletedDiaryDays = Array(deleted.sorted().suffix(400))
         scheduleSave()
         notify()
     }
@@ -544,6 +677,36 @@ final class CompanionMemory {
     static func dayKey(_ date: Date) -> String {
         let components = Calendar.current.dateComponents([.year, .month, .day], from: date)
         return String(format: "%04d-%02d-%02d", components.year ?? 0, components.month ?? 0, components.day ?? 0)
+    }
+
+    /// What touching her chest or lifting her skirt costs (again while she's still upset: more).
+    static let boundaryPenalty: Double = 8
+    static let boundaryRepeatPenalty: Double = 12
+    /// Given back when she believes it was an accident (net −3 instead of −6 with a normal apology).
+    static let accidentRefund: Double = 5
+    /// Apologising this soon after the first touch counts as "it was an accident".
+    static let quickApology: TimeInterval = 2 * 60
+    /// Saying you didn't mean to still counts as an accident within this time.
+    static let explainedAccident: TimeInterval = 30 * 60
+
+    /// "I didn't mean to", "唔小心", "わざとじゃない"…
+    static func isAccidentExplanation(_ text: String) -> Bool {
+        let lowered = text.lowercased()
+        let words = [
+            "唔小心", "不小心", "唔係有心", "不是有心", "唔係故意", "不是故意", "唔係特登", "非故意", "意外", "手滑", "撳錯", "按錯", "點錯", "誤觸",
+            "accident", "didn't mean", "did not mean", "didnt mean", "by mistake", "misclick", "slipped",
+            "わざとじゃ", "わざとではない", "うっかり", "間違えて", "事故"
+        ]
+        return words.contains { lowered.contains($0) }
+    }
+
+    /// The first touch today, and an apology right away (or saying it was an accident soon after).
+    static func isAccident(text: String, since touched: Date?, firstStrike: Bool, now: Date = Date()) -> Bool {
+        guard firstStrike, let touched else { return false }
+        let elapsed = now.timeIntervalSince(touched)
+        guard elapsed >= 0 else { return false }
+        if elapsed <= quickApology, isApology(text) || isAccidentExplanation(text) { return true }
+        return elapsed <= explainedAccident && isAccidentExplanation(text)
     }
 
     static func isApology(_ text: String) -> Bool {

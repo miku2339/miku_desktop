@@ -12,6 +12,7 @@ import { createRelationship, RELATIONSHIP_TOUCH_KINDS } from './relationship.js'
 import { canUseRoomBed, DEFAULT_ROOM_LAYOUT, loadRoomLayout, roomViewportGeometry } from './room-layout.js';
 import { createSleepCycle, isAsleep, normalizeOverride, scheduledAsleep } from './sleep.js';
 import { OutlineEffect } from './vendor/effects/OutlineEffect.js';
+import { chooseHandProp, createProps, hatFor, isTeaTime } from './props.js';
 
 const canvas = document.querySelector('#webglCanvas');
 const sceneRoot = document.querySelector('#sceneRoot');
@@ -138,7 +139,7 @@ const ALLOWED_EMOTIONS = new Set(['happy', 'curious', 'sleepy', 'calm', 'dizzy',
 const REPLY_GESTURES = ['bow', 'shakeHead', 'laugh', 'clap', 'shy', 'sad', 'pout', 'surprised'];
 const ALLOWED_REPLY_ACTIONS = new Set(['wave', 'stretch', 'rest', 'idle', 'nod', 'think', 'cheer', 'dance', 'idolPose', 'yawn', ...REPLY_GESTURES]);
 const GESTURE_TYPES = ['dance', 'idolPose', 'think', 'tidyHair', 'yawn', 'doze', 'sneeze', 'cheer', 'bored', 'shiver', 'skyLook', 'startle', ...REPLY_GESTURES];
-const INTERACTION_TYPES = new Set(['headPat', 'headStroke', 'poke', 'wave', 'stretch', 'rest', 'hello', 'look', 'move', 'dizzy', 'ouch', 'boundary', 'snub', 'forgive', ...GESTURE_TYPES]);
+const INTERACTION_TYPES = new Set(['headPat', 'headStroke', 'poke', 'wave', 'stretch', 'rest', 'hello', 'look', 'move', 'dizzy', 'ouch', 'boundary', 'snub', 'forgive', 'rps', ...GESTURE_TYPES]);
 // Idle actions she isn't in the mood for while she's upset with you.
 const CHEERFUL_ACTIONS = new Set(['dance', 'idolPose', 'cheer', 'bored', 'hum', 'wave', 'clap', 'laugh', 'shy']);
 const CONTROLLED_BONES = [
@@ -213,7 +214,9 @@ const state = {
   nextMicro: 0,
   lastFlash: 0,
   nextStartle: 0,
-  language: 'zh-Hant'
+  language: 'zh-Hant',
+  specialDays: { today: [], day: '' },
+  music: { playing: false, title: '' }
 };
 
 const HOVER_PHRASES = {
@@ -719,7 +722,8 @@ function startReaction(type, options = {}) {
     shy: 3.8,
     sad: 4.2,
     pout: 3.4,
-    surprised: 2.4
+    surprised: 2.4,
+    rps: 4.4
   };
   const targetAnchor = Number.isFinite(Number(options.x))
     ? THREE.MathUtils.clamp(Number(options.x), 0.16, 0.68)
@@ -1872,9 +1876,20 @@ function updateHoverBlend(elapsed, motionActive) {
   if (Math.abs(target - state.hoverBlend) < 0.002) state.hoverBlend = target;
 }
 
+function updateStandingStance(gaitPose, gaitDisabled) {
+  const release = gaitDisabled || state.hopLift > 0.001 || Math.abs(turning.yaw.v) >= 1.5;
+  walking?.holdStance({
+    active: !gaitPose.active && !release,
+    release,
+    delta: springDelta
+  });
+}
+
 function updateModel(elapsed) {
   if (!state.model) return;
   if (sleepState.lying) {
+    props?.hideHandProps();
+    updateHat();
     updateSleepingModel(elapsed);
     return;
   }
@@ -2017,6 +2032,8 @@ function updateModel(elapsed) {
   if (behaviorName === 'boundary') applyBoundary(behavior.progress, elapsed, behavior.variant);
   if (behaviorName === 'snub') applySnub(behavior.progress, elapsed, behavior.variant);
   if (behaviorName === 'forgive') applyForgive(behavior.progress, elapsed, behavior.variant);
+  if (behaviorName === 'rps') applyRPS(behavior.progress, elapsed, behavior.variant);
+  applyBeat(elapsed);
   if (sleepState.phase === 'dozing') applyStandingDoze(elapsed);
   applyTalking(elapsed);
   // A reply's mood lingers for a while, then she settles back down.
@@ -2034,12 +2051,569 @@ function updateModel(elapsed) {
   // Holding hands: her arm reaches for your cursor wherever it goes.
   if (behaviorName === 'handHold' && state.pointer?.point) aimArmAt(behavior.side, state.pointer.point, behavior.progress);
 
+  // An umbrella, a drink, a leek…: only while her arms are free.
+  const armsFree = !reaction && !state.pointer && !carrying && ARMS_FREE.has(behaviorName) && !reducedMotion.matches;
+  const held = updateHeldProp(elapsed, armsFree || (reducedMotion.matches && !carrying));
+  applyHoldPose(held, propState.hold.x, elapsed);
+  updateHat();
+  greetSpecialDay(elapsed);
+
   normalizeEyeMorphs();
   applyGrantRotations();
   applyHairClearance();
   blendMotionTransition(elapsed);
   if (!gaitDisabled) walking?.solve();
+  // Standing: feet stay planted while gestures sway her hips (no sliding).
+  updateStandingStance(gaitPose, gaitDisabled);
   state.model.updateMatrixWorld(true);
+  placeHandProps(elapsed);
+}
+
+// ---- Props: umbrella, drink, leek, fan, glowsticks, hats ----------------------
+//
+// What she holds is chosen every frame (props.js decides; this file poses her and places
+// the props). The pose eases in, the prop appears once her hand is there, and it is put
+// away whenever she's busy with you (touched, carried, dragged, reacting).
+
+let props = null;
+const ARMS_FREE = new Set(['idle', 'walk', 'move', 'lookAround', 'hum']);
+const propState = {
+  shown: null,
+  hold: { x: 0, v: 0 },
+  drinkUntil: 0,
+  drinkDay: '',
+  leekUntil: 0,
+  nextLeek: null,
+  fanUntil: 0,
+  nextFan: null,
+  cheerUntil: 0,
+  nextCheer: null,
+  listenUntil: 0,
+  nextListen: null,
+  greeted: new Set()
+};
+
+// Bone rotations (on top of her normal standing pose) for each way of holding something.
+// [x, y, z] per bone, like rotateBone(). Calibrated with screenshots of the model.
+const HOLD_POSES = {
+  closedUmbrella: { '右腕': [0, 0.15, 0.05], '右ひじ': [0, 0.35, 0], '右手首': [0, 0, 0] },
+  umbrella: { '右腕': [0.48, 0.5, -0.21], '右ひじ': [-0.67, 1.11, 0], '右手首': [-0.31, 0.38, -0.5] },
+  drink: { '右腕': [-0.18, -0.36, 0.27], '右ひじ': [0.02, 1.83, -0.2], '右手首': [-0.44, 0.14, -0.19] },
+  sip: { '右腕': [-0.45, 0.78, 0.94], '右ひじ': [-0.69, 1.77, -0.62], '右手首': [-0.72, -0.99, 0.71], '頭': [0.06, 0, 0] },
+  leek: { '右腕': [-0.21, 0.87, -0.97], '右ひじ': [-0.02, -0.54, -0.4], '右手首': [0.11, -0.5, 0.48] },
+  fan: { '右腕': [0.04, 0.07, 0.12], '右ひじ': [0.19, 1.93, -1.08], '右手首': [-0.38, -0.32, 0.49] },
+  glowsticks: {
+    '右腕': [-0.1, 0.5, -2.01], '右ひじ': [-0.58, -0.57, 0.04], '右手首': [0.46, -0.22, 0.02],
+    '左腕': [-0.1, -0.5, 2.01], '左ひじ': [-0.58, 0.57, -0.04], '左手首': [0.46, 0.22, -0.02]
+  },
+  listen: { '左腕': [0, -0.35, 1.35], '左ひじ': [0, -0.5, 1.9], '左手首': [0, 0, 0] }
+};
+// Where each hat sits on the head bone: position, rotation and size (head-bone units).
+const HAT_PLACEMENT = {
+  santa: { position: [0.15, 2.4, -0.35], rotation: [-0.12, 0, -0.18], scale: 1 },
+  witch: { position: [0, 2.35, -0.3], rotation: [-0.1, 0, 0.1], scale: 1 },
+  party: { position: [0.6, 2.75, -0.2], rotation: [-0.08, 0, -0.32], scale: 1 },
+  beanie: { position: [0, 1.75, -0.25], rotation: [-0.12, 0, 0], scale: 1 }
+};
+
+function applyHoldPose(name, weight, elapsed) {
+  if (!name || weight <= 0.001) return;
+  const pose = HOLD_POSES[name];
+  if (!pose) return;
+  let extra = null;
+  if (name === 'drink') {
+    // A sip every few seconds: the cup comes up to her mouth and goes back down.
+    const cycle = (elapsed % 9) / 9;
+    const sip = easeBetween(cycle, 0.55, 0.68) * (1 - easeBetween(cycle, 0.86, 0.97));
+    if (sip > 0.001) extra = { pose: HOLD_POSES.sip, amount: sip };
+    if (sip > 0.5) setMorph('う', 0.5 * weight);
+    else setSmile(0.35 * weight);
+  }
+  for (const [bone, [x, y, z]] of Object.entries(pose)) {
+    let [bx, by, bz] = [x, y, z];
+    if (extra?.pose[bone]) {
+      const [ex, ey, ez] = extra.pose[bone];
+      bx += (ex - x) * extra.amount;
+      by += (ey - y) * extra.amount;
+      bz += (ez - z) * extra.amount;
+    }
+    rotateBone(bone, bx, by, bz, weight);
+  }
+  if (extra) {
+    for (const [bone, [x, y, z]] of Object.entries(extra.pose)) {
+      if (!pose[bone]) rotateBone(bone, x, y, z, weight * extra.amount);
+    }
+  }
+  // Fingers closed round the handle (both hands for the glowsticks).
+  const grip = HOLD_GRIPS[name];
+  if (grip) {
+    for (const side of name === 'glowsticks' ? ['右', '左'] : ['右']) {
+      const twist = HOLD_TWIST[name] ?? 0;
+      if (twist) twistBone(`${side}ひじ`, `${side}手首`, side === '右' ? twist : -twist, weight);
+      curlFingers(side, gripShape(grip), weight);
+      gripThumb(side, weight * Math.min(1, grip / 0.85));
+    }
+  }
+  if (name === 'leek') {
+    // Twirling: the wrist circles, so the leek's tip draws a circle.
+    rotateBone('右手首', Math.sin(elapsed * 7) * 0.3, 0, Math.cos(elapsed * 7) * 0.3 + LEEK_LEAN, weight);
+    rotateBone('上半身', 0, 0, Math.sin(elapsed * 3.5) * 0.04 * weight);
+    rotateBone('頭', 0, 0, Math.sin(elapsed * 3.5 + 0.6) * 0.06 * weight);
+    setSmile(0.8 * weight);
+    setMorph('ω', 0.4 * weight);
+  }
+  if (name === 'fan') {
+    rotateBone('右手首', Math.sin(elapsed * 9) * 0.35, 0, 0, weight);
+    setSmile(0.3 * weight);
+  }
+  if (name === 'glowsticks') {
+    const beat = Math.sin(elapsed * Math.PI * 2 * 1.1);
+    rotateBone('右ひじ', 0, 0, -0.25 * beat, weight);
+    rotateBone('左ひじ', 0, 0, -0.25 * beat, weight);
+    offsetBone('センター', 0, 0.12 * Math.abs(beat) * weight, 0);
+    setSmile(0.9 * weight);
+    setMorph('にっこり', 0.4 * weight);
+  }
+  if (name === 'listen') {
+    // A hand on her headphones, nodding along to your music.
+    const beat = Math.sin(elapsed * Math.PI * 2 * 0.95);
+    rotateBone('頭', (0.05 + 0.05 * beat) * weight, 0, 0.06 * weight);
+    rotateBone('首', 0.03 * beat * weight, 0, 0);
+    setMorph('まばたき', 0.55 * weight);
+    setSmile(0.45 * weight);
+  }
+}
+
+const propVectors = {
+  dir: new THREE.Vector3(),
+  up: new THREE.Vector3(0, 1, 0),
+  toCamera: new THREE.Vector3(0, 0, 1),
+  side: new THREE.Vector3(),
+  forward: new THREE.Vector3(),
+  basis: new THREE.Matrix4(),
+  tilt: new THREE.Quaternion(),
+  tiltEuler: new THREE.Euler()
+};
+
+// How props sit in her hand (model units). Calibrated with close-up screenshots.
+const PROP_FIT = { umbrellaLength: 8.2, umbrellaGrip: 0.55, cupOut: 0.2, cupAlong: 0.2, cupDrop: 0.4, cupUpright: 0.7, leekGrip: 1.4, fanGrip: 0.45 };
+// Leans the twirling leek away from her head (radians on the wrist).
+const LEEK_LEAN = -0.2;
+// How tightly she grips each prop (0 open … 1 fist).
+const HOLD_GRIPS = { closedUmbrella: 0.85, umbrella: 0.85, drink: 0.8, leek: 0.85, fan: 0.85, glowsticks: 0.85 };
+// Forearm roll per prop so the fist faces the right way (radians, like twistBone()).
+const HOLD_TWIST = { umbrella: 0.54, drink: 0.55, leek: 0.47, fan: 0.61, glowsticks: 0.45 };
+
+const fistVectors = {
+  index: new THREE.Vector3(),
+  pinky: new THREE.Vector3(),
+  middle: new THREE.Vector3(),
+  middleTip: new THREE.Vector3(),
+  wrist: new THREE.Vector3(),
+  center: new THREE.Vector3(),
+  palm: new THREE.Vector3(),
+  axis: new THREE.Vector3(),
+  inward: new THREE.Vector3(),
+  along: new THREE.Vector3(),
+  thumbSide: new THREE.Vector3()
+};
+// Where the grip's cylinder sits relative to the palm point, in the fist's own frame.
+const GRIP_CENTER = { along: 0.85, out: 0.14, side: 0, radius: 0.12 };
+// The thumb closing over a handle (right hand; the left is mirrored).
+const GRIP_THUMB = { '親指０': [0.57, -0.02, -0.05], '親指１': [0.03, 0.03, 0.01], '親指２': [0, -0.08, -0.12] };
+
+/**
+ * Her hand as a grip: the line from the little finger to the index finger (what a handle runs
+ * along, out of the thumb side), the direction along the palm towards the fingers, the palm's
+ * normal (the side the fingers curl towards), and the centre of the hole the curled fingers
+ * and thumb close round. Measured from the bones every frame, so it follows any pose.
+ */
+function fistFrame(side) {
+  const bone = (name) => state.bones.get(`${side}${name}`);
+  const index = bone('人指１');
+  const pinky = bone('小指１');
+  const middle = bone('中指１');
+  const middleTip = bone('中指３');
+  const wrist = bone('手首');
+  if (!index || !pinky || !middle || !middleTip || !wrist) return null;
+  const v = fistVectors;
+  index.getWorldPosition(v.index);
+  pinky.getWorldPosition(v.pinky);
+  middle.getWorldPosition(v.middle);
+  middleTip.getWorldPosition(v.middleTip);
+  wrist.getWorldPosition(v.wrist);
+  v.axis.copy(v.index).sub(v.pinky).normalize();
+  // Along the palm, wrist → knuckles.
+  v.along.copy(v.middle).sub(v.wrist);
+  v.along.addScaledVector(v.axis, -v.along.dot(v.axis)).normalize();
+  // The palm's normal: whichever way the fingertips curl.
+  v.inward.crossVectors(v.axis, v.along).normalize();
+  v.thumbSide.copy(v.middleTip).sub(v.middle);
+  if (v.thumbSide.dot(v.inward) < 0) v.inward.negate();
+  v.palm.copy(v.wrist).lerp(v.middle, 0.7);
+  // The hole of the fist: just in front of the palm, under the base of the fingers.
+  v.center.copy(v.wrist).lerp(v.middle, GRIP_CENTER.along)
+    .addScaledVector(v.inward, GRIP_CENTER.out)
+    .addScaledVector(v.axis, GRIP_CENTER.side);
+  return { center: v.center, axis: v.axis, palm: v.palm, inward: v.inward, along: v.along, radius: GRIP_CENTER.radius };
+}
+
+function gripShape(amount) {
+  return { 人指: amount, 中指: amount, 薬指: amount, 小指: amount };
+}
+
+function gripThumb(side, weight) {
+  const mirror = side === '右' ? 1 : -1;
+  for (const [joint, [x, y, z]] of Object.entries(GRIP_THUMB)) {
+    rotateBone(`${side}${joint}`, x, y * mirror, z * mirror, weight);
+  }
+}
+
+function pointAlong(object, direction) {
+  object.quaternion.setFromUnitVectors(propVectors.up, propVectors.dir.copy(direction).normalize());
+}
+
+/** +Y along `direction`, +Z as close to `facing` as it can be. */
+function orientAlong(object, direction, facing) {
+  const v = propVectors;
+  v.dir.copy(direction).normalize();
+  v.forward.copy(facing).addScaledVector(v.dir, -facing.dot(v.dir));
+  if (v.forward.lengthSq() < 1e-6) v.forward.set(1, 0, 0);
+  v.forward.normalize();
+  v.side.crossVectors(v.dir, v.forward);
+  v.basis.makeBasis(v.side, v.dir, v.forward);
+  object.quaternion.setFromRotationMatrix(v.basis);
+}
+
+/** After the pose is final: put the held prop in her hand. */
+function placeHandProps(elapsed) {
+  if (!props) return;
+  props.hideHandProps();
+  const name = propState.shown;
+  if (!name || propState.hold.x < 0.6 || name === 'listen') return;
+  const hand = props.hand;
+  if (name === 'glowsticks') {
+    for (const [side, object] of [['右', hand.glowRight], ['左', hand.glowLeft]]) {
+      const fist = fistFrame(side);
+      if (!fist) continue;
+      // Held in the fist, sticking out of the thumb side.
+      object.position.copy(fist.center);
+      pointAlong(object, fist.axis);
+      object.visible = true;
+    }
+    return;
+  }
+  const object = hand[name];
+  const fist = fistFrame('右');
+  if (!object || !fist) return;
+  object.position.copy(fist.center);
+  if (name === 'umbrella') {
+    // The shaft runs through her fist; the canopy stays level over her head.
+    const length = PROP_FIT.umbrellaLength;
+    pointAlong(object, fist.axis);
+    object.position.addScaledVector(fist.axis, -PROP_FIT.umbrellaGrip);
+    object.userData.shaft.scale.y = length;
+    object.userData.shaft.position.y = length / 2;
+    object.userData.canopyHolder.position.y = length;
+    object.userData.canopyHolder.quaternion.copy(object.quaternion).invert()
+      .multiply(propVectors.tilt.setFromEuler(propVectors.tiltEuler.set(0.12, 0, -0.08)));
+  } else if (name === 'drink') {
+    // The cup sits in the grip, its side against her palm, held a little below the middle.
+    // It turns with her hand, but she keeps it mostly upright so nothing spills.
+    pointAlong(object, propVectors.side.copy(fist.axis).lerp(propVectors.up, PROP_FIT.cupUpright).normalize());
+    object.position.addScaledVector(fist.inward, PROP_FIT.cupOut).addScaledVector(fist.along, PROP_FIT.cupAlong)
+      .addScaledVector(fist.axis, -PROP_FIT.cupDrop);
+    const cycle = (elapsed % 9) / 9;
+    const sip = easeBetween(cycle, 0.55, 0.68) * (1 - easeBetween(cycle, 0.86, 0.97));
+    // Follows her hand (set above); tipped a little more towards her mouth while she sips.
+    object.rotateX(-0.3 * sip);
+  } else if (name === 'closedUmbrella') {
+    // Hanging from her fingers by the J hook, the shaft straight down.
+    orientAlong(object, propVectors.up, fist.axis);
+  } else if (name === 'leek') {
+    pointAlong(object, fist.axis);
+    object.position.addScaledVector(fist.axis, PROP_FIT.leekGrip);
+  } else if (name === 'fan') {
+    // Handle in the fist, the round face turned towards you.
+    // An uchiwa's flat handle lies against the palm, so its face is parallel to the palm.
+    propVectors.toCamera.copy(fist.inward);
+    if (propVectors.toCamera.z < 0) propVectors.toCamera.negate();
+    orientAlong(object, fist.axis, propVectors.toCamera);
+    object.position.addScaledVector(fist.axis, -PROP_FIT.fanGrip);
+  }
+  object.visible = true;
+}
+
+function propDay() {
+  const date = new Date();
+  return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+}
+
+/**
+ * Every frame: decide what she's holding (or doing with her hands) and ease into it.
+ * `armsFree` is false while she's busy with you or doing a gesture with her arms.
+ */
+function updateHeldProp(elapsed, armsFree) {
+  if (!props) return null;
+  const today = new Set(state.specialDays?.today ?? []);
+  const awake = sleepState.phase === 'awake';
+  const calm = armsFree && awake && !relationship.offended;
+  const hour = currentHour();
+  const festive = today.has('mikuDay') || today.has('birthday');
+  propState.nextLeek ??= elapsed + variety.range(festive ? 120 : 600, festive ? 300 : 1500);
+  propState.nextFan ??= elapsed + variety.range(60, 240);
+  propState.nextCheer ??= elapsed + variety.range(60, 180);
+  propState.nextListen ??= elapsed + variety.range(40, 120);
+  if (calm) {
+    if (elapsed >= propState.nextLeek) {
+      propState.leekUntil = elapsed + variety.range(11, 16);
+      propState.nextLeek = elapsed + variety.range(festive ? 240 : 900, festive ? 540 : 2100);
+      sayProp('leek');
+    }
+    if (isTeaTime(hour) && propState.drinkDay !== propDay() && elapsed > 20) {
+      propState.drinkDay = propDay();
+      propState.drinkUntil = elapsed + variety.range(60, 90);
+      sayProp('drink');
+    }
+    if (today.has('summerFestival') && hour >= 16 && hour < 23 && elapsed >= propState.nextFan) {
+      propState.fanUntil = elapsed + variety.range(25, 40);
+      propState.nextFan = elapsed + variety.range(480, 900);
+      sayProp('fan');
+    }
+    if (today.has('magicalMirai') && elapsed >= propState.nextCheer) {
+      propState.cheerUntil = elapsed + variety.range(12, 18);
+      propState.nextCheer = elapsed + variety.range(420, 780);
+      sayProp('mirai');
+    }
+    if (state.music?.playing && elapsed >= propState.nextListen) {
+      propState.listenUntil = elapsed + variety.range(10, 16);
+      propState.nextListen = elapsed + variety.range(200, 420);
+      sayProp('listen');
+    }
+  }
+  let wanted = chooseHandProp({
+    weather: state.weather?.kind,
+    scene: state.activeScene,
+    hour,
+    idle: calm,
+    awake,
+    drinkUntil: propState.drinkUntil,
+    leekUntil: propState.leekUntil,
+    fanUntil: propState.fanUntil,
+    cheerUntil: propState.cheerUntil,
+    now: elapsed
+  });
+  if (!wanted && calm && state.music?.playing && elapsed < propState.listenUntil) wanted = 'listen';
+  if (reducedMotion.matches) wanted = wanted === 'umbrella' || wanted === 'closedUmbrella' ? wanted : null;
+  // Swap through empty hands: put one thing away before picking up the next.
+  if (wanted !== propState.shown) {
+    springTo(propState.hold, 0, 2.4, 1);
+    if (propState.hold.x < 0.04) {
+      propState.shown = wanted;
+      propState.hold.x = propState.hold.v = 0;
+      if (wanted === 'umbrella' && elapsed - (propState.rainSaid ?? -Infinity) > 900) {
+        propState.rainSaid = elapsed;
+        sayProp('rain', 'calm');
+      }
+    }
+  } else springTo(propState.hold, wanted ? 1 : 0, 1.8, 1);
+  return propState.shown;
+}
+
+function updateHat() {
+  if (!props) return;
+  const head = state.bones.get('頭');
+  const hat = sleepState.lying || sleepState.phase === 'dimming' || sleepState.phase === 'brightening'
+    ? null
+    : hatFor(state.specialDays?.today ?? []);
+  if (hat !== props.wornHat) props.wearHat(hat, head, hat ? HAT_PLACEMENT[hat] : null);
+}
+
+const PROP_PHRASES = {
+  'zh-Hant': {
+    leek: ['轉轉大蔥～♪', '大蔥時間！', 'Ievan Polkka～♪'],
+    drink: ['下午茶時間～', '珍珠奶茶好好飲♪', '休息一下，飲杯嘢先～'],
+    fan: ['夏日祭好熱鬧呀～', '撥撥扇，好涼爽♪', '一陣間去睇煙花？'],
+    mirai: ['魔法未來！一齊打 call！', '螢光棒揮起嚟～♪', '今日係魔法未來喔！'],
+    listen: ['呢首歌好好聽♪', '我都跟住聽緊～', '嗯嗯，節奏好正！'],
+    rain: ['落雨喇，記得帶遮～', '遮好喇，唔怕濕♪'],
+    newYear: ['新年快樂！今年都請多多指教～'],
+    mikuDay: ['今日係ミクの日！3 月 9 日，Thank you♪'],
+    birthday: ['今日係我生日呀！多謝你陪我～'],
+    anniversary: ['今日係我哋認識一週年喔！多謝你一直陪住我～'],
+    halloween: ['Trick or treat！唔俾糖就搞蠱你喔～'],
+    christmas: ['聖誕快樂！🎄'],
+    newYearsEve: ['今年最後一日喇，多謝你陪咗我成年！'],
+    snowMiku: ['SNOW MIKU 嘅季節到喇！北海道好凍呀～'],
+    magicalMirai: ['魔法未來嚟喇！好期待！'],
+    tanabata: ['七夕喔，你會許咩願？'],
+    summerFestival: ['夏日祭嘅季節喇～']
+  },
+  en: {
+    leek: ['Leek spin~ ♪', 'Leek time!', 'Ievan Polkka~ ♪'],
+    drink: ['Tea time~', 'Bubble tea is the best ♪', 'Let’s take a little break~'],
+    fan: ['The summer festival is so lively~', 'Fan, fan… nice and cool ♪', 'Fireworks later?'],
+    mirai: ['Magical Mirai! Let’s cheer!', 'Glowsticks up~ ♪', 'It’s Magical Mirai today!'],
+    listen: ['I like this song ♪', 'I’m listening too~', 'Mm, great rhythm!'],
+    rain: ['It’s raining — don’t forget your umbrella~', 'Umbrella up, staying dry ♪'],
+    newYear: ['Happy New Year! Let’s have a great year together~'],
+    mikuDay: ['It’s Miku Day — March 9th! Thank you ♪'],
+    birthday: ['It’s my birthday today! Thanks for being here~'],
+    anniversary: ['It’s our anniversary — a year since we met! Thank you~'],
+    halloween: ['Trick or treat! No sweets, no mercy~'],
+    christmas: ['Merry Christmas! 🎄'],
+    newYearsEve: ['Last day of the year — thanks for this year with me!'],
+    snowMiku: ['It’s SNOW MIKU season! Hokkaido is so cold~'],
+    magicalMirai: ['Magical Mirai is here! I’m so excited!'],
+    tanabata: ['It’s Tanabata — what will you wish for?'],
+    summerFestival: ['Summer festival season~']
+  },
+  ja: {
+    leek: ['ネギくるくる～♪', 'ネギの時間！', 'イエヴァン・ポルッカ～♪'],
+    drink: ['おやつタイム～', 'タピオカおいしい♪', 'ちょっと休憩しよ～'],
+    fan: ['夏祭り、にぎやかだね～', 'パタパタ…涼しい♪', 'あとで花火見よっか？'],
+    mirai: ['マジカルミライ！一緒に盛り上がろ！', 'ペンライト振っちゃお～♪', '今日はマジカルミライだよ！'],
+    listen: ['この曲いいね♪', 'わたしも聴いてるよ～', 'うんうん、いいリズム！'],
+    rain: ['雨だね、傘忘れないでね～', '傘さしたから大丈夫♪'],
+    newYear: ['あけましておめでとう！今年もよろしくね～'],
+    mikuDay: ['今日はミクの日！3月9日、サンキュー♪'],
+    birthday: ['今日はわたしの誕生日！一緒にいてくれてありがとう～'],
+    anniversary: ['今日は出会って一周年だね！いつもありがとう～'],
+    halloween: ['トリック・オア・トリート！お菓子くれないといたずらしちゃうよ～'],
+    christmas: ['メリークリスマス！🎄'],
+    newYearsEve: ['今年も最後の日だね。一年ありがとう！'],
+    snowMiku: ['SNOW MIKUの季節だよ！北海道は寒いね～'],
+    magicalMirai: ['マジカルミライだよ！楽しみ！'],
+    tanabata: ['七夕だね、何をお願いする？'],
+    summerFestival: ['夏祭りの季節だね～']
+  }
+};
+
+function sayProp(key, emotion = 'happy') {
+  if (state.thinking || !showsCharacter) return false;
+  const language = PROP_PHRASES[state.language] ? state.language : 'zh-Hant';
+  const phrases = PROP_PHRASES[language][key];
+  if (!phrases?.length) return false;
+  showBubble(variety.line(`prop-${language}-${key}`, phrases), emotion, 3200);
+  return true;
+}
+
+const GREETING_ORDER = ['birthday', 'anniversary', 'newYear', 'mikuDay', 'christmas', 'halloween', 'newYearsEve',
+  'magicalMirai', 'snowMiku', 'tanabata', 'summerFestival'];
+
+/** Once a day per special day, when she's awake and not busy: say it, with a little cheer. */
+function greetSpecialDay(elapsed) {
+  const today = state.specialDays?.today ?? [];
+  if (!today.length || sleepState.phase !== 'awake' || state.reaction || state.pointer || state.thinking) return;
+  if (elapsed < (propState.nextGreeting ?? 6)) return;
+  const day = state.specialDays.day || propDay();
+  const key = GREETING_ORDER.find((name) => today.includes(name) && !propState.greeted.has(`${day}:${name}`)
+    && !greetedBefore(`${day}:${name}`));
+  if (!key) return;
+  propState.greeted.add(`${day}:${key}`);
+  rememberGreeting(`${day}:${key}`);
+  propState.nextGreeting = elapsed + 40;
+  const gesture = key === 'newYear' ? 'bow' : key === 'halloween' ? 'laugh' : 'cheer';
+  // The gesture without its own words: the greeting is already in the bubble.
+  if (sayProp(key)) startReaction(gesture, { variant: { ...chooseVariant(gesture), said: 0, talk: false } });
+}
+
+// Greetings survive a reload of the page (but are only a convenience: failures are fine).
+function greetedBefore(id) {
+  try { return window.localStorage?.getItem(`miku.greeted.${id}`) === '1'; } catch { return false; }
+}
+
+function rememberGreeting(id) {
+  try { window.localStorage?.setItem(`miku.greeted.${id}`, '1'); } catch { /* not available */ }
+}
+
+// ---- Rock-paper-scissors and tapping along to a beat (mini games) ------------
+
+// A fist: how far each finger joint bends, and around which axis (bone frame).
+const FINGER_CURL = { joints: [1.1, 1.3, 0.9], thumb: [0.5, 0.7, 0.6], axis: [0, 0, 1], thumbAxis: [0, 1, 0] };
+const RPS_ARM = { '右肩': [0, 0, -0.08], '右腕': [0, 0.25, -1.15], '右ひじ': [0, 0.3, -1.25] };
+const RPS_TWIST = { forearm: 0.9, wrist: [0, 0, 0], spread: 0.22 };
+const RPS_SHAPES = {
+  rock: { 人指: 1, 中指: 1, 薬指: 1, 小指: 1, 親指: 1 },
+  scissors: { 人指: 0, 中指: 0, 薬指: 1, 小指: 1, 親指: 1 },
+  paper: { 人指: 0, 中指: 0, 薬指: 0, 小指: 0, 親指: 0 }
+};
+
+function curlFingers(side, shape, weight) {
+  // Towards the palm. (Measured: on this model +z bends the right hand's fingers palmwards.)
+  const sign = side === '右' ? 1 : -1;
+  const [ax, ay, az] = FINGER_CURL.axis;
+  const [tx, ty, tz] = FINGER_CURL.thumbAxis;
+  for (const [finger, amount] of Object.entries(shape)) {
+    const curl = amount * weight;
+    if (curl <= 0.001) continue;
+    if (finger === '親指') {
+      ['０', '１', '２'].forEach((joint, index) => {
+        // The thumb's joints are mirrored relative to the fingers' on this model.
+        const angle = FINGER_CURL.thumb[index] * curl * -sign;
+        rotateBone(`${side}親指${joint}`, tx * angle, ty * angle, tz * angle);
+      });
+    } else {
+      ['１', '２', '３'].forEach((joint, index) => {
+        const angle = FINGER_CURL.joints[index] * curl * sign;
+        rotateBone(`${side}${finger}${joint}`, ax * angle, ay * angle, az * angle);
+      });
+    }
+  }
+}
+
+/**
+ * "Jan, ken, pon!": the fist pumps twice, then she shows her hand to you and reacts.
+ * variant: { hand: 'rock' | 'paper' | 'scissors', outcome: 'win' | 'lose' | 'draw' } (hers).
+ */
+function applyRPS(progress, elapsed, variant = {}) {
+  const duration = state.reaction?.duration ?? 4.4;
+  const t = progress * duration;
+  const raise = easeBetween(t, 0, 0.35) * (1 - easeBetween(t, duration - 0.45, duration));
+  const reveal = t >= 1.45;
+  const pump = reveal ? 0 : Math.max(0, Math.sin(Math.max(0, t - 0.35) * Math.PI / 0.55)) * easeBetween(t, 0.3, 0.45);
+  for (const [bone, [x, y, z]] of Object.entries(RPS_ARM)) rotateBone(bone, x, y, z, raise);
+  rotateBone('右ひじ', 0, 0, 0.45 * pump, raise);
+  // Palm towards you, so you can see what she threw.
+  twistBone('右ひじ', '右手首', RPS_TWIST.forearm, raise);
+  rotateBone('右手首', ...RPS_TWIST.wrist, raise);
+  const shape = reveal ? RPS_SHAPES[variant.hand] ?? RPS_SHAPES.rock : RPS_SHAPES.rock;
+  curlFingers('右', shape, raise);
+  if (reveal && variant.hand === 'scissors') {
+    // A proper V: index and middle finger apart.
+    rotateBone('右人指１', 0, RPS_TWIST.spread, 0, raise);
+    rotateBone('右中指１', 0, -RPS_TWIST.spread, 0, raise);
+  }
+  // How she takes the result.
+  const after = easeBetween(t, 1.55, 1.9) * raise;
+  if (!reveal) {
+    setSmile(0.45 * raise);
+    rotateBone('頭', 0.03 * pump, 0, 0);
+  } else if (variant.outcome === 'win') {
+    setSmile(0.95 * after);
+    setMorph('にっこり', 0.6 * after);
+    offsetBone('センター', 0, 0.12 * Math.abs(Math.sin(elapsed * 9)) * after, 0);
+  } else if (variant.outcome === 'lose') {
+    setMorph('困る', 0.7 * after);
+    setMorph('ω', 0.35 * after);
+    rotateBone('頭', 0.06 * after, 0, -0.08 * after);
+  } else {
+    setMorph('上', 0.5 * after);
+    setSmile(0.5 * after);
+    rotateBone('頭', 0, 0, 0.08 * after);
+  }
+}
+
+// Tapping along: a little bounce and nod on every beat of the rhythm game.
+const beat = { at: -Infinity };
+
+function applyBeat(elapsed) {
+  const since = elapsed - beat.at;
+  if (since < 0 || since > 0.35) return;
+  const env = Math.sin(Math.min(1, since / 0.35) * Math.PI);
+  offsetBone('センター', 0, 0.1 * env, 0);
+  rotateBone('頭', 0.07 * env, 0, 0);
+  setSmile(0.55);
 }
 
 // ---- More actions, reactions and micro-expressions --------------------------
@@ -2828,6 +3402,8 @@ async function loadModel() {
     });
     scene.add(state.model);
     grounding.attach(state.model);
+    props = createProps(THREE);
+    scene.add(props.group);
 
     for (const bone of state.model.skeleton?.bones || []) {
       state.bones.set(bone.name, bone);
@@ -3409,6 +3985,31 @@ window.mikuCompanion = Object.freeze({
   setThinking(thinking) {
     setThinking(thinking);
     return true;
+  },
+  /** Rock-paper-scissors from the chat: { hand, outcome } (her hand, and how it went for her). */
+  playRPS(payload = {}) {
+    if (!showsCharacter || sleepState.phase !== 'awake') return false;
+    const hand = ['rock', 'paper', 'scissors'].includes(payload?.hand) ? payload.hand : 'rock';
+    const outcome = ['win', 'lose', 'draw'].includes(payload?.outcome) ? payload.outcome : 'draw';
+    startReaction('rps', { variant: { hand, outcome } });
+    renderState(performance.now());
+    return true;
+  },
+  /** One beat of the rhythm game: she bounces along. */
+  rhythmBeat() {
+    beat.at = currentElapsed();
+    return true;
+  },
+  /** Whether music is playing on the Mac (from the app's awareness of Music / Spotify). */
+  setMusic(payload = {}) {
+    state.music = { playing: Boolean(payload?.playing), title: typeof payload?.title === 'string' ? payload.title.slice(0, 120) : '' };
+    return state.music;
+  },
+  /** Festivals, her birthday, your anniversary…: { today: [keys], day: 'yyyy-MM-dd' }. */
+  setSpecialDays(payload = {}) {
+    const today = Array.isArray(payload?.today) ? payload.today.filter((key) => typeof key === 'string').slice(0, 12) : [];
+    state.specialDays = { today, day: typeof payload?.day === 'string' ? payload.day : '' };
+    return state.specialDays;
   },
   /** When she should sleep: { override: { asleep, until } | null } from the app. */
   setSleep(payload = {}) {

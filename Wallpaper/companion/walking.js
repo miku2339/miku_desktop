@@ -209,6 +209,9 @@ export function createWalking({ model, bones, restPose }) {
     recovery = null;
     initializedFeet = false;
     lastPose = { active: false, weight: 0, direction: 1, turn: 0, stride: 0 };
+    stance.weight = 0;
+    stance.captured = false;
+    stance.step = null;
   }
 
   function update({ walking, rootX, destinationX, delta = 0 }) {
@@ -523,6 +526,164 @@ export function createWalking({ model, bones, restPose }) {
     model.updateMatrixWorld(true);
   }
 
+  // ---- Standing still: feet stay where they are ---------------------------------
+  //
+  // Gestures sway the hips (dancing, stretching, leaning): without this the feet would slide
+  // along with the body. While she stands, each foot is held at a planted spot under her
+  // and the legs bend to reach it. If the body drifts or turns too far from that spot, she
+  // takes a small step to re-plant (feet lifted, never dragged).
+  const STANCE_SLACK = 0.45;
+  const STANCE_TURN = 0.6;
+  const STANCE_STEP_SECONDS = 0.32;
+  const stance = {
+    weight: 0,
+    captured: false,
+    rootX: 0,
+    rootZ: 0,
+    yaw: 0,
+    step: null,
+    targets: Object.fromEntries(SIDE_NAMES.map(side => [side, new THREE.Vector3()])),
+    quaternions: Object.fromEntries(SIDE_NAMES.map(side => [side, new THREE.Quaternion()]))
+  };
+  const stanceEuler = new THREE.Euler();
+
+  function stanceSpot(side, target, quaternion) {
+    const leg = legs[side];
+    canonicalOffset.set(leg.neutralOffsetX, 0, leg.neutralOffsetZ).applyQuaternion(modelQuaternion);
+    target.set(model.position.x + canonicalOffset.x, leg.neutralY, model.position.z + canonicalOffset.z);
+    quaternion.copy(modelQuaternion).multiply(leg.neutralQuaternion);
+  }
+
+  function captureStance() {
+    for (const side of SIDE_NAMES) stanceSpot(side, stance.targets[side], stance.quaternions[side]);
+    stance.rootX = model.position.x;
+    stance.rootZ = model.position.z;
+    stance.yaw = stanceEuler.setFromQuaternion(modelQuaternion, 'YXZ').y;
+    stance.captured = true;
+  }
+
+  function solveLegTo(leg, target, quaternion, amount) {
+    if (!leg.hip || !leg.knee || !leg.ankle || amount <= EPSILON) return;
+    model.updateMatrixWorld(true);
+    leg.hip.getWorldPosition(hipPosition);
+    leg.knee.getWorldPosition(kneePosition);
+    leg.ankle.getWorldPosition(anklePosition);
+    targetPosition.copy(anklePosition).lerp(target, amount);
+    const upperLength = hipPosition.distanceTo(kneePosition);
+    const lowerLength = kneePosition.distanceTo(anklePosition);
+    axis.copy(targetPosition).sub(hipPosition);
+    const rawDistance = axis.length();
+    if (rawDistance < EPSILON) return;
+    axis.multiplyScalar(1 / rawDistance);
+    const distance = THREE.MathUtils.clamp(rawDistance, Math.abs(upperLength - lowerLength) + 0.001, upperLength + lowerLength - 0.004);
+    const along = (upperLength * upperLength - lowerLength * lowerLength + distance * distance) / (2 * distance);
+    const height = Math.sqrt(Math.max(0, upperLength * upperLength - along * along));
+    poleDirection.set(0, 0, 1).applyQuaternion(modelQuaternion);
+    poleDirection.addScaledVector(axis, -poleDirection.dot(axis));
+    if (poleDirection.lengthSq() < 1e-5) {
+      poleDirection.set(1, 0, 0).applyQuaternion(modelQuaternion);
+      poleDirection.addScaledVector(axis, -poleDirection.dot(axis));
+    }
+    poleDirection.normalize();
+    desiredKnee.copy(hipPosition).addScaledVector(axis, along).addScaledVector(poleDirection, height);
+    upperDirection.copy(kneePosition).sub(hipPosition);
+    desiredDirection.copy(desiredKnee).sub(hipPosition);
+    alignBone(leg.hip, upperDirection, desiredDirection);
+    model.updateMatrixWorld(true);
+    leg.knee.getWorldPosition(kneePosition);
+    leg.ankle.getWorldPosition(anklePosition);
+    lowerDirection.copy(anklePosition).sub(kneePosition);
+    desiredDirection.copy(targetPosition).sub(kneePosition);
+    alignBone(leg.knee, lowerDirection, desiredDirection);
+    model.updateMatrixWorld(true);
+    leg.ankle.getWorldQuaternion(currentWorldQuaternion);
+    currentWorldQuaternion.slerp(quaternion, amount);
+    setWorldQuaternion(leg.ankle, currentWorldQuaternion, parentQuaternion, inverseParent);
+  }
+
+  /**
+   * Call every frame after the pose, instead of solve(), while she isn't walking.
+   * `active` false (carried, dragged, lying, spinning…) lets the feet follow the body again.
+   */
+  function holdStance({ active, delta = 0, release = false }) {
+    const safeDelta = THREE.MathUtils.clamp(Number(delta) || 0, 0, 0.1);
+    // Picked up, dragged or lying down: the feet go with her at once.
+    if (release) {
+      stance.weight = 0;
+      stance.captured = false;
+      stance.step = null;
+      return;
+    }
+    // Walking (or settling after a walk) owns the legs.
+    if (plan && weight > EPSILON) {
+      // Take over exactly where the walk left her feet (no snap when it hands over).
+      model.getWorldQuaternion(modelQuaternion);
+      for (const side of SIDE_NAMES) {
+        const leg = legs[side];
+        stance.targets[side].set(leg.target.x, leg.neutralY, leg.target.z);
+        stance.quaternions[side].copy(leg.currentTargetQuaternion);
+      }
+      stance.rootX = model.position.x;
+      stance.rootZ = model.position.z;
+      stance.yaw = stanceEuler.setFromQuaternion(modelQuaternion, 'YXZ').y;
+      stance.captured = initializedFeet;
+      stance.step = null;
+      stance.weight = 1;
+      return;
+    }
+    stance.weight = active ? Math.min(1, stance.weight + safeDelta / 0.25) : Math.max(0, stance.weight - safeDelta / 0.2);
+    if (stance.weight <= EPSILON) {
+      stance.captured = false;
+      stance.step = null;
+      return;
+    }
+    model.position.y = 0;
+    model.updateMatrixWorld(true);
+    model.getWorldQuaternion(modelQuaternion);
+    if (!stance.captured) captureStance();
+    const yaw = stanceEuler.setFromQuaternion(modelQuaternion, 'YXZ').y;
+    const drift = Math.hypot(model.position.x - stance.rootX, model.position.z - stance.rootZ);
+    const turned = Math.abs(Math.atan2(Math.sin(yaw - stance.yaw), Math.cos(yaw - stance.yaw)));
+    if (!stance.step && (drift > STANCE_SLACK || turned > STANCE_TURN)) {
+      // Too far from where she planted her feet: a quick little step to re-plant them.
+      stance.step = {
+        progress: 0,
+        from: Object.fromEntries(SIDE_NAMES.map(side => [side, stance.targets[side].clone()])),
+        fromQ: Object.fromEntries(SIDE_NAMES.map(side => [side, stance.quaternions[side].clone()]))
+      };
+      captureStance();
+    }
+    for (const [index, side] of SIDE_NAMES.entries()) {
+      const leg = legs[side];
+      let target = stance.targets[side];
+      let quaternion = stance.quaternions[side];
+      if (stance.step) {
+        // One foot, then the other, each lifted a little on the way.
+        const local = clamp01(stance.step.progress * 2 - index);
+        const eased = smoothstep(local);
+        targetPosition.copy(stance.step.from[side]).lerp(stance.targets[side], eased);
+        targetPosition.y += Math.sin(local * Math.PI) * 0.45 * model.scale.y;
+        target = canonicalPosition.copy(targetPosition);
+        quaternion = currentWorldQuaternion.copy(stance.step.fromQ[side]).slerp(stance.quaternions[side], eased).clone();
+      }
+      solveLegTo(leg, target.clone(), quaternion, stance.weight);
+    }
+    if (stance.step) {
+      stance.step.progress = Math.min(1, stance.step.progress + safeDelta / STANCE_STEP_SECONDS);
+      if (stance.step.progress >= 1 - EPSILON) stance.step = null;
+    }
+    refreshLegGrants();
+    model.updateMatrixWorld(true);
+  }
+
+  function stanceStatus() {
+    return {
+      weight: stance.weight,
+      stepping: Boolean(stance.step),
+      targets: Object.fromEntries(SIDE_NAMES.map(side => [side, stance.targets[side].toArray()]))
+    };
+  }
+
   function status() {
     const feet = {};
     for (const side of SIDE_NAMES) {
@@ -547,5 +708,5 @@ export function createWalking({ model, bones, restPose }) {
     };
   }
 
-  return { update, solve, reset, status };
+  return { update, solve, reset, status, holdStance, stanceStatus };
 }

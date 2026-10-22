@@ -94,6 +94,6 @@ Issue や Pull Request を歓迎します。不具合を報告する際は、mac
 
 本プロジェクトは非公式のファン作品であり、Crypton Future Media、Project SEKAI、OTOIRO、JR East とは関係ありません。
 
-ソースコードは [MIT License](LICENSE) の下で提供されます。キャラクター、MMD モデル、背景、サードパーティ製ライブラリには、それぞれのライセンスが適用されます。一部のアニメ調背景には、非商用に限る利用制限があります。東京および学校のシーンは、公式 MV の元映像ではありません。
+本プロジェクト独自のソースコードは [PolyForm Noncommercial License 1.0.0](LICENSE) に基づき、非商用での使用・改変・再配布が認められます。以前 MIT ライセンスで公開されたバージョンには、引き続き元の MIT ライセンスが適用されます。キャラクター、MMD モデル、背景、サードパーティ製ライブラリには、それぞれ従来の利用条件が適用されます。一部のアニメ調背景には、非商用に限る利用制限があります。東京および学校のシーンは、公式 MV の元映像ではありません。
 
 出典と利用条件の詳細は、[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) および[シーン素材の説明](Wallpaper/assets/scenes/ATTRIBUTION.md)をご覧ください。

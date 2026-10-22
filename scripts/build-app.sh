@@ -41,6 +41,8 @@ mkdir -p "$staging_app/Contents/MacOS" "$staging_app/Contents/Resources/Wallpape
 cp "$build_product" "$staging_app/Contents/MacOS/MikuDesktop"
 cp "$project_root/Info.plist" "$staging_app/Contents/Info.plist"
 cp "$project_root/Resources/AppIcon.icns" "$staging_app/Contents/Resources/AppIcon.icns"
+cp "$project_root/LICENSE" "$staging_app/Contents/Resources/LICENSE"
+cp "$project_root/THIRD_PARTY_NOTICES.md" "$staging_app/Contents/Resources/THIRD_PARTY_NOTICES.md"
 ditto --norsrc "$wallpaper_source/companion" "$staging_app/Contents/Resources/Wallpaper/companion"
 ditto --norsrc "$wallpaper_source/assets" "$staging_app/Contents/Resources/Wallpaper/assets"
 if [[ "$public_build" == true ]]; then

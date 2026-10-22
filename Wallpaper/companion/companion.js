@@ -18,10 +18,17 @@ const sceneRoot = document.querySelector('#sceneRoot');
 const fallbackPortrait = document.querySelector('#fallbackPortrait');
 const speechBubble = document.querySelector('#speechBubble');
 const bedOverlay = document.querySelector('#bedOverlay');
+const ROOM_BLANKET_URLS = Object.fromEntries(
+  ['day', 'dusk', 'night'].map(period => [period, `../assets/scenes/room-blanket-${period}.png`])
+);
+let roomBlanketsReady = false;
 if (bedOverlay) {
-  // The blanket layer ships with the room pictures; without it she just lies on the bed.
+  // Never show a lying pose until its matching blanket is ready to cover it.
   bedOverlay.addEventListener('load', () => { bedOverlay.dataset.ok = 'true'; });
-  bedOverlay.addEventListener('error', () => { bedOverlay.dataset.ok = 'false'; });
+  bedOverlay.addEventListener('error', () => {
+    bedOverlay.dataset.ok = 'false';
+    roomBlanketsReady = false;
+  });
 }
 const ambientCanvas = document.querySelector('#ambientCanvas');
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -483,6 +490,13 @@ async function prepareScenes() {
 
   state.loadedScenes = results.filter(Boolean);
   if (state.loadedScenes.length === 0) state.loadedScenes = ['shibuya'];
+}
+
+async function prepareRoomBlankets() {
+  roomBlanketsReady = false;
+  if (!roomLayout.sleepReady || !bedOverlay) return;
+  const results = await Promise.allSettled(Object.values(ROOM_BLANKET_URLS).map(preload));
+  roomBlanketsReady = results.every(result => result.status === 'fulfilled');
 }
 
 function sceneWeightsAt(elapsed) {
@@ -1819,6 +1833,7 @@ function updateModel(elapsed) {
   resetSkeleton();
   resetMorphs();
   state.model.rotation.set(0, 0, 0);
+  if (state.model.scale.x !== MODEL_SCALE) state.model.scale.setScalar(MODEL_SCALE);
   let anchor = reducedMotion.matches
     ? (state.pinnedAnchor ?? POSITION_ANCHORS[1])
     : heldAnchorAt(routineAnchor, elapsed);
@@ -2153,7 +2168,7 @@ function updateSleep(elapsed, hour) {
     time: elapsed,
     wantAsleep,
     busy,
-    canLie: canUseRoomBed(roomLayout, state.loadedScenes.includes('room'))
+    canLie: canUseRoomBed(roomLayout, state.loadedScenes.includes('room'), roomBlanketsReady)
   });
   if (!showsCharacter || previous === sleepState.phase) return;
   if (sleepState.phase === 'windingDown') {
@@ -2182,19 +2197,22 @@ let bedOverlayPeriod = null;
 function applySleepVisibility(periodWeights) {
   if (!showsCharacter) return;
   const visibility = reducedMotion.matches ? (sleepState.phase === 'dimming' || sleepState.phase === 'brightening' ? 0 : 1) : sleepState.visibility;
-  // Driven frame by frame here, so the stylesheet's own fade must not lag behind.
-  canvas.style.transition = visibility >= 0.999 ? '' : 'none';
-  canvas.style.opacity = visibility >= 0.999 ? '' : String(visibility);
   const inBed = sleepState.lying && state.activeScene === 'room';
-  if (!bedOverlay) return;
-  if (inBed) {
+  if (inBed && bedOverlay) {
     const period = ['day', 'dusk', 'night'].reduce((best, key) => (periodWeights[key] ?? 0) > (periodWeights[best] ?? 0) ? key : best, 'day');
     if (period !== bedOverlayPeriod) {
       bedOverlayPeriod = period;
-      bedOverlay.src = `../assets/scenes/room-blanket-${period}.png`;
+      bedOverlay.dataset.ok = 'pending';
+      bedOverlay.style.opacity = '0';
+      bedOverlay.src = ROOM_BLANKET_URLS[period];
     }
   }
-  bedOverlay.style.opacity = inBed && bedOverlay.dataset.ok !== 'false' ? String(visibility) : '0';
+  const coverReady = !inBed || bedOverlay?.dataset.ok === 'true';
+  const displayedVisibility = coverReady ? visibility : 0;
+  // Driven frame by frame here, so the stylesheet's own fade must not lag behind.
+  canvas.style.transition = displayedVisibility >= 0.999 ? '' : 'none';
+  canvas.style.opacity = displayedVisibility >= 0.999 ? '' : String(displayedVisibility);
+  if (bedOverlay) bedOverlay.style.opacity = inBed && coverReady ? String(visibility) : '0';
 }
 
 function updateSleepingModel(elapsed) {
@@ -2215,7 +2233,10 @@ function updateSleepingModel(elapsed) {
     state.standingHeight = Math.max(1, modelBox.max.y - modelBox.min.y);
   }
   model.rotation.set(0, 0, -Math.PI / 2);
-  const height = state.standingHeight;
+  // The bed is further back than where she stands, so she's drawn a little smaller there.
+  const sleepScale = SLEEP_SCALE;
+  model.scale.setScalar(MODEL_SCALE * sleepScale);
+  const height = state.standingHeight * sleepScale;
   model.position.x = screenAnchorToWorld(roomGeometry.bedHeadX) - height * 0.97;
   model.position.y = camera.position.y + CAMERA_HEIGHT * (0.5 - roomGeometry.bedSurfaceY) + height * SLEEP_BODY_HALF;
   model.position.z = 0;
@@ -2232,6 +2253,8 @@ function updateSleepingModel(elapsed) {
     rotateBone(`${side}手首`, 0, 0, s * 0.3);
   }
   rotateBone('上半身', 0.12 + 0.015 * breath, 0, 0);
+  // Legs angled a touch down into the bed, so they stay under the blanket.
+  rotateBone('下半身', 0, 0, SLEEP_HIP_TILT);
   rotateBone('首', 0.08, 0, 0.05);
   rotateBone('頭', 0.06, 0.05, 0.12);
   // Twintails fall onto the bed behind her instead of standing out sideways.
@@ -2260,7 +2283,11 @@ function updateSleepingModel(elapsed) {
 
 // How far her side sticks out below her centre line when lying (fraction of her height),
 // and how far the twintails swing in towards her back. Calibrated against the model.
-const SLEEP_BODY_HALF = 0;
+// Calibrated against room-*.jpg with the blanket layer (room-blanket-*.png) on top.
+const SLEEP_BODY_HALF = 0.03;
+const SLEEP_SCALE = 0.75;
+const SLEEP_HIP_TILT = 0.2;
+const MODEL_SCALE = 0.93;
 const SLEEP_TAIL_SWING = 0.45;
 
 function applyStandingDoze(elapsed) {
@@ -2671,7 +2698,7 @@ async function loadModel() {
     state.model = model;
     state.modelURL = url;
     state.modelName = name;
-    state.model.scale.setScalar(0.93);
+    state.model.scale.setScalar(MODEL_SCALE);
     state.model.position.set(screenAnchorToWorld(POSITION_ANCHORS[0]), 0, 0);
     state.model.castShadow = true;
     state.model.receiveShadow = false;
@@ -3411,6 +3438,7 @@ try {
   roomGeometry = roomViewportGeometry(roomLayout, window.innerWidth, window.innerHeight);
   ambient?.setRoomLayout(roomLayout);
   await prepareScenes();
+  await prepareRoomBlankets();
   if (showsCharacter) {
     fallbackPortrait.src = fallbackPortrait.dataset.src;
     setupRenderer();

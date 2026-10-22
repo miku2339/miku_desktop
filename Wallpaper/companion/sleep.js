@@ -62,13 +62,14 @@ export function createSleepCycle({ windDown = 3.6, fade = 0.7 } = {}) {
         else if (canLie) enter('dimming', time);
         break;
       case 'dimming':
-        if (elapsed >= swap) enter('lying', time);
+        if (!canLie) enter(elapsed >= fade ? 'brightening' : 'dozing', time);
+        else if (elapsed >= swap) enter('lying', time);
         break;
       case 'lying':
-        if (!wantAsleep) enter('brightening', time);
+        if (!wantAsleep || !canLie) enter('brightening', time);
         break;
       case 'brightening':
-        if (elapsed >= swap) enter('awake', time);
+        if (elapsed >= swap) enter(wantAsleep && !canLie ? 'dozing' : 'awake', time);
         break;
       default:
         enter('awake', time);

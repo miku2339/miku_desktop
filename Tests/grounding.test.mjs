@@ -54,3 +54,14 @@ test('invalid or negative carrying height never sinks the model below the floor'
     assert.ok(Math.abs(grounding.status().lowestSoleY + 2) < 1e-6);
   }
 });
+
+test('standing fallback discards the previous bed height without foot samples', () => {
+  const scene = new THREE.Scene();
+  const mesh = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial());
+  scene.add(mesh);
+  const grounding = createGrounding(scene);
+  assert.equal(grounding.attach(mesh), false);
+  mesh.position.y = 6;
+  grounding.update(-2, 0.3, 0);
+  assert.equal(mesh.position.y, 0);
+});

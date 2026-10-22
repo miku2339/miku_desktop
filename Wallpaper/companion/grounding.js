@@ -80,9 +80,10 @@ export function createGrounding(scene) {
   }
 
   function update(groundY, opacity, elevation = 0) {
-    if (!model || !Number.isFinite(groundY) || !feet.some(foot => foot.samples.length > 0)) return;
-    // Sample the soles after the pose, then move the body once; raised feet keep their relative height.
+    if (!model || !Number.isFinite(groundY)) return;
     model.position.y = 0;
+    if (!feet.some(foot => foot.samples.length > 0)) return;
+    // Sample the soles after the pose, then move the body once; raised feet keep their relative height.
     model.updateMatrixWorld(true);
     let floorY = Infinity;
     for (const foot of feet) {

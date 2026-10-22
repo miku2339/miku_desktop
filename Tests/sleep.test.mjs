@@ -52,3 +52,19 @@ test('she waits while you hold her, and only dozes without a bed', () => {
   assert.equal(cycle.step({ time: 9, wantAsleep: true, canLie: false }).lying, false);
   assert.equal(cycle.step({ time: 10, wantAsleep: false }).phase, 'awake');
 });
+
+test('a lost blanket fades her back to a standing doze', () => {
+  const cycle = createSleepCycle({ windDown: 1, fade: 0.5 });
+  cycle.step({ time: 0, wantAsleep: true, canLie: true });
+  cycle.step({ time: 1.1, wantAsleep: true, canLie: true });
+  assert.equal(cycle.step({ time: 2.2, wantAsleep: true, canLie: true }).phase, 'lying');
+
+  let state = cycle.step({ time: 3, wantAsleep: true, canLie: false });
+  assert.equal(state.phase, 'brightening');
+  assert.equal(state.lying, true);
+  state = cycle.step({ time: 3.6, wantAsleep: true, canLie: false });
+  assert.equal(state.lying, false);
+  state = cycle.step({ time: 4.1, wantAsleep: true, canLie: false });
+  assert.equal(state.phase, 'dozing');
+  assert.equal(state.lying, false);
+});

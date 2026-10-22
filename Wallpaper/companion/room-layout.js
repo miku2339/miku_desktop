@@ -108,6 +108,6 @@ export function roomAmbientFeatures(layout) {
   };
 }
 
-export function canUseRoomBed(layout, roomLoaded) {
-  return Boolean(roomLoaded && layout?.sleepReady === true);
+export function canUseRoomBed(layout, roomLoaded, blanketsReady) {
+  return Boolean(roomLoaded && blanketsReady && layout?.sleepReady === true);
 }

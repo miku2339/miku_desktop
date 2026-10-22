@@ -1,6 +1,6 @@
 {
   "scene": "Miku's music room bedroom",
-  "sleepReady": false,
+  "sleepReady": true,
   "files": {
     "day": {
       "file": "room-day.jpg",
@@ -91,5 +91,26 @@
       "registeredMedianPx": 0.669,
       "registeredP95Px": 1.414
     }
+  },
+  "blanket": {
+    "day": {
+      "file": "room-blanket-day.png",
+      "sha256": "99809d9815397468921831941cf0eb6c680e07312707cae2126d20132a18981a"
+    },
+    "dusk": {
+      "file": "room-blanket-dusk.png",
+      "sha256": "f4e3874dc979cddf6447af71a87de7cc424fe145bf9620232b19fd81a4a2d333"
+    },
+    "night": {
+      "file": "room-blanket-night.png",
+      "sha256": "29eeaa150593ae45af11e5a0dd606832c89594a4af14d7be0f7385ba6e979c7e"
+    },
+    "note": "Cut from each room image with one polygon (convex hull of the day image's turquoise blanket); drawn over the character while she sleeps."
+  },
+  "sleepPose": {
+    "scale": 0.75,
+    "bodyHalf": 0.03,
+    "hipTilt": 0.2,
+    "calibrated": "2026-10-22, against room-*.jpg at 16:10"
   }
 }

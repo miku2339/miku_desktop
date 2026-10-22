@@ -27,7 +27,7 @@ const calibrated = {
 test('missing or malformed metadata stays safe and uses room defaults', async () => {
   const missing = await loadRoomLayout('missing.json', async () => { throw new Error('missing'); });
   assert.equal(missing.sleepReady, false);
-  assert.equal(canUseRoomBed(missing, true), false);
+  assert.equal(canUseRoomBed(missing, true, true), false);
   assert.deepEqual(missing.imageSize, [2560, 1600]);
   assert.deepEqual(missing.coordinates.clearForeground, [0.04, 0.7, 0.44, 0.3]);
 
@@ -40,10 +40,11 @@ test('missing or malformed metadata stays safe and uses room defaults', async ()
   assert.deepEqual(malformed.coordinates.windowBounds, [0.06, 0.1, 0.3, 0.36]);
 });
 
-test('sleepReady only enables the bed after the room pictures have loaded', () => {
+test('sleepReady only enables the bed after the room pictures and blankets have loaded', () => {
   const layout = normalizeRoomLayout(calibrated);
-  assert.equal(canUseRoomBed(layout, false), false);
-  assert.equal(canUseRoomBed(layout, true), true);
+  assert.equal(canUseRoomBed(layout, false, true), false);
+  assert.equal(canUseRoomBed(layout, true, false), false);
+  assert.equal(canUseRoomBed(layout, true, true), true);
 });
 
 test('room coordinates drive the bed, clear floor and ambient window', () => {

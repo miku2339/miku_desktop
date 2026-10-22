@@ -25,7 +25,7 @@ export const SCENE_LIGHT = {
   hallway: { indoor: true, day: [1.06, 1.0, 0.9], dusk: [1.08, 0.92, 0.82], night: [0.98, 1.0, 1.04], rim: [1, 0.9, 0.75] },
   musicroom: { indoor: true, day: [1.02, 0.96, 1.05], dusk: [1.06, 0.9, 0.98], night: [0.98, 0.98, 1.06], rim: [1, 0.85, 1] },
   // Her room: daylight from the window, a warm bedside lamp at night.
-  room: { indoor: true, day: [1.03, 1.0, 0.97], dusk: [1.08, 0.94, 0.86], night: [1.06, 0.92, 0.8], rim: [1, 0.86, 0.7] }
+  room: { indoor: true, day: [1.03, 1.0, 0.97], dusk: [1.08, 0.94, 0.86], night: [1.06, 0.9, 0.76], rim: [1, 0.86, 0.7], nightDim: 0.62 }
 };
 
 const DEFAULT_WEATHER = { kind: 'clear', intensity: 0, wind: 0.15, cloud: 0.15 };
@@ -116,6 +116,8 @@ export function characterEnvironment({ hour, periodWeights, sceneWeights, weathe
   const profile = WEATHER_LIGHT[w.kind];
   const sceneEntries = Object.entries(sceneWeights || {}).filter(([, value]) => value > 0);
   let indoorWeight = 0;
+  // Some scenes are much darker at night (her room with only the bedside lamp on).
+  let dim = 0;
   let sceneTint = [0, 0, 0];
   let rimTint = [0, 0, 0];
   let total = 0;
@@ -127,12 +129,15 @@ export function characterEnvironment({ hour, periodWeights, sceneWeights, weathe
     sceneTint = sceneTint.map((c, i) => c + periodTint[i] * value);
     rimTint = rimTint.map((c, i) => c + light.rim[i] * value);
     if (light.indoor) indoorWeight += value;
+    dim += (1 - (1 - (light.nightDim ?? 1)) * periodWeights.night) * value;
     total += value;
   }
   if (total <= 0) {
     sceneTint = [1, 1, 1];
     rimTint = [0.8, 0.9, 1];
+    dim = 1;
   } else {
+    dim /= total;
     sceneTint = sceneTint.map(c => c / total);
     rimTint = rimTint.map(c => c / total);
     indoorWeight /= total;
@@ -156,12 +161,12 @@ export function characterEnvironment({ hour, periodWeights, sceneWeights, weathe
 
   // A rim light from behind is strongest at dusk (low sun) and under neon at night.
   const rimStrength = (periodWeights.dusk * 0.9 + periodWeights.night * 0.55 + periodWeights.day * 0.25)
-    * (1 - weatherAmount * 0.6);
+    * (1 - weatherAmount * 0.6) * dim;
 
   return {
-    keyScale: blend('key'),
-    ambientScale: blend('ambient'),
-    fillScale: blend('fill'),
+    keyScale: blend('key') * dim,
+    ambientScale: blend('ambient') * dim,
+    fillScale: blend('fill') * dim,
     shadowScale: blend('shadow'),
     tint: [0, 1, 2].map(i => sceneTint[i] * weatherTint[i]),
     flash,

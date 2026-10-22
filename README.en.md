@@ -94,6 +94,6 @@ Issues and pull requests are welcome. When reporting a problem, include your mac
 
 This is an unofficial fan project and is not affiliated with Crypton Future Media, Project SEKAI, OTOIRO, or JR East.
 
-The source code is available under the [MIT License](LICENSE). Character assets, MMD models, backgrounds, and third-party libraries remain subject to their respective licenses. Some anime-style backgrounds are restricted to non-commercial use. The Tokyo and school scenes are not original frames from any official music video.
+Original project code is available under the [PolyForm Noncommercial License 1.0.0](LICENSE), which permits noncommercial use, modification, and distribution under its terms. Versions previously released under the MIT License remain subject to their original MIT terms. Character assets, MMD models, backgrounds, and third-party libraries remain subject to their respective original terms. Some anime-style backgrounds are restricted to noncommercial use. The Tokyo and school scenes are not original frames from any official music video.
 
 See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and the [scene asset attribution](Wallpaper/assets/scenes/ATTRIBUTION.md) for detailed sources and terms of use.

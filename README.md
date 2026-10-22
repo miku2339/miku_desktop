@@ -94,6 +94,6 @@ node --test Tests/*.test.mjs
 
 本專案為非官方同人作品，與 Crypton Future Media、Project SEKAI、OTOIRO 或 JR East 無隸屬關係。
 
-程式碼採 [MIT 授權](LICENSE)。角色、MMD 模型、背景與第三方程式庫適用各自授權；部分動漫化背景含非商業使用限制。東京及校園場景並非官方 MV 原始畫格。
+本專案原創程式碼採 [PolyForm Noncommercial 1.0.0 非商業授權](LICENSE)，可依條款作非商業使用、修改與散布。此前以 MIT 授權發布的版本繼續適用原 MIT 授權。角色、MMD 模型、背景與第三方程式庫適用各自原有條款；部分動漫化背景含非商業使用限制。東京及校園場景並非官方 MV 原始畫格。
 
 詳細來源與使用條件見 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 及[場景素材說明](Wallpaper/assets/scenes/ATTRIBUTION.md)。

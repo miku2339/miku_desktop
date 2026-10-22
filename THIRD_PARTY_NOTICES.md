@@ -1,12 +1,14 @@
 # Third-party notices
 
+Project-owned source code is licensed separately under the [PolyForm Noncommercial License 1.0.0](LICENSE). The notices below continue to apply to their respective third-party code and assets.
+
 ## three.js and MMD runtime
 
 Vendored from [three.js r171](https://github.com/mrdoob/three.js/tree/r171), including its MMD loader, shader, parser, TGA loader and OutlineEffect. See `Wallpaper/companion/vendor/THREE-LICENSE.txt` and the individual file headers for attribution and license terms.
 
 ## Hatsune Miku model
 
-Animasa Hatsune Miku v2.3, originally bundled with MikuMikuDance. The model and eye texture are fetched separately from the [three.js r171 Miku example](https://github.com/mrdoob/three.js/tree/r171/examples/models/mmd/miku). See `Wallpaper/assets/companion-model/readme_miku_v2.txt`, `readme.txt` and `ASSET-NOTICE.txt`. These assets are not covered by the three.js or project MIT license.
+Animasa Hatsune Miku v2.3, originally bundled with MikuMikuDance. The model and eye texture are fetched separately from the [three.js r171 Miku example](https://github.com/mrdoob/three.js/tree/r171/examples/models/mmd/miku). See `Wallpaper/assets/companion-model/readme_miku_v2.txt`, `readme.txt` and `ASSET-NOTICE.txt`. These assets are not covered by the three.js MIT license or the project’s PolyForm Noncommercial license.
 
 Hatsune Miku is a character of Crypton Future Media, Inc. Consult [Piapro character licensing](https://piapro.jp/license/character_guideline) for character use. The repository does not include model weights or character model binaries. A local build may contain the separately downloaded character model; the build does not grant redistribution rights.
 

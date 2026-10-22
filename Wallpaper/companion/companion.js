@@ -675,6 +675,13 @@ function holdAnchor(anchor, elapsed, seconds = 12) {
   };
 }
 
+function handLeadingAnchor(anchor) {
+  const target = THREE.MathUtils.clamp(anchor, 0.16, 0.68);
+  if (state.activeScene !== 'room') return target;
+  const [left, , width] = roomGeometry.clearForeground;
+  return THREE.MathUtils.clamp(target, left, left + width);
+}
+
 function startReaction(type, options = {}) {
   if (!INTERACTION_TYPES.has(type)) return false;
   const elapsed = currentElapsed();
@@ -1341,8 +1348,9 @@ function applyWave(progress, elapsed, side = '左', variant = null) {
 
 function applyStretch(progress, variant = null, elapsed = 0) {
   // A proper morning stretch: arms go up, fingers lace together above her head with the
-  // palms turned up, she rises onto her toes and leans back with her eyes shut, holds it
-  // for a moment (trembling a little), then lets her arms drop and relaxes with a sigh.
+  // palms turned up, she leans back with her eyes shut and reaches a little further for a
+  // moment, then lets her arms drop and relaxes with a sigh. Everything here moves slowly:
+  // fast wobbles get amplified by the long twintails and read as twitching.
   const style = variant?.style ?? 'plain';
   const flip = variant?.flip ?? 1;
   const up = smoothstep(THREE.MathUtils.clamp(progress / 0.24, 0, 1));
@@ -1350,7 +1358,8 @@ function applyStretch(progress, variant = null, elapsed = 0) {
   const reach = up * (1 - down);
   const hold = THREE.MathUtils.clamp((progress - 0.2) / 0.1, 0, 1) * (1 - down);
   const settle = down * (1 - THREE.MathUtils.clamp((progress - 0.9) / 0.1, 0, 1));
-  const tremble = Math.sin(elapsed * 23) * 0.012 * hold;
+  // One slow extra reach at the peak of the stretch.
+  const extra = Math.sin(THREE.MathUtils.clamp((progress - 0.28) / 0.36, 0, 1) * Math.PI) * hold;
 
   // Arms: straight up, elbows soft, hands meeting over her head.
   // Calibrated so the hands meet in an arch just above her head.
@@ -1361,7 +1370,7 @@ function applyStretch(progress, variant = null, elapsed = 0) {
   for (const [index, side] of ['左', '右'].entries()) {
     const s = index === 0 ? 1 : -1;
     rotateBone(`${side}肩`, 0, 0, s * 0.18 * reach);
-    rotateBone(`${side}腕`, 0, -s * forward * reach, s * (raise * reach + tremble));
+    rotateBone(`${side}腕`, 0, -s * forward * reach, s * (raise * reach + 0.06 * extra));
     rotateBone(`${side}ひじ`, 0, 0, s * elbow * reach);
     twistBone(`${side}ひじ`, `${side}手首`, s * twist * reach);
     rotateBone(`${side}手首`, 0, 0, s * 0.35 * reach);
@@ -1373,15 +1382,13 @@ function applyStretch(progress, variant = null, elapsed = 0) {
     // Arms dropping afterwards: a loose swing past her sides.
     rotateBone(`${side}腕`, 0, 0, -s * 0.12 * settle);
   }
-  // Body: up on her toes, chest open, leaning back a little; or bending to one side.
-  offsetBone('センター', 0, 0.3 * hold, 0);
-  for (const side of ['左', '右']) rotateBone(`${side}足首`, 0.35 * hold, 0, 0);
+  // Body: chest open, leaning back a little; or bending to one side.
   if (style === 'side') {
     const lean = Math.sin(THREE.MathUtils.clamp((progress - 0.24) / 0.42, 0, 1) * Math.PI) * reach;
     rotateBone('上半身', -0.04 * reach, 0, 0.16 * flip * lean);
     rotateBone('下半身', 0, 0, -0.05 * flip * lean);
   } else {
-    rotateBone('上半身', -0.1 * reach, 0, tremble);
+    rotateBone('上半身', -0.08 * reach - 0.03 * extra, 0, 0);
   }
   rotateBone('首', -0.1 * hold, 0, 0);
   rotateBone('頭', -0.12 * hold, 0, 0);
@@ -1622,6 +1629,50 @@ function applyHandHold(progress, elapsed, side, variant = null) {
   }
 }
 
+const aim = {
+  origin: new THREE.Vector3(),
+  tip: new THREE.Vector3(),
+  target: new THREE.Vector3(),
+  current: new THREE.Vector3(),
+  delta: new THREE.Quaternion(),
+  world: new THREE.Quaternion(),
+  parent: new THREE.Quaternion(),
+  identity: new THREE.Quaternion()
+};
+
+/**
+ * Turns her upper arm so the hand points at a screen position (the cursor holding it).
+ * Works in world space on top of whatever pose is already applied, then hands the result
+ * back to the bone in its parent's frame.
+ */
+function aimArmAt(side, point, weight = 1) {
+  const arm = state.bones.get(`${side}腕`);
+  const wrist = state.bones.get(`${side}手首`);
+  if (!arm || !wrist || !arm.parent || !camera) return;
+  state.model.updateMatrixWorld(true);
+  arm.getWorldPosition(aim.origin);
+  wrist.getWorldPosition(aim.tip);
+  aim.target.set(
+    screenAnchorToWorld(point.x),
+    camera.position.y + CAMERA_HEIGHT * (0.5 - point.y),
+    aim.tip.z
+  ).sub(aim.origin);
+  // Never across her own body: keep the hand on its own side.
+  const outward = side === '右' ? -1 : 1;
+  const facing = Math.cos(state.model.rotation.y) >= 0 ? 1 : -1;
+  const sideways = aim.target.x * outward * facing;
+  if (sideways < 0.6) aim.target.x = 0.6 * outward * facing;
+  // Not straight up over her head either.
+  aim.target.y = Math.min(aim.target.y, Math.abs(aim.target.x) * 1.2);
+  if (aim.target.lengthSq() < 1e-6) return;
+  aim.current.copy(aim.tip).sub(aim.origin).normalize();
+  aim.delta.setFromUnitVectors(aim.current, aim.target.normalize());
+  aim.delta.slerp(aim.identity, 1 - THREE.MathUtils.clamp(weight, 0, 1));
+  arm.getWorldQuaternion(aim.world);
+  arm.parent.getWorldQuaternion(aim.parent);
+  arm.quaternion.copy(aim.parent.invert().multiply(aim.delta.multiply(aim.world)));
+}
+
 function applyPoke(progress, elapsed, side, variant = null) {
   const weight = gestureEnvelope(progress);
   const style = variant?.style ?? 'wink';
@@ -1850,7 +1901,15 @@ function updateModel(elapsed) {
   const handHeld = state.pointer && !state.pointer.dragging && state.pointer.zone === 'hand' && !relationship.offended;
   const pointerReaction = state.pointer?.dragging
     ? { type: 'drag', progress: 0.5, fromAnchor: state.currentAnchor, toAnchor: state.currentAnchor }
-    : handHeld ? { type: 'handHold', side: state.pointer.side, variant: state.pointer.variant, progress: Math.min(1, (elapsed - state.pointer.started) / 0.35) } : null;
+    : handHeld ? {
+      type: 'handHold',
+      side: state.pointer.side,
+      variant: state.pointer.variant,
+      progress: Math.min(1, (elapsed - state.pointer.started) / 0.35),
+      // Pulled along by the hand: she walks to follow your cursor.
+      leading: Boolean(state.pointer.leading),
+      toAnchor: state.anchorHold?.anchor
+    } : null;
   if (handHeld && !carrying && !state.pointer.greeted && elapsed - state.pointer.started >= 0.6) {
     state.pointer.greeted = true;
     showTouchPhrase('handHold');
@@ -1907,7 +1966,9 @@ function updateModel(elapsed) {
     : reaction ? `interactive-${reaction.type}` : behavior.name;
 
   const behaviorName = reaction?.type || behavior.name;
-  const walkingBehavior = behaviorName === 'walk' || behaviorName === 'move';
+  const led = behaviorName === 'handHold' && reaction?.leading && Number.isFinite(reaction.toAnchor)
+    && Math.abs(reaction.toAnchor - state.currentAnchor) > 0.012;
+  const walkingBehavior = behaviorName === 'walk' || behaviorName === 'move' || led;
   const destinationAnchor = behavior.toAnchor ?? POSITION_ANCHORS[behavior.to] ?? anchor;
   const gaitDisabled = reducedMotion.matches || dragging || carrying;
   if (gaitDisabled) walking?.reset();
@@ -1969,6 +2030,9 @@ function updateModel(elapsed) {
   if (behaviorName === 'hello') applyNod(behavior.progress, true, behavior.variant);
 
   if (behaviorName !== 'walk' && behaviorName !== 'move') applySkirtTrail(springs.skirt.x);
+
+  // Holding hands: her arm reaches for your cursor wherever it goes.
+  if (behaviorName === 'handHold' && state.pointer?.point) aimArmAt(behavior.side, state.pointer.point, behavior.progress);
 
   normalizeEyeMorphs();
   applyGrantRotations();
@@ -2940,6 +3004,7 @@ function handlePointerDown(event) {
     cheek,
     zone: result.zone,
     variant: result.zone === 'hand' ? chooseVariant('handHold') : null,
+    point,
     dragging: false
   };
   canvas.setPointerCapture?.(event.pointerId);
@@ -3019,6 +3084,22 @@ function moveGrabbedPointer(pointer, event, elapsed) {
     // Wait until it's clear whether this is a rub (sideways) or a lift (mostly vertical).
     if (distance <= 18) return;
   }
+  if (pointer.zone === 'hand' && !pointer.dragging && !relationship.offended) {
+    // Holding her hand: pulling sideways leads her along, a clear upward pull lifts her.
+    const handPoint = normalizedPointer(event);
+    pointer.point = handPoint;
+    state.lookTarget = { x: handPoint.x, y: handPoint.y, until: elapsed + 0.6 };
+    const dx = event.clientX - pointer.startX;
+    const dy = event.clientY - pointer.startY;
+    const lifting = dy < -40 && Math.abs(dy) > Math.abs(dx) * 1.5;
+    if (!lifting) {
+      if (Math.abs(dx) > 12) pointer.leading = true;
+      if (pointer.leading) {
+        holdAnchor(handLeadingAnchor(pointer.startAnchor + handPoint.x - pointer.startPointX), elapsed, 10);
+      }
+      return;
+    }
+  }
   if (!pointer.dragging && distance <= 7) return;
   const point = normalizedPointer(event);
   if (!pointer.dragging) {
@@ -3049,6 +3130,12 @@ function finishPointer(event = null, { reset = false } = {}) {
   state.pointer = null;
   if (canvas.hasPointerCapture?.(pointer.id)) canvas.releasePointerCapture?.(pointer.id);
   postNative({ type: 'drag', active: false });
+  if (pointer.leading && !pointer.dragging) {
+    // Led somewhere by the hand: she stays where you took her.
+    state.pinnedAnchor = handLeadingAnchor(state.currentAnchor);
+    state.anchorHold = null;
+    postNative({ type: 'pin', x: state.pinnedAnchor });
+  }
   if (pointer.dragging) {
     // Remember where she was dropped.
     const anchor = state.anchorHold?.anchor ?? state.currentAnchor;

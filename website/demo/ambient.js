@@ -6,9 +6,30 @@
 import { lightningFlash, normalizeWeather, sunDirection } from './environment.js';
 import { roomAmbientFeatures } from './room-layout.js';
 import { createTraffic, drawTrainCar, drawVehicle3D, pointOnPath, vehicleLook } from './vehicles.js';
+import { createScramble } from './crowd.js';
+import { drawScramble } from './crowd-draw.js';
 
 const IMAGE_WIDTH = 1586;
 const IMAGE_HEIGHT = 992;
+
+// Shibuya scramble crossing at street level, measured on shibuya-scramble-*.jpg
+// (shibuya-scramble-layout.json): the ground vanishes at (0.476, 0.434); with the eye at
+// 1.25 m and focal 1.2 the kerbs and zebra stripes land where the picture has them, and a
+// 1.6 m person where Miku's feet are is as tall as she is. crowd.js holds the ground plan.
+const SHIBUYA_SCRAMBLE = {
+  size: [2560, 1600],
+  sky: [[0.27, 0, 0.64, 0.05]],
+  scramble: {
+    camera: { horizon: 0.434, vx: 0.476, eye: 1.25, focal: 1.2 },
+    // The two pedestrian lights on the near poles, facing us: the red (standing) and
+    // green (walking) lamps as [x0, y0, x1, y1] in image coordinates.
+    signals: [
+      { red: [0.0426, 0.2405, 0.0614, 0.2685], green: [0.0418, 0.2725, 0.0604, 0.3] },
+      { red: [0.9466, 0.2536, 0.9639, 0.279], green: [0.9479, 0.2836, 0.9654, 0.3095] }
+    ],
+    minLight: 0.55
+  }
+};
 
 const SCENE_FEATURES = {
   // JR Shibuya, Hachikō gates: indoors, with a glimpse of the street beyond the gates.
@@ -671,6 +692,14 @@ export function createAmbient(canvas) {
     s.cars = s.cars.filter(car => now - car.start < car.duration);
     for (const car of s.cars) drawSideCar(car, car.road, env, now);
     if (features.viaduct && features.roads?.length) drawViaductTrains(s, features, env, now, alpha);
+    let crowded = false;
+    if (features.scramble) {
+      s.scramble ??= createScramble();
+      const frame = s.scramble.update(now / 1000);
+      const view = { px, py, size, width, height };
+      drawScramble(context, features.scramble, frame, env, view, Math.max(lightLevel(env), features.scramble.minLight ?? 0), now);
+      crowded = true;
+    }
     if (features.occluders && s.traffic?.cars.length) drawOccluders(features.occluders, env);
     if (features.birds && features.sky && env.periodWeights.night < 0.6 && ['clear', 'cloudy'].includes(env.weather.kind)) {
       if (s.nextBirds === null) s.nextBirds = now + 15000 + random() * 30000;
@@ -692,7 +721,7 @@ export function createAmbient(canvas) {
       }
       if (s.birds && !drawBirds(s.birds, features, env, now)) s.birds = null;
     }
-    const busy = s.trains.length > 0 || s.cars.length > 0 || Boolean(s.birds) || Boolean(s.traffic?.cars.length) || Boolean(s.rail?.trains.length);
+    const busy = crowded || s.trains.length > 0 || s.cars.length > 0 || Boolean(s.birds) || Boolean(s.traffic?.cars.length) || Boolean(s.rail?.trains.length);
     return busy;
   }
 
@@ -883,6 +912,10 @@ export function createAmbient(canvas) {
   return {
     resize,
     update,
+    /** The crossing's pictures are installed: Shibuya becomes the street-level scramble. */
+    useShibuyaScramble() {
+      SCENE_FEATURES.shibuya = SHIBUYA_SCRAMBLE;
+    },
     setRoomLayout(layout) {
       const room = roomAmbientFeatures(layout);
       SCENE_FEATURES.room.size = room.size;

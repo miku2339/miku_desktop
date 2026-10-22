@@ -28,6 +28,14 @@ export const SCENE_LIGHT = {
   room: { indoor: true, day: [1.03, 1.0, 0.97], dusk: [1.08, 0.94, 0.86], night: [1.06, 0.9, 0.76], rim: [1, 0.86, 0.7], nightDim: 0.62 }
 };
 
+// The Shibuya scramble crossing replaces the station gates once its pictures are installed:
+// an outdoor street, cool screens and signs at night.
+const SHIBUYA_SCRAMBLE_LIGHT = { indoor: false, day: [1.02, 1, 1], dusk: [1.06, 0.94, 0.9], night: [0.96, 0.96, 1.08], rim: [0.9, 0.92, 1] };
+
+export function useShibuyaScramble() {
+  SCENE_LIGHT.shibuya = SHIBUYA_SCRAMBLE_LIGHT;
+}
+
 const DEFAULT_WEATHER = { kind: 'clear', intensity: 0, wind: 0.15, cloud: 0.15 };
 
 export function normalizeWeather(input) {

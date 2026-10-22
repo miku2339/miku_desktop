@@ -8,9 +8,6 @@
   html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #0d3149; }
   .layer, canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
   .layer { background: center / cover no-repeat; }
-  /* The station is one picture under fluorescent light; the app tints it the same way. */
-  [data-scene="shibuya"] .dusk { filter: brightness(0.9) sepia(0.15) saturate(1.05); }
-  [data-scene="shibuya"] .night { background-color: rgb(211 228 255); background-blend-mode: multiply; filter: brightness(0.55) saturate(0.8); }
   canvas { pointer-events: none; }
 </style>
 </head>

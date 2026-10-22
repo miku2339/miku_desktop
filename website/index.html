@@ -44,7 +44,7 @@
     <h1><span class="line">Miku 住在</span><span class="line">你的桌面</span></h1>
     <p class="lede">日出、黃昏、深夜，她的房間會隨著你的時鐘變換光線。你可以摸摸頭、牽手、和她聊天；她會記得你說過的事。</p>
     <div class="cta-row">
-      <a class="btn primary" href="https://github.com/miku2339/miku_desktop#建置與啟動">查看建置指引</a>
+      <a class="btn primary" href="https://github.com/miku2339/miku_desktop#安裝與建置">查看建置指引</a>
       <a class="btn ghost repo" id="repo-link" href="https://github.com/miku2339/miku_desktop">
         <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
         GitHub 倉庫
@@ -69,6 +69,7 @@
     <div class="prose">
       <p>她會在桌面上走來走去。滑鼠靠近時，她會看過來；戳戳臉、摸摸頭，她都會有反應。拖曳她時可以把她提起，放手後她會回到地面。</p>
       <p>凌晨一點左右，她會回房、側躺上床並蓋好棉被。你也可以對她說晚安，讓她提早入睡。</p>
+      <p>下雨天她會撐透明雨傘，下午茶時間會端著飲料，有時還會搧扇子、抱著大蔥或揮螢光棒；節日會戴上應景的帽子。你播音樂時，她會扶著耳機跟著節拍擺動。</p>
     </div>
   </div>
 </section>
@@ -77,10 +78,10 @@
   <canvas class="particles" id="street-particles" aria-hidden="true"></canvas>
   <div class="wrap reveal">
     <h2>七個場景，三種時間</h2>
-    <p class="sub">澀谷、池袋、秋葉原、新宿、校園走廊、音樂教室，以及 Miku 的房間。街景會下雨、下雪，也有車輛與 JR 列車經過；若想節省電力，可以關閉動態效果。</p>
+    <p class="sub">澀谷十字路口、池袋、秋葉原、新宿、校園走廊、音樂教室，以及 Miku 的房間。在澀谷，路人會在路口等紅燈，綠燈一亮就從四面八方穿越；街景會下雨、下雪，也有車輛與 JR 列車經過。若想節省電力，可以關閉動態效果。</p>
   </div>
   <div class="strip reveal" tabindex="0" aria-label="場景圖片，可左右捲動">
-    <figure><img src="/assets/shibuya.jpg" alt="澀谷八公口閘口" loading="lazy"><figcaption>澀谷</figcaption></figure>
+    <figure><img src="/assets/shibuya-scramble-dusk.jpg" alt="黃昏的澀谷十字路口" loading="lazy"><figcaption>澀谷十字路口・黃昏</figcaption></figure>
     <figure><img src="/assets/gigo-night.jpg" alt="秋葉原 GiGO 一號館夜景" loading="lazy"><figcaption>秋葉原・夜晚</figcaption></figure>
     <figure><img src="/assets/shinjuku-dusk.jpg" alt="新宿黃昏" loading="lazy"><figcaption>新宿・黃昏</figcaption></figure>
     <figure><img src="/assets/ikebukuro-day.jpg" alt="池袋白天" loading="lazy"><figcaption>池袋・白天</figcaption></figure>
@@ -144,7 +145,8 @@
         <p class="her">辛苦了～要不要讓我哼一首輕快的歌陪你？♪</p>
       </div>
       <ul class="facts">
-        <li><b>三種語言。</b>繁體中文、日本語、English，也支援粵語口語回覆。</li>
+        <li><b>三種語言。</b>繁體中文、日本語、English。中文預設以台灣國語的口吻回覆，想聽粵語可以直接跟她說。</li>
+        <li><b>像她本人。</b>個性開朗直率，一聊到音樂就停不下來；她會哼歌，但不會引用有版權的歌詞。</li>
         <li><b>可以選擇個性。</b>活潑、溫柔、安靜，或者自行撰寫，再設定她如何稱呼你。</li>
         <li><b>長期記憶。</b>她會記住你的喜好與你們之間的關係，也可以逐條刪除她記得的事情。</li>
         <li><b>看得懂圖片。</b>把圖片拖進聊天視窗即可，但本機模型必須支援圖片輸入。</li>
@@ -153,12 +155,24 @@
   </div>
 </section>
 
+<section class="band daily">
+  <div class="wrap two reveal">
+    <h2>她的每一天</h2>
+    <ul class="facts">
+      <li><b>節日與紀念日。</b>她記得自己的生日、Miku Day、聖誕節、新年和夏日祭典，也記得你們第一次見面的日子。魔法未來與 SNOW MIKU 的日期每 3 天從官方網站確認一次。</li>
+      <li><b>手帳與日記。</b>每晚睡前，她會把今天的事寫進日記，你可以在「Miku 的手帳」裡翻閱。</li>
+      <li><b>小遊戲。</b>猜拳、Vocaloid 歌曲問答、跟著節拍打拍子，在聊天裡說一聲就能開始。</li>
+      <li><b>偶爾主動找你。</b>開啟「隨機小事件」後，她會不定時哼歌、問你問題，或找你一起玩。</li>
+    </ul>
+  </div>
+</section>
+
 <section class="band private">
   <div class="wrap two reveal">
     <h2>全部留在你的 Mac</h2>
     <div class="prose">
-      <p>聊天由你電腦上的 AI 模型處理，對話、記憶和圖片都不會上傳。天氣功能只會傳送所選城市的座標。</p>
-      <p>查看你正在使用的 App、正在聽的歌曲、正在看的影片，以及定時理解畫面，這四項主動陪伴功能預設都關閉，必須由你逐項開啟。</p>
+      <p>聊天由你電腦上的 AI 模型處理，對話、記憶和圖片都不會上傳。天氣功能只會傳送所選城市的座標；確認魔法未來與 SNOW MIKU 的日期時，只會讀取官方網站的公開頁面。</p>
+      <p>留意你正在使用的 App、正在聽的歌曲、正在看的影片、定時看看畫面，以及隨機小事件，這五項主動陪伴功能預設全部關閉，必須由你逐項開啟。</p>
     </div>
   </div>
 </section>
@@ -169,7 +183,7 @@
     <ol class="steps">
       <li>
         <h3>下載原始碼並建置</h3>
-        <p>依照 <a href="https://github.com/miku2339/miku_desktop#建置與啟動">GitHub 建置指引</a> clone 倉庫，再執行 <code>./scripts/fetch-model.sh</code> 及 <code>./scripts/build-app.sh</code>。</p>
+        <p>依照 <a href="https://github.com/miku2339/miku_desktop#安裝與建置">GitHub 建置指引</a> clone 倉庫，再執行 <code>./scripts/fetch-model.sh</code> 及 <code>./scripts/build-app.sh</code>。</p>
       </li>
       <li>
         <h3>允許開啟</h3>
@@ -192,7 +206,7 @@
 <footer class="foot">
   <div class="wrap">
     <p><b>非官方同人作品。</b>初音ミク是 Crypton Future Media, INC. 的角色，本專案與 Crypton Future Media、Project SEKAI、OTOIRO 及 JR East 均無隸屬關係，並依照 <a href="https://piapro.jp/license/character_guideline">Piapro 角色使用指引</a>進行非商業使用。</p>
-    <p>本專案原創程式碼採 <a href="https://github.com/miku2339/miku_desktop/blob/main/LICENSE">PolyForm Noncommercial 1.0.0 非商業授權</a>，可依條款作非商業使用、修改與散布。部分背景以 AnimeGANv2 轉換，只限非商業使用。澀谷背景改編自 Mister0124 的 <a href="https://commons.wikimedia.org/wiki/File:JR_Shibuya_Station_Hachiko_Gates.jpg">JR Shibuya Station Hachiko Gates</a>，以 <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a> 發布。秋葉原場景以作者自己拍攝的 GiGO 秋葉原 1 號館相片為參考，用 AI 繪製；畫面中的招牌及廣告屬各自擁有者。其他素材的來源與條件見 <a href="https://github.com/miku2339/miku_desktop/blob/main/THIRD_PARTY_NOTICES.md">THIRD_PARTY_NOTICES</a>。</p>
+    <p>本專案原創程式碼採 <a href="https://github.com/miku2339/miku_desktop/blob/main/LICENSE">PolyForm Noncommercial 1.0.0 非商業授權</a>，可依條款作非商業使用、修改與散布。部分背景以 AnimeGANv2 轉換，只限非商業使用。澀谷十字路口與秋葉原場景以作者自己拍攝的相片為參考，用 AI 繪製；畫面中的招牌及廣告屬各自擁有者。App 內備用的澀谷車站背景改編自 Mister0124 的 <a href="https://commons.wikimedia.org/wiki/File:JR_Shibuya_Station_Hachiko_Gates.jpg">JR Shibuya Station Hachiko Gates</a>，以 <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a> 發布。其他素材的來源與條件見 <a href="https://github.com/miku2339/miku_desktop/blob/main/THIRD_PARTY_NOTICES.md">THIRD_PARTY_NOTICES</a>。</p>
   </div>
 </footer>
 

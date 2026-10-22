@@ -2,25 +2,63 @@
 
 [繁體中文](README.md) · [日本語](README.ja.md) · **English**
 
-A Hatsune Miku desktop companion for macOS, featuring dynamic scenes, an interactive 3D character, and local AI-powered chat and memory.
+Hatsune Miku, living on your macOS desktop. She walks around animated Tokyo street scenes, reacts to your pointer, and chats with you through an AI running on your own Mac, remembering the time you spend together.
+
+**Website**: [miku.qimake.com](https://miku.qimake.com/) (overview and live background demo)
+
+![The Shibuya scramble crossing at dusk](Wallpaper/assets/scenes/shibuya-scramble-dusk.jpg)
 
 ## Features
 
-- **Scenes and lighting**: Shibuya, Ikebukuro, Akihabara, Shinjuku, a school hallway, a music room, and Miku's room. Day, sunset, and night transition gradually with local time, while character lighting follows the scene and weather. Choose a background, enable automatic rotation, and set the rotation interval. Miku's room is excluded from automatic rotation.
-- **Dynamic backgrounds**: Rain, snow, fog, thunderstorms, sunrise, sunset, and indoor lighting. Traffic and JR trains appear in applicable street scenes. Dynamic effects can be disabled to save power.
-- **Character interaction**: Move the pointer near Miku, pat her head, poke her cheek, hold her hand, drag her, pick her up, and let her land. Chat responses can include facial expressions, actions, and lip sync. After dragging her, you can pin her in place or let her walk freely again.
-- **Trilingual chat and personality**: Traditional Chinese, Japanese, and English. Choose a cheerful, gentle, quiet, or custom personality, and set how Miku addresses you. Responses receive the local date and time, along with relevant Hatsune Miku and song information.
-- **Image understanding**: Select, drag, or paste an image into the chat window. This requires a local model that supports image input.
-- **Long-term memory**: Persists conversations, summaries, preferences, interaction history, affection, and relationship status. Individual memories can be deleted. Resetting memory requires two confirmations and keeps a recoverable backup of the previous state.
-- **Sleep schedule and wake-up**: Miku sleeps from 1:00 a.m. to 7:00 a.m. by default. Saying good night lets her rest early, while chatting or interacting can wake her. She switches to her room and lies on her side under the covers when sleeping. If required assets are missing, she dozes while standing instead.
-- **Optional proactive companionship**: Independently enable awareness of active apps and routines, Music/Spotify, YouTube/Niconico video titles, and periodic screen understanding. All four are disabled by default.
-- **Desktop controls**: Separate floating **Chat / Settings** buttons, menu bar controls, pointer passthrough for transparent areas, feedback on compatible Force Touch trackpads, and launch at login. Clicking Miku only triggers character interactions.
+### Living scenes
 
-![Miku's room at night](Wallpaper/assets/scenes/room-night.jpg)
+- **Seven scenes**: the Shibuya scramble crossing, Ikebukuro, Akihabara (GiGO), Shinjuku, a school hallway, a music room, and Miku's room. Pick one yourself or let them rotate at an interval you choose (her room is left out of the rotation).
+- **Time and weather**: Day, dusk, and night follow your local time. Rain, snow, fog, thunderstorms, sunrise, and sunset all show in the scene, and the light on Miku follows the scene and the weather.
+- **Street life**: Traffic and JR trains run through the street scenes. At the Shibuya crossing, people wait at the kerbs, stream across in every direction when the lights change, and the pedestrian signals nearby light up to match. Animations can be turned off to save power.
 
-## Build and run
+### Interacting with her
 
-Requires an Apple silicon Mac, macOS 13 or later, and Xcode Command Line Tools with Swift 5.10 or later. The local AI service and model may have higher system or memory requirements.
+- Move the pointer near her, pat her head, poke her cheek, hold her hand (she follows the pointer), drag her, pick her up, and let her drop back down.
+- After dragging her, you can pin her in place or let her wander freely again.
+- Depending on the scene, weather, season, and events, she carries a clear umbrella, a drink, a leek, a fan, or glowsticks, and wears a hat on holidays. While music plays, she rests a hand on her headset and moves to the beat.
+
+### Chat and memory
+
+- **Three languages**: Traditional Chinese, Japanese, and English. Choose a cheerful, gentle, quiet, or custom personality, and set what she calls you.
+- **Sounds like Miku**: Upbeat and direct, and she lights up when the talk turns to music. She never quotes copyrighted lyrics. Replies come with facial expressions, gestures, and lip sync.
+- **Understands images**: Select, drag, or paste an image into the chat window (requires a local model with image input).
+- **Long-term memory**: Keeps conversations, summaries, preferences, interaction history, affection, and relationship status. Remembered facts can be deleted one at a time. Resetting memory takes two confirmations and keeps one backup you can restore.
+
+### Her daily life
+
+- **Sleep schedule**: By default she sleeps from 1:00 to 7:00 a.m. Say good night to let her turn in early; chatting or interacting wakes her. At bedtime she goes to her room and lies on her side under the covers.
+- **Special days**: She remembers her birthday, Miku Day, Christmas, New Year, summer festivals, and the anniversary of the day you met. Magical Mirai and SNOW MIKU dates are checked on the official sites every three days.
+- **Notebook and diary**: She writes a diary entry before bed every night, which you can read or delete in Miku's Notebook. No diary is written while memory is off.
+- **Mini games**: Rock-paper-scissors, a Vocaloid song quiz, and rhythm tap. Type a game's name in chat or start one from the Mini games menu in the chat window.
+
+### Optional proactive companionship
+
+Each of these can be turned on separately. **All are off by default**, and everything is handled on this Mac only:
+
+| Option | What she does |
+| --- | --- |
+| Apps & breaks | Notices what you're using and for how long, and suggests a break when it's time |
+| Music playing | Reads the song title from Music / Spotify and talks about what you're listening to |
+| YouTube / Niconico | Reads the video title |
+| Glance at the screen | Now and then shows the screen to the local model (never stored; requires macOS 14 or later) |
+| Random little moments | Hums, asks you something, or invites you to play at random times |
+
+### Desktop integration
+
+Separate floating **Chat / Settings** buttons, menu bar controls under **♪**, pointer passthrough on transparent areas, feedback on Force Touch trackpads, and launch at login. Clicking Miku herself only triggers character interactions, never a window.
+
+## Requirements
+
+- An Apple silicon Mac running macOS 13 or later
+- Xcode Command Line Tools with Swift 5.10 or later
+- A separately running local AI service for chat; the service and model may need a newer system or more memory
+
+## Install and build
 
 ```sh
 git clone https://github.com/miku2339/miku_desktop.git
@@ -29,56 +67,72 @@ cd miku_desktop
 ./scripts/build-app.sh
 ```
 
-`fetch-model.sh` downloads the character model and verifies its checksum. Read the terms included with the model before use.
+`fetch-model.sh` downloads the character model and verifies its checksums. Please read the model's terms of use before using it.
 
-Release builds are placed in the `outputs/` directory **one level above the project**:
+The build lands in the `outputs/` folder **one level above the project**:
 
 | File | Purpose |
 | --- | --- |
-| `Miku Desktop.zip` | Unzip it, then move the app to Applications and run it |
+| `Miku Desktop.zip` | Unzip it and move the app into Applications |
 | `Miku Desktop.app` | A shortcut to the latest local build |
 
-After opening the app, use the desktop **Chat / Settings** buttons or the **♪** menu bar item. The app includes a local wallpaper server, so Plash is not required. Scenes and the character work offline; chat requires a separately running local AI service, while weather data requires an internet connection.
+Once it's open, use the **Chat / Settings** buttons on the desktop or **♪** in the menu bar. A local wallpaper server is built in, so Plash isn't needed. Scenes and the character work offline; chat needs the local AI service, and weather needs an internet connection.
 
-### Public package and optional model
+### Shareable build
 
 ```sh
 ./scripts/build-app.sh --public
 ```
 
-The public build creates `../outputs/Miku Desktop (Public).zip` and excludes the optional Tda model and the complete GiGO Akihabara image set. When the GiGO images are unavailable, that Akihabara scene is skipped. Each asset remains subject to its own license.
+This creates `../outputs/Miku Desktop (Public).zip` without the optional Tda model. Every asset remains subject to its own license.
 
-For the classic Tda / 金子卵黄 outfit model, download `Tda式デフォ服ミク_ver1.1.zip` from the [author's distribution page](https://bowlroll.net/file/16344), read the included terms, then import it with Python 3:
+### Optional: Tda classic outfit model
+
+To use the classic outfit model by Tda / 金子卵黄, download `Tda式デフォ服ミク_ver1.1.zip` from the [author's distribution page](https://bowlroll.net/file/16344), read the included terms, then import it with Python 3:
 
 ```sh
 python3 scripts/import-tda-model.py /path/to/Tda式デフォ服ミク_ver1.1.zip
 ./scripts/build-app.sh
 ```
 
-The Animasa model is used when Tda has not been imported. Local packages that include Tda are for personal use only; the model and textures are not distributed with the source code.
+Without it, the Animasa model is used. A build that includes the Tda model is for your own use only; the model and its textures are not distributed with the source code.
 
-## Local AI
+## Setting up the local AI
 
-1. Install and start [oMLX](https://github.com/jundot/omlx), then load a local model.
-2. In **Settings → Local AI**, enter the endpoint and the actual model ID exposed by the service.
-3. Select **Test connection**, then open chat.
+1. Install and start [oMLX](https://github.com/jundot/omlx), and load a local model.
+2. Open **Settings → Local AI** and enter the endpoint and the model ID your service actually provides.
+3. Click **Test connection**; once it succeeds, you can start chatting.
 
-The initial endpoint is `http://127.0.0.1:8000/v1`, and the model name is `Qwen3.5-0.8B-MLX-4bit`. Both can be changed to match your local service. The app does not include language model weights. Small models have limited knowledge and may follow language and personality instructions less reliably.
+The default endpoint is `http://127.0.0.1:8000/v1` with the model `Qwen3.5-0.8B-MLX-4bit`; change them to match your local service. The app doesn't ship a language model. Small models are limited in knowledge, language, and staying in character, so a larger model gives better results.
 
-Only loopback endpoints are accepted. When the settings match oMLX, the app reads the existing API key at runtime and does not write it into the project. Image chat and periodic screen understanding require both the service and the loaded model's converted build to support visual input; text-only models cannot use these features.
+For safety, only loopback (local) endpoints are accepted. When the settings match oMLX, the app reads oMLX's existing API key at run time and never writes it into the project. Image chat and "Glance at the screen" need both the service and the loaded model to support visual input.
 
-## Data and permissions
+## Privacy and network access
 
-- Conversations, memories, and chat images are stored in `~/Library/Application Support/MikuDesktop/`. Preferences such as personality and language are stored in macOS user defaults.
-- Resetting clears conversations, summaries, remembered facts, interaction history, and relationship data while retaining personality and other settings. Restoring replaces any new post-reset memories with the backup created before the reset. You can also permanently delete the backup.
-- Chat content and any enabled observation data are passed to the local AI. Periodic screen captures are not saved; this feature requires macOS 14 or later and Screen Recording permission. Music and video features may require macOS Automation permission.
-- The weather service connects to Open-Meteo to request weather using the selected city's coordinates. Screen awareness and weather are separate features.
+- Conversations, memories, diary entries, and chat images are stored in `~/Library/Application Support/MikuDesktop/`. Preferences such as personality and language are stored in macOS user defaults.
+- Chat messages and any observations you turn on go only to the local AI. Screen captures are never saved and need Screen Recording permission; the music and video options may need macOS Automation permission.
+- Resetting memory clears conversations, summaries, remembered facts, interaction history, and relationship data, but keeps her personality and other settings. You can restore from the backup afterwards or delete it permanently.
+- The app only connects to these sites on its own:
 
-## Development and contributions
+| Connects to | Why | How often |
+| --- | --- | --- |
+| Open-Meteo | Weather for the selected city's coordinates | Periodically |
+| magicalmirai.com, snowmiku.com | Reads public pages to confirm Magical Mirai and SNOW MIKU dates | Every three days, cached locally |
 
-The native Swift interface is in `Sources/MikuDesktop/`. Character, background, and interaction scripts are in `Wallpaper/companion/`, while scene images are in `Wallpaper/assets/scenes/`.
+## Project layout
 
-After changing related features, run the following checks as appropriate. The JavaScript tests require Node.js:
+| Path | Contents |
+| --- | --- |
+| `Sources/MikuDesktop/` | The native Swift app: windows, chat, settings, memory, sleep schedule, special days, mini games |
+| `Wallpaper/companion/` | The character (three.js / MMD), animated backgrounds, crowds and traffic, interactions |
+| `Wallpaper/assets/scenes/` | Scene images and their layout data |
+| `Tests/` | JavaScript and Swift tests |
+| `scripts/` | Build, model download, and test scripts |
+| `website/`, `deploy/website/` | The website's source and deployment settings |
+
+## Development and testing
+
+After making changes, run these checks (the JavaScript tests need Node.js):
 
 ```sh
 node --test Tests/*.test.mjs
@@ -86,11 +140,13 @@ node --test Tests/*.test.mjs
 ./scripts/test-relationship.sh
 ./scripts/test-awareness.sh
 ./scripts/test-sleep-schedule.sh
+./scripts/test-special-days.sh
+./scripts/test-mini-games.sh
 ```
 
-Issues and pull requests are welcome. When reporting a problem, include your macOS version, reproduction steps, and relevant screenshots. Remove private conversations, API keys, and other personal data before sharing logs.
+Issues and pull requests are welcome. When reporting a problem, please include your macOS version, steps to reproduce, and relevant screenshots. Before sharing logs, remove private conversations, API keys, and other personal information.
 
-## Assets and licenses
+## License and assets
 
 This is an unofficial fan project and is not affiliated with Crypton Future Media, Project SEKAI, OTOIRO, or JR East.
 

@@ -762,15 +762,15 @@ actor LocalAI {
         case .traditionalChinese:
             formatter.locale = Locale(identifier: "zh_Hant")
             formatter.dateFormat = "yyyy年M月d日 EEEE HH:mm"
-            return "現在是對方當地時間 \(formatter.string(from: now))（\(TimeZone.current.identifier)）。被問到時間或日期時照此回答；深夜可以關心對方早點休息。"
+            return "現在是對方當地時間 \(formatter.string(from: now))（\(TimeZone.current.identifier)）。被問到時間或日期時照此回答；深夜可以關心對方早點休息。你自己也要睡覺：平常凌晨 1 點到早上 7 點在房間的床上睡；對方叫你去睡或道晚安時，就回一句晚安準備上床，不要說自己不用睡覺。"
         case .english:
             formatter.locale = Locale(identifier: "en_US_POSIX")
             formatter.dateFormat = "EEEE, d MMMM yyyy, HH:mm"
-            return "It is now \(formatter.string(from: now)) in the user's local time (\(TimeZone.current.identifier)). Use this when asked about the time or date; late at night you can gently tell them to get some rest."
+            return "It is now \(formatter.string(from: now)) in the user's local time (\(TimeZone.current.identifier)). Use this when asked about the time or date; late at night you can gently tell them to get some rest. You sleep too: usually from 1 a.m. to 7 a.m., in the bed in your room. When they tell you to go to bed or say good night, say good night back and get ready for bed; never claim you don't need sleep."
         case .japanese:
             formatter.locale = Locale(identifier: "ja_JP")
             formatter.dateFormat = "yyyy年M月d日（EEEE）HH:mm"
-            return "今は相手の現地時間で\(formatter.string(from: now))（\(TimeZone.current.identifier)）です。時間や日付を聞かれたらこれで答え、夜遅ければ早めに休むよう気づかってください。"
+            return "今は相手の現地時間で\(formatter.string(from: now))（\(TimeZone.current.identifier)）です。時間や日付を聞かれたらこれで答え、夜遅ければ早めに休むよう気づかってください。あなた自身も眠ります。ふだんは午前1時から7時まで部屋のベッドで寝ます。寝るように言われたり「おやすみ」と言われたりしたら、おやすみを返して寝る支度をしてください。自分は眠らなくていいとは言わないこと。"
         }
     }
 

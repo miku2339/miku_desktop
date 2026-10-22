@@ -1,5 +1,5 @@
-// Runs the app's own ambience engine (ambient.js, copied unchanged from
-// Wallpaper/companion) over the scene pictures, driven by the controls on the
+// Runs the app's own ambience engine (ambient.js, crowd.js and friends, copied
+// unchanged from Wallpaper/companion) over the scene pictures, driven by the controls on the
 // parent page through postMessage.
 import { createAmbient } from './ambient.js';
 import { timeAnchors } from './environment.js';
@@ -13,7 +13,7 @@ const SCENES = {
   akihabara: ['gigo-day.jpg', 'gigo-dusk.jpg', 'gigo-night.jpg'],
   ikebukuro: ['ikebukuro-day.jpg', 'ikebukuro-dusk.jpg', 'ikebukuro-night.jpg'],
   shinjuku: ['shinjuku-day.jpg', 'shinjuku-dusk.jpg', 'shinjuku-night.jpg'],
-  shibuya: ['shibuya.jpg', 'shibuya.jpg', 'shibuya.jpg'],
+  shibuya: ['shibuya-scramble-day.jpg', 'shibuya-scramble-dusk.jpg', 'shibuya-scramble-night.jpg'],
   hallway: ['hallway-day.jpg', 'hallway-dusk.jpg', 'hallway-night.jpg'],
   musicroom: ['musicroom-day.jpg', 'musicroom-dusk.jpg', 'musicroom-night.jpg']
 };
@@ -30,6 +30,8 @@ const WEATHER = {
 const state = { scene: 'akihabara', weather: 'rain', hour: new Date().getHours() + new Date().getMinutes() / 60, playing: false, paused: false };
 const layers = { day: document.querySelector('.day'), dusk: document.querySelector('.dusk'), night: document.querySelector('.night') };
 const ambient = createAmbient(document.getElementById('ambient'));
+// Shibuya is the street-level scramble crossing, with its crowds and lights.
+ambient.useShibuyaScramble();
 ambient.resize();
 window.addEventListener('resize', () => ambient.resize());
 

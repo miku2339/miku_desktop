@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Usage: scripts/build-app.sh [--public]
-#   --public  Leave out the optional Tda／金子卵黄 model and the GiGO Akihabara scene so the zip can be shared.
+#   --public  Leave out the optional Tda／金子卵黄 model so the zip can be shared.
 #             Without it the build is for local use only and must not be redistributed.
 
 public_build=false
@@ -48,9 +48,6 @@ ditto --norsrc "$wallpaper_source/assets" "$staging_app/Contents/Resources/Wallp
 if [[ "$public_build" == true ]]; then
   rm -rf "$staging_app/Contents/Resources/Wallpaper/assets/companion-model/tda"
   echo "Public build: optional Tda model excluded."
-  # The GiGO Akihabara scene shows real shop signs and adverts; keep it out of shared builds.
-  rm -f "$staging_app/Contents/Resources/Wallpaper/assets/scenes/"gigo-*
-  echo "Public build: GiGO Akihabara scene excluded (the Akihabara scene is skipped)."
 elif [[ -d "$wallpaper_source/assets/companion-model/tda" ]]; then
   echo "Note: this build includes the Tda model. Do not share the zip; use --public for a shareable build." >&2
 fi

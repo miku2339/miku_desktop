@@ -18,6 +18,8 @@ The optional detailed classic-outfit model is **Tda式初音ミク デフォ服v
 
 The Shibuya background is **JR Shibuya Station Hachiko Gates.jpg** by **Mister0124**, obtained from the [original Wikimedia Commons file page](https://commons.wikimedia.org/wiki/File:JR_Shibuya_Station_Hachiko_Gates.jpg) under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). The background at `Wallpaper/assets/scenes/shibuya-hachiko.png` is a semi-anime adaptation produced with image editing, based on the photograph. The station perspective, ticket gates and original sign placement are retained; textures and lighting are stylized. All three time-of-day views use this adapted image, with responsive display cropping and CSS color grading for dusk and night. The photograph and this visual adaptation remain under CC BY-SA 4.0; the project code is licensed separately. Photographed signage remains the property of its respective owners. Attribution is also bundled in `Wallpaper/assets/scenes/ATTRIBUTION.md`.
 
+The GiGO Akihabara scene (`gigo-*.jpg` and its occluder cut-outs) was painted with AI image generation from the project author's own photographs of GiGO Akihabara Building 1, and is included in public builds. Signage and advertising shown in the scene remain the property of their respective owners. See `Wallpaper/assets/scenes/ATTRIBUTION.md`.
+
 The other Tokyo and school backgrounds are generated recreations inspired by real locations and the atmosphere of the official [セカイ music video](https://www.youtube.com/watch?v=9vyIPWBeRes). They are not official music-video frames. Generated fallback character artwork remains subject to the character owner's rights.
 
 ## AI backend and model

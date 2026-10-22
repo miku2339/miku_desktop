@@ -450,7 +450,7 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
         let prompt = text.isEmpty && image != nil ? L10n.text("imagePrompt") : text
         // Talking to her wakes her up; "good morning" gets her up for the day.
         let sleep = SleepSchedule.shared
-        let goodNight = SleepSchedule.isGoodNight(text)
+        let goodNight = SleepSchedule.isBedtimeRequest(text)
         if SleepSchedule.isGoodMorning(text) {
             sleep.goodMorning()
         } else if sleep.isAsleep(), !goodNight {
@@ -478,12 +478,18 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
                 memory.record(messages)
                 memory.didExchange(user: userMessage, reply: assistantMessage, ai: ai)
                 onReply?(reply)
-                // After saying good night back, she goes to bed (once you've read her reply).
-                if goodNight {
+                // After saying good night back, she goes to bed (once you've read her reply);
+                // late at night, her own "good night" means the same.
+                let automaticGoodNight = SleepSchedule.shouldAutomaticallySleep(
+                    after: reply.text,
+                    userText: text
+                )
+                if goodNight || automaticGoodNight {
                     scheduleBedtime(
                         sleep: sleep,
                         sleepRevision: sleepRevision,
-                        conversationGeneration: generation
+                        conversationGeneration: generation,
+                        requiresLateEvening: automaticGoodNight && !goodNight
                     )
                 }
                 if statusDot.color != MikuTheme.online { refreshConnectionStatus() }
@@ -511,13 +517,16 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
     private func scheduleBedtime(
         sleep: SleepSchedule,
         sleepRevision: Int,
-        conversationGeneration generation: Int
+        conversationGeneration generation: Int,
+        requiresLateEvening: Bool
     ) {
         bedtimeScheduler.schedule(
             afterNanoseconds: 6_000_000_000,
             ifStillCurrent: { [weak self] in
                 guard let self else { return false }
-                return generation == conversationGeneration && sleepRevision == sleep.revision
+                return generation == conversationGeneration
+                    && sleepRevision == sleep.revision
+                    && (!requiresLateEvening || SleepSchedule.isLateEvening())
             },
             action: { sleep.goToBed() }
         )

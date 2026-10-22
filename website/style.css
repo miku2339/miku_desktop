@@ -298,6 +298,7 @@ h2 { font-size: clamp(30px, 4vw, 44px); line-height: 1.2; }
 .js .reveal.in .facts li:nth-child(2) { transition-delay: .12s; }
 .js .reveal.in .facts li:nth-child(3) { transition-delay: .24s; }
 .js .reveal.in .facts li:nth-child(4) { transition-delay: .36s; }
+.js .reveal.in .facts li:nth-child(5) { transition-delay: .48s; }
 
 /* Chat: her reply arrives after a typing indicator */
 .js .bubbles .you, .js .bubbles .her { opacity: 0; transform: translateY(10px) scale(.96); transition: opacity .4s ease, transform .4s cubic-bezier(.3,1.4,.5,1); }

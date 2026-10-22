@@ -34,7 +34,7 @@
     <h1><span class="line">ミクが暮らす</span><span class="line">あなたのデスクトップ</span></h1>
     <p class="lede">朝から夕暮れ、そして深夜へ。あなたの時刻に合わせて、ミクの部屋の光が移り変わります。頭をなでたり、手をつないだり、おしゃべりしたり。ミクはあなたとの会話を覚えています。</p>
     <div class="cta-row">
-      <a class="btn primary" href="https://github.com/miku2339/miku_desktop/blob/main/README.ja.md#ビルドと起動">ビルド手順を見る</a>
+      <a class="btn primary" href="https://github.com/miku2339/miku_desktop/blob/main/README.ja.md#インストールとビルド">ビルド手順を見る</a>
       <a class="btn ghost repo" id="repo-link" href="https://github.com/miku2339/miku_desktop">
         <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
         GitHubリポジトリ
@@ -59,6 +59,7 @@
     <div class="prose">
       <p>ミクはデスクトップを気ままに歩き回ります。マウスを近づけるとこちらを見つめ、頬をつついたり頭をなでたりすれば、かわいらしい反応を見せます。ドラッグして持ち上げ、手を離すと地面に着地します。</p>
       <p>午前1時ごろになると部屋へ戻り、ベッドで横向きになって布団をかぶります。「おやすみ」と声をかければ、少し早めに休むこともあります。</p>
+      <p>雨の日は透明なビニール傘をさし、ティータイムには飲み物を手に。ときにはうちわであおいだり、ネギを抱えたり、ペンライトを振ったりします。祝日には季節の帽子をかぶります。音楽を流すと、ヘッドセットに手を添えてリズムに乗ります。</p>
     </div>
   </div>
 </section>
@@ -67,10 +68,10 @@
   <canvas class="particles" id="street-particles" aria-hidden="true"></canvas>
   <div class="wrap reveal">
     <h2>7つのシーン、3つの時間帯</h2>
-    <p class="sub">渋谷、池袋、秋葉原、新宿、学校の廊下、音楽室、ミクの部屋を収録。街には雨や雪が降り、車やJRの列車も走ります。消費電力が気になるときは、動く演出を無効にできます。</p>
+    <p class="sub">渋谷スクランブル交差点、池袋、秋葉原、新宿、学校の廊下、音楽室、ミクの部屋を収録。渋谷では人々が信号待ちをして、青になると四方八方へ渡っていきます。街には雨や雪が降り、車やJRの列車も走ります。消費電力が気になるときは、動く演出を無効にできます。</p>
   </div>
   <div class="strip reveal" tabindex="0" aria-label="左右にスクロールできるシーン画像">
-    <figure><img src="/assets/shibuya.jpg" alt="渋谷駅ハチ公口改札" loading="lazy"><figcaption>渋谷</figcaption></figure>
+    <figure><img src="/assets/shibuya-scramble-dusk.jpg" alt="夕暮れの渋谷スクランブル交差点" loading="lazy"><figcaption>渋谷スクランブル交差点・夕暮れ</figcaption></figure>
     <figure><img src="/assets/gigo-night.jpg" alt="GiGO秋葉原1号館の夜景" loading="lazy"><figcaption>秋葉原・夜</figcaption></figure>
     <figure><img src="/assets/shinjuku-dusk.jpg" alt="夕暮れの新宿" loading="lazy"><figcaption>新宿・夕方</figcaption></figure>
     <figure><img src="/assets/ikebukuro-day.jpg" alt="昼の池袋" loading="lazy"><figcaption>池袋・昼</figcaption></figure>
@@ -134,7 +135,8 @@
         <p class="her">お疲れさま～。元気が出る曲を歌おうか？♪</p>
       </div>
       <ul class="facts">
-        <li><b>3言語に対応。</b>繁體中文、日本語、Englishで会話でき、広東語の話し言葉にも対応します。</li>
+        <li><b>3言語に対応。</b>繁體中文、日本語、Englishで会話できます。中国語は台湾華語の口調が基本で、頼めば広東語でも話します。</li>
+        <li><b>ミクらしい話し方。</b>明るくまっすぐで、音楽の話になると止まりません。鼻歌は歌っても、著作権のある歌詞は引用しません。</li>
         <li><b>性格を選べます。</b>元気、優しい、物静か、または自由に作成し、ミクからの呼び名も設定できます。</li>
         <li><b>長期記憶。</b>あなたの好みや二人の関係を覚えます。覚えている内容は1件ずつ削除できます。</li>
         <li><b>画像を理解。</b>ローカルモデルが画像入力に対応していれば、画像をチャットウインドウへドラッグして送れます。</li>
@@ -143,12 +145,24 @@
   </div>
 </section>
 
+<section class="band daily">
+  <div class="wrap two reveal">
+    <h2>ミクの毎日</h2>
+    <ul class="facts">
+      <li><b>記念日。</b>自分の誕生日、ミクの日、クリスマス、お正月、夏祭り、そしてあなたと初めて会った日を覚えています。マジカルミライとSNOW MIKUの日程は、3日ごとに公式サイトで確認します。</li>
+      <li><b>手帳と日記。</b>毎晩寝る前に、その日のことを日記に書きます。「ミクの手帳」で読み返せます。</li>
+      <li><b>ミニゲーム。</b>じゃんけん、ボカロ曲クイズ、リズムタップ。チャットで声をかければ始まります。</li>
+      <li><b>ときどき、ミクから。</b>「ランダムな小さな出来事」を有効にすると、不定期に鼻歌を歌ったり、質問したり、遊びに誘ったりします。</li>
+    </ul>
+  </div>
+</section>
+
 <section class="band private">
   <div class="wrap two reveal">
     <h2>すべてをあなたのMacに</h2>
     <div class="prose">
-      <p>チャットはMac上のAIモデルで処理され、会話、記憶、画像が外部へ送信されることはありません。天気機能では、選択した都市の座標だけを送信します。</p>
-      <p>使用中のApp、再生中の音楽や動画、定期的な画面の理解による4つの自発的な声かけ機能は、すべて初期設定で無効です。必要なものだけを個別に有効化できます。</p>
+      <p>チャットはMac上のAIモデルで処理され、会話、記憶、画像が外部へ送信されることはありません。天気機能では、選択した都市の座標だけを送信します。マジカルミライとSNOW MIKUの日程の確認では、公式サイトの公開ページを読み込むだけです。</p>
+      <p>使用中のApp、再生中の音楽、視聴中の動画、ときどき画面を見る、ランダムな小さな出来事の5つの自発的な声かけ機能は、すべて初期設定で無効です。必要なものだけを個別に有効化できます。</p>
     </div>
   </div>
 </section>
@@ -159,7 +173,7 @@
     <ol class="steps">
       <li>
         <h3>ソースコードを取得してビルド</h3>
-        <p><a href="https://github.com/miku2339/miku_desktop/blob/main/README.ja.md#ビルドと起動">GitHubのビルド手順</a>に従ってリポジトリをcloneし、<code>./scripts/fetch-model.sh</code>と<code>./scripts/build-app.sh</code>を実行します。</p>
+        <p><a href="https://github.com/miku2339/miku_desktop/blob/main/README.ja.md#インストールとビルド">GitHubのビルド手順</a>に従ってリポジトリをcloneし、<code>./scripts/fetch-model.sh</code>と<code>./scripts/build-app.sh</code>を実行します。</p>
       </li>
       <li>
         <h3>起動を許可</h3>
@@ -182,7 +196,7 @@
 <footer class="foot">
   <div class="wrap">
     <p><b>非公式のファン作品です。</b>初音ミクはクリプトン・フューチャー・メディア株式会社のキャラクターです。本プロジェクトは、クリプトン・フューチャー・メディア、プロジェクトセカイ、OTOIRO、JR東日本とは関係ありません。<a href="https://piapro.jp/license/character_guideline">ピアプロキャラクター利用ガイドライン</a>に基づき、非営利で利用しています。</p>
-    <p>本プロジェクト独自のソースコードは<a href="https://github.com/miku2339/miku_desktop/blob/main/LICENSE">PolyForm Noncommercial License 1.0.0</a>に基づき、非商用での使用・改変・再配布が認められます。一部の背景はAnimeGANv2で変換され、非営利利用に限られます。渋谷の背景はMister0124による<a href="https://commons.wikimedia.org/wiki/File:JR_Shibuya_Station_Hachiko_Gates.jpg">JR Shibuya Station Hachiko Gates</a>をもとに加工し、<a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>で公開しています。秋葉原のシーンは、作者が撮影したGiGO秋葉原1号館の写真を参考にAIで制作しました。画面内の看板や広告の権利は、それぞれの所有者に帰属します。その他の素材の出典と利用条件は<a href="https://github.com/miku2339/miku_desktop/blob/main/THIRD_PARTY_NOTICES.md">THIRD_PARTY_NOTICES</a>をご覧ください。</p>
+    <p>本プロジェクト独自のソースコードは<a href="https://github.com/miku2339/miku_desktop/blob/main/LICENSE">PolyForm Noncommercial License 1.0.0</a>に基づき、非商用での使用・改変・再配布が認められます。一部の背景はAnimeGANv2で変換され、非営利利用に限られます。渋谷スクランブル交差点と秋葉原のシーンは、作者が撮影した写真を参考にAIで制作しました。画面内の看板や広告の権利は、それぞれの所有者に帰属します。アプリ内で予備として使う渋谷駅の背景は、Mister0124による<a href="https://commons.wikimedia.org/wiki/File:JR_Shibuya_Station_Hachiko_Gates.jpg">JR Shibuya Station Hachiko Gates</a>をもとに加工し、<a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>で公開しています。その他の素材の出典と利用条件は<a href="https://github.com/miku2339/miku_desktop/blob/main/THIRD_PARTY_NOTICES.md">THIRD_PARTY_NOTICES</a>をご覧ください。</p>
   </div>
 </footer>
 

@@ -6,7 +6,7 @@ import { createTouchGestures } from './touch-gestures.js';
 import { createShake, shakeAftermath } from './shake.js';
 import { createGestures, GESTURE_PHRASES } from './gestures.js';
 import { createRoutine, createVariety } from './variety.js';
-import { characterEnvironment, defaultWeather, normalizeWeather, timeAnchors } from './environment.js';
+import { characterEnvironment, defaultWeather, normalizeWeather, timeAnchors, useShibuyaScramble } from './environment.js';
 import { createAmbient } from './ambient.js';
 import { createRelationship, RELATIONSHIP_TOUCH_KINDS } from './relationship.js';
 import { canUseRoomBed, DEFAULT_ROOM_LAYOUT, loadRoomLayout, roomViewportGeometry } from './room-layout.js';
@@ -79,10 +79,16 @@ let TIME_ANCHORS = timeAnchors();
 
 const SCENE_CONFIGS = [
   {
+    // The scramble crossing at street level; the station gates until its pictures are installed.
     id: 'shibuya',
-    day: '../assets/scenes/shibuya-hachiko.png',
-    dusk: '../assets/scenes/shibuya-hachiko.png',
-    night: '../assets/scenes/shibuya-hachiko.png'
+    day: '../assets/scenes/shibuya-scramble-day.jpg',
+    dusk: '../assets/scenes/shibuya-scramble-dusk.jpg',
+    night: '../assets/scenes/shibuya-scramble-night.jpg',
+    fallback: {
+      day: '../assets/scenes/shibuya-hachiko.png',
+      dusk: '../assets/scenes/shibuya-hachiko.png',
+      night: '../assets/scenes/shibuya-hachiko.png'
+    }
   },
   {
     id: 'ikebukuro',
@@ -167,6 +173,8 @@ const state = {
   sceneElements: new Map(),
   behavior: 'loading',
   activeScene: 'shibuya',
+  // Scenes showing their old pictures because the new ones aren't installed yet.
+  fallbackScenes: new Set(),
   currentAnchor: POSITION_ANCHORS[0],
   interactive: showsCharacter && !hasNativeBridge(),
   forcedScene: null,
@@ -475,21 +483,44 @@ function createSceneElement(config) {
 async function prepareScenes() {
   for (const config of SCENE_CONFIGS) createSceneElement(config);
 
+  const available = async urls => {
+    await Promise.all(['day', 'dusk', 'night'].map(async period => {
+      const url = urls[period];
+      if (showsBackground) return preload(url);
+      const response = await fetch(url, { method: 'HEAD' });
+      if (!response.ok) throw new Error(`Missing scene asset: ${url}`);
+    }));
+  };
   const results = await Promise.all(SCENE_CONFIGS.map(async config => {
     try {
-      await Promise.all(['day', 'dusk', 'night'].map(async period => {
-        const url = config[period];
-        if (showsBackground) return preload(url);
-        const response = await fetch(url, { method: 'HEAD' });
-        if (!response.ok) throw new Error(`Missing scene asset: ${url}`);
-      }));
+      await available(config);
       return config.id;
     } catch {
+      // A scene being replaced keeps its old pictures until the new ones are installed.
+      if (config.fallback) {
+        try {
+          await available(config.fallback);
+          const element = state.sceneElements.get(config.id);
+          if (element) element.dataset.sceneFallback = 'true';
+          element?.querySelectorAll('.scene-layer').forEach(layer => {
+            const period = ['day', 'dusk', 'night'].find(name => layer.classList.contains(`scene-${name}`));
+            if (period) layer.style.backgroundImage = `url('${config.fallback[period]}')`;
+          });
+          state.fallbackScenes.add(config.id);
+          return config.id;
+        } catch {
+          // Neither: drop the scene.
+        }
+      }
       state.sceneElements.get(config.id)?.remove();
       state.sceneElements.delete(config.id);
       return null;
     }
   }));
+  if (results.includes('shibuya') && !state.fallbackScenes.has('shibuya')) {
+    useShibuyaScramble();
+    ambient?.useShibuyaScramble();
+  }
 
   state.loadedScenes = results.filter(Boolean);
   if (state.loadedScenes.length === 0) state.loadedScenes = ['shibuya'];
@@ -2393,7 +2424,8 @@ function updateHeldProp(elapsed, armsFree) {
   }
   let wanted = chooseHandProp({
     weather: state.weather?.kind,
-    scene: state.activeScene,
+    // The old Shibuya picture is inside the station; the new one is the street.
+    scene: state.activeScene === 'shibuya' && state.fallbackScenes.has('shibuya') ? 'shibuya-station' : state.activeScene,
     hour,
     idle: calm,
     awake,

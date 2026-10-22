@@ -9,9 +9,10 @@ test('umbrella only outdoors in rain or snow', () => {
   assert.equal(chooseHandProp({ weather: 'clear', scene: 'shinjuku' }), null);
 });
 
-test('inside Shibuya station she carries her umbrella closed', () => {
-  assert.equal(chooseHandProp({ weather: 'rain', scene: 'shibuya' }), 'closedUmbrella');
-  assert.equal(chooseHandProp({ weather: 'clear', scene: 'shibuya' }), null);
+test('Shibuya: an open umbrella at the crossing, closed inside the old station picture', () => {
+  assert.equal(chooseHandProp({ weather: 'rain', scene: 'shibuya' }), 'umbrella');
+  assert.equal(chooseHandProp({ weather: 'rain', scene: 'shibuya-station' }), 'closedUmbrella');
+  assert.equal(chooseHandProp({ weather: 'clear', scene: 'shibuya-station' }), null);
   assert.equal(chooseHandProp({ weather: 'rain', scene: 'room' }), null);
 });
 

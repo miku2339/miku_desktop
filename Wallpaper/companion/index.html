@@ -109,11 +109,11 @@
       transition: opacity 1s linear;
     }
 
-    .scene[data-scene="shibuya"] .scene-dusk {
+    .scene[data-scene="shibuya"][data-scene-fallback="true"] .scene-dusk {
       filter: brightness(0.9) sepia(0.15) saturate(1.05);
     }
 
-    .scene[data-scene="shibuya"] .scene-night {
+    .scene[data-scene="shibuya"][data-scene-fallback="true"] .scene-night {
       background-color: rgb(211 228 255);
       background-blend-mode: multiply;
       filter: brightness(0.55) saturate(0.8);

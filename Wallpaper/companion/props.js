@@ -365,10 +365,10 @@ export function hatFor(keys = []) {
   return null;
 }
 
-const OUTDOOR_SCENES = new Set(['ikebukuro', 'akihabara', 'shinjuku']);
+const OUTDOOR_SCENES = new Set(['ikebukuro', 'akihabara', 'shinjuku', 'shibuya']);
 // Indoors but just in from the rain: the Shibuya scene is inside the station's ticket gates,
 // where nobody opens an umbrella; she carries hers closed.
-const JUST_IN_FROM_THE_RAIN = new Set(['shibuya']);
+const JUST_IN_FROM_THE_RAIN = new Set(['shibuya-station']);
 
 /**
  * What she should be holding right now, if anything. Pure, so it can be tested.

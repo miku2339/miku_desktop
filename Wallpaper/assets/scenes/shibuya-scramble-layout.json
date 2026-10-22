@@ -1,0 +1,210 @@
+{
+  "scene": "Shibuya scramble crossing, station-side viewpoint, based on user photographs",
+  "files": {
+    "day": {
+      "file": "shibuya-scramble-day.jpg",
+      "width": 2560,
+      "height": 1600,
+      "bytes": 2060698,
+      "sha256": "6c28850644e1733f0da2de3c31f6fe30e0f5433d4f53a8383a81d0d2ac3afec5"
+    },
+    "dusk": {
+      "file": "shibuya-scramble-dusk.jpg",
+      "width": 2560,
+      "height": 1600,
+      "bytes": 1938029,
+      "sha256": "3ca7225889021160587ff2adf66374d43c2f80ba2e4082cb49415e81136d40df"
+    },
+    "night": {
+      "file": "shibuya-scramble-night.jpg",
+      "width": 2560,
+      "height": 1600,
+      "bytes": 2022380,
+      "sha256": "c29c18ef76afcbcccd9696eb6b86807e86afd8f48c2f9db573ec37416cbe2d26"
+    }
+  },
+  "generation": {
+    "tool": "OpenAI built-in image_gen.imagegen",
+    "source": "User-owned photographs IMG_6817.HEIC and IMG_6818.HEIC; other supplied stills and the short video inspected for context",
+    "nativeSize": [
+      1586,
+      992
+    ],
+    "deliverySize": [
+      2560,
+      1600
+    ],
+    "upscaled": true,
+    "resampling": "Lanczos centered aspect fit; less than one native pixel cropped vertically",
+    "variants": "Daytime repainted from the photographs, then dusk and night edited separately from the final day image, changing lighting only",
+    "registrationWarpApplied": false,
+    "promptSummary": {
+      "day": "Repaint the user photographs as an empty, level street-view Shibuya scramble crossing in a refined semi-anime film style. Preserve the left curved advertising facade, center commercial buildings and right glass multi-screen facade. Abstract illegible screen artwork, no people, vehicles, readable brands or text. Broad clear foreground sidewalk for Miku.",
+      "dusk": "Lighting-only edit of the final day image: orange-pink-lavender sky, warm storefront lights, dry road. Preserve all building, curb, tile, crossing and signal geometry.",
+      "night": "Lighting-only edit of the final day image: indigo sky, lit abstract screens and warm shops, cool ambient road light, dry pavement. Preserve all geometry."
+    }
+  },
+  "coordinates": {
+    "units": "Normalized image coordinates. Approximate visual measurements on the delivered day image; confirm at the app cover crop before integration.",
+    "rectFormat": "x,y,width,height",
+    "vanishingPoint": [
+      0.476,
+      0.434
+    ],
+    "vanishingPointConfidenceRange": {
+      "x": [
+        0.47,
+        0.49
+      ],
+      "y": [
+        0.43,
+        0.44
+      ]
+    },
+    "nearKerbY": 0.77,
+    "nearKerbYRange": [
+      0.76,
+      0.78
+    ],
+    "farKerbY": 0.47,
+    "farKerbYRange": [
+      0.465,
+      0.48
+    ],
+    "farCrosswalkStartYRange": [
+      0.482,
+      0.49
+    ],
+    "roadBand": [
+      0,
+      0.47,
+      1,
+      0.3
+    ],
+    "crosswalkBand": [
+      0,
+      0.482,
+      1,
+      0.278
+    ],
+    "diagonalCrossingCenter": [
+      0.5,
+      0.555
+    ],
+    "clearForeground": [
+      0.15,
+      0.79,
+      0.7,
+      0.21
+    ],
+    "coreCharacterClearance": [
+      0.25,
+      0.8,
+      0.5,
+      0.2
+    ],
+    "suggestedFootY": 0.915,
+    "safeSkyRect": [
+      0.285,
+      0.0,
+      0.22,
+      0.07
+    ],
+    "pedestrianSignals": [
+      {
+        "x": 0.19,
+        "y": 0.405,
+        "size": 0.005,
+        "plane": "far",
+        "confidence": "approximate; small box"
+      },
+      {
+        "x": 0.62,
+        "y": 0.395,
+        "size": 0.005,
+        "plane": "far",
+        "confidence": "approximate; partly overlaps a narrow sign/pole"
+      }
+    ],
+    "foregroundSignalAlternatives": [
+      {
+        "x": 0.045,
+        "y": 0.27,
+        "size": 0.011,
+        "plane": "near"
+      },
+      {
+        "x": 0.957,
+        "y": 0.28,
+        "size": 0.011,
+        "plane": "near"
+      }
+    ],
+    "signalNote": "The foreground boxes are much clearer. Far boxes are small; inspect with the actual app crop and keep overlays proportionately small."
+  },
+  "alignment": {
+    "dusk": {
+      "matches": 1729,
+      "inliers": 1611,
+      "directMedianPx": 0.544,
+      "directP95Px": 1.53,
+      "homographyGridMaxDisplacementPx": 0.698
+    },
+    "night": {
+      "matches": 1057,
+      "inliers": 986,
+      "directMedianPx": 0.749,
+      "directP95Px": 1.653,
+      "homographyGridMaxDisplacementPx": 1.51
+    }
+  },
+  "suggestedRuntime": {
+    "size": [
+      2560,
+      1600
+    ],
+    "sky": [
+      [
+        0.285,
+        0.0,
+        0.22,
+        0.07
+      ]
+    ],
+    "scramble": {
+      "camera": {
+        "horizon": 0.434,
+        "vx": 0.476,
+        "eye": 1.25,
+        "focal": 1.2
+      },
+      "signals": [
+        {
+          "x": 0.19,
+          "y": 0.405,
+          "size": 0.005
+        },
+        {
+          "x": 0.62,
+          "y": 0.395,
+          "size": 0.005
+        }
+      ],
+      "minLight": 0.55
+    },
+    "groundProjectionMeters": {
+      "nearKerb": 4.464,
+      "farKerb": 41.667
+    },
+    "note": "Suggested calibration only. Current renderer does not load this JSON. Map camera and signals into ambient.js and ground positions into crowd.js, then inspect crossing trajectories. The kerbs differ from the original handoff estimates."
+  },
+  "validation": {
+    "dimensionsAndRGB": true,
+    "emptyCentralForeground": true,
+    "noPeopleOrVehiclesVisible": true,
+    "noReadableBrandsOrTextVisible": true,
+    "siftP95Under2Pixels": true,
+    "homographyGridMaxUnder2Pixels": true
+  },
+  "integrationStatus": "Assets delivered; renderer and crowd path calibration pending Claude integration. No app build performed."
+}

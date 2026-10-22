@@ -223,6 +223,21 @@ function pickType(random) {
   return 'sedan';
 }
 
+/** One vehicle (type, size, paint) for scenes that move their own cars, like the Shibuya crossing. */
+export function makeVehicle(random = Math.random) {
+  const type = pickType(random);
+  const spec = VEHICLE_TYPES[type];
+  const liveries = LIVERIES[type];
+  const colors = COLORS[type] ?? ['#f4f5f7'];
+  const paint = liveries
+    ? (() => {
+      const livery = liveries[Math.floor(random() * liveries.length)];
+      return { color: livery.body, livery };
+    })()
+    : { color: colors[Math.floor(random() * colors.length)] };
+  return { type, typeWidth: spec.width, ...paint, seed: random() * 1000 };
+}
+
 /** Traffic on one road: spawning, following distance and cornering speed. */
 export function createTraffic(road, random = Math.random) {
   const paths = buildPaths(road);

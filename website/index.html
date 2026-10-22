@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Miku Desktop</title>
+<meta name="description" content="住在你 Mac 桌面上的初音未來：場景會隨著你的時間變化，聊天與記憶全部在本機運作。非官方同人作品。">
+<link rel="icon" href="/assets/icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;800&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body data-time="day">
+
+<header class="hero">
+  <div class="scene" aria-hidden="true">
+    <img class="scene-img" data-for="day" src="/assets/room-day.jpg" alt="">
+    <img class="scene-img" data-for="dusk" src="/assets/room-dusk.jpg" alt="">
+    <img class="scene-img" data-for="night" src="/assets/room-night.jpg" alt="">
+  </div>
+  <div class="miku-wrap" id="miku-wrap">
+    <img class="hero-miku" src="/assets/miku.png" alt="站在房間裡的初音未來">
+  </div>
+  <canvas class="particles" id="hero-particles" aria-hidden="true"></canvas>
+
+  <nav class="topbar">
+    <a class="brand" href="#"><img src="/assets/icon.png" alt="" width="32" height="32">Miku Desktop</a>
+    <div class="toplinks">
+      <label class="language-picker">
+        <span class="sr-only">網站語言</span>
+        <select id="site-language" aria-label="網站語言">
+          <option value="/">繁體中文</option>
+          <option value="/en/">English</option>
+          <option value="/ja/">日本語</option>
+        </select>
+      </label>
+      <a class="toplink" href="https://github.com/miku2339/miku_desktop">GitHub</a>
+    </div>
+  </nav>
+
+  <div class="hero-copy">
+    <p class="clock" id="clock">現在是你所在地的白天</p>
+    <h1><span class="line">Miku 住在</span><span class="line">你的桌面</span></h1>
+    <p class="lede">日出、黃昏、深夜，她的房間會隨著你的時鐘變換光線。你可以摸摸頭、牽手、和她聊天；她會記得你說過的事。</p>
+    <div class="cta-row">
+      <a class="btn primary" href="https://github.com/miku2339/miku_desktop#建置與啟動">查看建置指引</a>
+      <a class="btn ghost repo" id="repo-link" href="https://github.com/miku2339/miku_desktop">
+        <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        GitHub 倉庫
+      </a>
+      <a class="btn ghost" href="#install">查看安裝步驟</a>
+    </div>
+    <p class="req">免費 · 需要 Apple silicon Mac 及 macOS 13 或以上</p>
+  </div>
+
+  <div class="dial" role="group" aria-label="切換場景時間">
+    <button type="button" data-set="day" aria-pressed="true">白天</button>
+    <button type="button" data-set="dusk" aria-pressed="false">黃昏</button>
+    <button type="button" data-set="night" aria-pressed="false">夜晚</button>
+  </div>
+</header>
+
+<main>
+
+<section class="band">
+  <div class="wrap two reveal">
+    <h2>不只是一張桌布</h2>
+    <div class="prose">
+      <p>她會在桌面上走來走去。滑鼠靠近時，她會看過來；戳戳臉、摸摸頭，她都會有反應。拖曳她時可以把她提起，放手後她會回到地面。</p>
+      <p>凌晨一點左右，她會回房、側躺上床並蓋好棉被。你也可以對她說晚安，讓她提早入睡。</p>
+    </div>
+  </div>
+</section>
+
+<section class="streets">
+  <canvas class="particles" id="street-particles" aria-hidden="true"></canvas>
+  <div class="wrap reveal">
+    <h2>七個場景，三種時間</h2>
+    <p class="sub">澀谷、池袋、秋葉原、新宿、校園走廊、音樂教室，以及 Miku 的房間。街景會下雨、下雪，也有車輛與 JR 列車經過；若想節省電力，可以關閉動態效果。</p>
+  </div>
+  <div class="strip reveal" tabindex="0" aria-label="場景圖片，可左右捲動">
+    <figure><img src="/assets/shibuya.jpg" alt="澀谷八公口閘口" loading="lazy"><figcaption>澀谷</figcaption></figure>
+    <figure><img src="/assets/gigo-night.jpg" alt="秋葉原 GiGO 一號館夜景" loading="lazy"><figcaption>秋葉原・夜晚</figcaption></figure>
+    <figure><img src="/assets/shinjuku-dusk.jpg" alt="新宿黃昏" loading="lazy"><figcaption>新宿・黃昏</figcaption></figure>
+    <figure><img src="/assets/ikebukuro-day.jpg" alt="池袋白天" loading="lazy"><figcaption>池袋・白天</figcaption></figure>
+    <figure><img src="/assets/hallway-dusk.jpg" alt="黃昏的校園走廊" loading="lazy"><figcaption>校園走廊・黃昏</figcaption></figure>
+    <figure><img src="/assets/musicroom-day.jpg" alt="音樂教室" loading="lazy"><figcaption>音樂教室・白天</figcaption></figure>
+  </div>
+</section>
+
+<section class="live" id="live">
+  <div class="wrap reveal">
+    <h2>親手試試動態背景</h2>
+    <p class="sub">下面就是 App 內的背景引擎，直接在瀏覽器中執行。選擇場景和天氣，再拖曳時間軸，看看光線如何從日出變到深夜。</p>
+  </div>
+  <div class="wrap live-body">
+    <div class="live-frame">
+      <iframe id="live-demo" src="/demo/index.html" title="動態背景示範" loading="lazy"></iframe>
+    </div>
+    <div class="live-controls">
+      <fieldset>
+        <legend>場景</legend>
+        <div class="chips" data-key="scene">
+          <button type="button" data-value="room" aria-pressed="false">Miku 的房間</button>
+          <button type="button" data-value="akihabara" aria-pressed="true">秋葉原</button>
+          <button type="button" data-value="ikebukuro" aria-pressed="false">池袋</button>
+          <button type="button" data-value="shinjuku" aria-pressed="false">新宿</button>
+          <button type="button" data-value="shibuya" aria-pressed="false">澀谷</button>
+          <button type="button" data-value="hallway" aria-pressed="false">校園走廊</button>
+          <button type="button" data-value="musicroom" aria-pressed="false">音樂教室</button>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>天氣</legend>
+        <div class="chips" data-key="weather">
+          <button type="button" data-value="clear" aria-pressed="false">晴天</button>
+          <button type="button" data-value="cloudy" aria-pressed="false">多雲</button>
+          <button type="button" data-value="fog" aria-pressed="false">霧</button>
+          <button type="button" data-value="rain" aria-pressed="true">下雨</button>
+          <button type="button" data-value="storm" aria-pressed="false">雷雨</button>
+          <button type="button" data-value="snow" aria-pressed="false">下雪</button>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>時間</legend>
+        <div class="time-row">
+          <button type="button" class="play" id="live-play" aria-pressed="false">播放一天</button>
+          <input type="range" id="live-hour" min="0" max="23.99" step="0.05" value="12" aria-label="時間">
+          <output id="live-clock" for="live-hour">12:00</output>
+        </div>
+      </fieldset>
+    </div>
+  </div>
+</section>
+
+<section class="band chat">
+  <div class="wrap two reveal">
+    <h2>聊天，而且記得你</h2>
+    <div>
+      <div class="bubbles" aria-label="對話例子">
+        <p class="you">今天好累</p>
+        <p class="typing" aria-hidden="true"><span></span><span></span><span></span></p>
+        <p class="her">辛苦了～要不要讓我哼一首輕快的歌陪你？♪</p>
+      </div>
+      <ul class="facts">
+        <li><b>三種語言。</b>繁體中文、日本語、English，也支援粵語口語回覆。</li>
+        <li><b>可以選擇個性。</b>活潑、溫柔、安靜，或者自行撰寫，再設定她如何稱呼你。</li>
+        <li><b>長期記憶。</b>她會記住你的喜好與你們之間的關係，也可以逐條刪除她記得的事情。</li>
+        <li><b>看得懂圖片。</b>把圖片拖進聊天視窗即可，但本機模型必須支援圖片輸入。</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="band private">
+  <div class="wrap two reveal">
+    <h2>全部留在你的 Mac</h2>
+    <div class="prose">
+      <p>聊天由你電腦上的 AI 模型處理，對話、記憶和圖片都不會上傳。天氣功能只會傳送所選城市的座標。</p>
+      <p>查看你正在使用的 App、正在聽的歌曲、正在看的影片，以及定時理解畫面，這四項主動陪伴功能預設都關閉，必須由你逐項開啟。</p>
+    </div>
+  </div>
+</section>
+
+<section class="band install" id="install">
+  <div class="wrap two reveal">
+    <h2>安裝</h2>
+    <ol class="steps">
+      <li>
+        <h3>下載原始碼並建置</h3>
+        <p>依照 <a href="https://github.com/miku2339/miku_desktop#建置與啟動">GitHub 建置指引</a> clone 倉庫，再執行 <code>./scripts/fetch-model.sh</code> 及 <code>./scripts/build-app.sh</code>。</p>
+      </li>
+      <li>
+        <h3>允許開啟</h3>
+        <p>第一次開啟時 macOS 可能會阻擋。前往「系統設定 → 隱私權與安全性」，按「仍要打開」。</p>
+      </li>
+      <li>
+        <h3>準備本機 AI</h3>
+        <p>安裝並啟動 <a href="https://github.com/jundot/omlx">oMLX</a>，載入一個模型。預設是 Qwen3.5-0.8B；如果記憶體足夠，較大的模型會有更好的對話表現。</p>
+      </li>
+      <li>
+        <h3>連線，開始聊天</h3>
+        <p>按一下選單列的 ♪，進入「設定 → 本機 AI」，再按「測試連線」。場景和角色不需要 AI 也能使用。</p>
+      </li>
+    </ol>
+  </div>
+</section>
+
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p><b>非官方同人作品。</b>初音ミク是 Crypton Future Media, INC. 的角色，本專案與 Crypton Future Media、Project SEKAI、OTOIRO 及 JR East 均無隸屬關係，並依照 <a href="https://piapro.jp/license/character_guideline">Piapro 角色使用指引</a>進行非商業使用。</p>
+    <p>程式碼採 MIT 授權。部分背景以 AnimeGANv2 轉換，只限非商業使用。澀谷背景改編自 Mister0124 的 <a href="https://commons.wikimedia.org/wiki/File:JR_Shibuya_Station_Hachiko_Gates.jpg">JR Shibuya Station Hachiko Gates</a>，以 <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a> 發布。秋葉原場景以作者自己拍攝的 GiGO 秋葉原 1 號館相片為參考，用 AI 繪製；畫面中的招牌及廣告屬各自擁有者。其他素材的來源與條件見 <a href="https://github.com/miku2339/miku_desktop/blob/main/THIRD_PARTY_NOTICES.md">THIRD_PARTY_NOTICES</a>。</p>
+  </div>
+</footer>
+
+<script src="/script.js"></script>
+</body>
+</html>

@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Miku Desktop 動態背景</title>
+<style>
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #0d3149; }
+  .layer, canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .layer { background: center / cover no-repeat; }
+  /* The station is one picture under fluorescent light; the app tints it the same way. */
+  [data-scene="shibuya"] .dusk { filter: brightness(0.9) sepia(0.15) saturate(1.05); }
+  [data-scene="shibuya"] .night { background-color: rgb(211 228 255); background-blend-mode: multiply; filter: brightness(0.55) saturate(0.8); }
+  canvas { pointer-events: none; }
+</style>
+</head>
+<body data-scene="room">
+  <div class="layer day"></div>
+  <div class="layer dusk"></div>
+  <div class="layer night"></div>
+  <canvas id="ambient"></canvas>
+  <script type="module" src="demo.js"></script>
+</body>
+</html>

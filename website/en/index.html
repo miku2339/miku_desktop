@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Miku Desktop</title>
+<meta name="description" content="Hatsune Miku on your Mac desktop: scenes change with your local time, while chat and memory run entirely on your device. An unofficial fan project.">
+<link rel="icon" href="/assets/icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;800&amp;family=Noto+Sans+TC:wght@400;500;700&amp;display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body data-time="day">
+
+<header class="hero">
+  <div class="scene" aria-hidden="true">
+    <img class="scene-img" data-for="day" src="/assets/room-day.jpg" alt="">
+    <img class="scene-img" data-for="dusk" src="/assets/room-dusk.jpg" alt="">
+    <img class="scene-img" data-for="night" src="/assets/room-night.jpg" alt="">
+  </div>
+  <div class="miku-wrap" id="miku-wrap">
+    <img class="hero-miku" src="/assets/miku.png" alt="Hatsune Miku standing in her room">
+  </div>
+  <canvas class="particles" id="hero-particles" aria-hidden="true"></canvas>
+
+  <nav class="topbar">
+    <a class="brand" href="#"><img src="/assets/icon.png" alt="" width="32" height="32">Miku Desktop</a>
+    <div class="toplinks">
+      <label class="language-picker">
+        <span class="sr-only">Website language</span>
+        <select id="site-language" aria-label="Website language">
+          <option value="/">繁體中文</option>
+          <option value="/en/" selected>English</option>
+          <option value="/ja/">日本語</option>
+        </select>
+      </label>
+      <a class="toplink" href="https://github.com/miku2339/miku_desktop">GitHub</a>
+    </div>
+  </nav>
+
+  <div class="hero-copy">
+    <p class="clock" id="clock">It's daytime where you are</p>
+    <h1><span class="line">Miku lives</span><span class="line">on your desktop</span></h1>
+    <p class="lede">From sunrise through dusk to late at night, the light in her room follows your clock. Pat her head, hold her hand, or talk with her; she'll remember what you tell her.</p>
+    <div class="cta-row">
+      <a class="btn primary" href="https://github.com/miku2339/miku_desktop/blob/main/README.en.md#build-and-run">View build instructions</a>
+      <a class="btn ghost repo" id="repo-link" href="https://github.com/miku2339/miku_desktop">
+        <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        GitHub repository
+      </a>
+      <a class="btn ghost" href="#install">View installation steps</a>
+    </div>
+    <p class="req">Free · Requires an Apple silicon Mac with macOS 13 or later</p>
+  </div>
+
+  <div class="dial" role="group" aria-label="Change the scene time">
+    <button type="button" data-set="day" aria-pressed="true">Day</button>
+    <button type="button" data-set="dusk" aria-pressed="false">Dusk</button>
+    <button type="button" data-set="night" aria-pressed="false">Night</button>
+  </div>
+</header>
+
+<main>
+
+<section class="band">
+  <div class="wrap two reveal">
+    <h2>More than a wallpaper</h2>
+    <div class="prose">
+      <p>She walks around your desktop on her own. Move the pointer close and she'll look your way; poke her cheek or pat her head and she'll respond. Pick her up by dragging her, then let go and she'll land back on the ground.</p>
+      <p>At around 1:00 a.m., she returns to her room, lies on her side in bed, and tucks herself under the covers. Say good night and she can go to sleep earlier.</p>
+    </div>
+  </div>
+</section>
+
+<section class="streets">
+  <canvas class="particles" id="street-particles" aria-hidden="true"></canvas>
+  <div class="wrap reveal">
+    <h2>Seven scenes, three times of day</h2>
+    <p class="sub">Shibuya, Ikebukuro, Akihabara, Shinjuku, a school hallway, a music room, and Miku's room. Rain and snow fall over the streets as cars and JR trains pass by; turn off dynamic effects whenever you want to save power.</p>
+  </div>
+  <div class="strip reveal" tabindex="0" aria-label="Scrollable scene gallery">
+    <figure><img src="/assets/shibuya.jpg" alt="Hachiko ticket gates at Shibuya Station" loading="lazy"><figcaption>Shibuya</figcaption></figure>
+    <figure><img src="/assets/gigo-night.jpg" alt="GiGO Akihabara Building 1 at night" loading="lazy"><figcaption>Akihabara · Night</figcaption></figure>
+    <figure><img src="/assets/shinjuku-dusk.jpg" alt="Shinjuku at dusk" loading="lazy"><figcaption>Shinjuku · Dusk</figcaption></figure>
+    <figure><img src="/assets/ikebukuro-day.jpg" alt="Ikebukuro during the day" loading="lazy"><figcaption>Ikebukuro · Day</figcaption></figure>
+    <figure><img src="/assets/hallway-dusk.jpg" alt="School hallway at dusk" loading="lazy"><figcaption>School hallway · Dusk</figcaption></figure>
+    <figure><img src="/assets/musicroom-day.jpg" alt="Music room" loading="lazy"><figcaption>Music room · Day</figcaption></figure>
+  </div>
+</section>
+
+<section class="live" id="live">
+  <div class="wrap reveal">
+    <h2>Try the dynamic background</h2>
+    <p class="sub">This is the background engine from the app, running directly in your browser. Choose a scene and weather, then move through the hours to see the light shift from sunrise to late at night.</p>
+  </div>
+  <div class="wrap live-body">
+    <div class="live-frame">
+      <iframe id="live-demo" src="/demo/index.html" title="Dynamic background demo" loading="lazy"></iframe>
+    </div>
+    <div class="live-controls">
+      <fieldset>
+        <legend>Scene</legend>
+        <div class="chips" data-key="scene">
+          <button type="button" data-value="room" aria-pressed="false">Miku's room</button>
+          <button type="button" data-value="akihabara" aria-pressed="true">Akihabara</button>
+          <button type="button" data-value="ikebukuro" aria-pressed="false">Ikebukuro</button>
+          <button type="button" data-value="shinjuku" aria-pressed="false">Shinjuku</button>
+          <button type="button" data-value="shibuya" aria-pressed="false">Shibuya</button>
+          <button type="button" data-value="hallway" aria-pressed="false">School hallway</button>
+          <button type="button" data-value="musicroom" aria-pressed="false">Music room</button>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>Weather</legend>
+        <div class="chips" data-key="weather">
+          <button type="button" data-value="clear" aria-pressed="false">Clear</button>
+          <button type="button" data-value="cloudy" aria-pressed="false">Cloudy</button>
+          <button type="button" data-value="fog" aria-pressed="false">Fog</button>
+          <button type="button" data-value="rain" aria-pressed="true">Rain</button>
+          <button type="button" data-value="storm" aria-pressed="false">Thunderstorm</button>
+          <button type="button" data-value="snow" aria-pressed="false">Snow</button>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>Time</legend>
+        <div class="time-row">
+          <button type="button" class="play" id="live-play" aria-pressed="false">Play a full day</button>
+          <input type="range" id="live-hour" min="0" max="23.99" step="0.05" value="12" aria-label="Time">
+          <output id="live-clock" for="live-hour">12:00</output>
+        </div>
+      </fieldset>
+    </div>
+  </div>
+</section>
+
+<section class="band chat">
+  <div class="wrap two reveal">
+    <h2>Talk with her, and she'll remember</h2>
+    <div>
+      <div class="bubbles" aria-label="Example conversation">
+        <p class="you">I'm so tired today.</p>
+        <p class="typing" aria-hidden="true"><span></span><span></span><span></span></p>
+        <p class="her">You've worked hard today. Shall I hum something cheerful for you? ♪</p>
+      </div>
+      <ul class="facts">
+        <li><b>Three languages.</b>Traditional Chinese, Japanese, and English, including conversational Cantonese replies.</li>
+        <li><b>Your choice of personality.</b>Cheerful, gentle, quiet, or one you write yourself, plus the name she uses for you.</li>
+        <li><b>Long-term memory.</b>She remembers your preferences and the relationship you've built together. You can delete individual memories at any time.</li>
+        <li><b>Image understanding.</b>Drag an image into the chat window when your local model supports image input.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="band private">
+  <div class="wrap two reveal">
+    <h2>Everything stays on your Mac</h2>
+    <div class="prose">
+      <p>Your own computer's AI model handles each chat, so conversations, memories, and images are never uploaded. The weather feature sends only the coordinates of the city you select.</p>
+      <p>Awareness of the apps you use, the music you play, the videos you watch, and periodic screen understanding are four separate proactive companionship features. All are off by default and must be enabled individually.</p>
+    </div>
+  </div>
+</section>
+
+<section class="band install" id="install">
+  <div class="wrap two reveal">
+    <h2>Installation</h2>
+    <ol class="steps">
+      <li>
+        <h3>Download the source and build</h3>
+        <p>Follow the <a href="https://github.com/miku2339/miku_desktop/blob/main/README.en.md#build-and-run">GitHub build instructions</a> to clone the repository, then run <code>./scripts/fetch-model.sh</code> and <code>./scripts/build-app.sh</code>.</p>
+      </li>
+      <li>
+        <h3>Allow the app to open</h3>
+        <p>macOS may block the app the first time you open it. Go to “System Settings → Privacy &amp; Security” and select “Open Anyway.”</p>
+      </li>
+      <li>
+        <h3>Prepare your local AI</h3>
+        <p>Install and start <a href="https://github.com/jundot/omlx">oMLX</a>, then load a model. The default is Qwen3.5-0.8B; a larger model will give better responses if your Mac has enough memory.</p>
+      </li>
+      <li>
+        <h3>Connect and start chatting</h3>
+        <p>Select ♪ in the menu bar, go to “Settings → Local AI,” then choose “Test connection.” Scenes and character interactions work without AI.</p>
+      </li>
+    </ol>
+  </div>
+</section>
+
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p><b>An unofficial fan project.</b>Hatsune Miku is a character of Crypton Future Media, INC. This project is not affiliated with Crypton Future Media, Project SEKAI, OTOIRO, or JR East, and is used non-commercially under the <a href="https://piapro.jp/license/character_guideline">Piapro Character License</a>.</p>
+    <p>The source code is licensed under the MIT License. Some backgrounds were converted with AnimeGANv2 and are restricted to non-commercial use. The Shibuya background is adapted from Mister0124's <a href="https://commons.wikimedia.org/wiki/File:JR_Shibuya_Station_Hachiko_Gates.jpg">JR Shibuya Station Hachiko Gates</a> under <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>. The Akihabara scene was AI-rendered from the author's own photograph of GiGO Akihabara Building 1; signs and advertisements shown remain the property of their respective owners. See <a href="https://github.com/miku2339/miku_desktop/blob/main/THIRD_PARTY_NOTICES.md">THIRD_PARTY_NOTICES</a> for the sources and terms of other assets.</p>
+  </div>
+</footer>
+
+<script src="/script.js"></script>
+</body>
+</html>

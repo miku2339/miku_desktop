@@ -61,6 +61,10 @@ final class CompanionMemory {
     static let summarizeThreshold = 24
 
     /// Touches that count, and how much each moves friendship.
+    /// Being picked up, by friendship level: a stranger doing it is a bit much (just met),
+    /// fine between friends, and something she enjoys with a close friend.
+    static let carryFriendship: [Double] = [-0.3, 0, 0.3, 0.4]
+
     static let touchFriendship: [String: Double] = [
         "headPat": 0.4, "headStroke": 0.4, "handHold": 0.5, "wave": 0.2, "hello": 0.2, "poke": 0.1,
         "carry": 0, "dizzy": -1.5, "sulk": -3, "ouch": -0.5
@@ -328,7 +332,9 @@ final class CompanionMemory {
             store.relationship.lastBoundary = Date()
             store.relationship.lastBoundaryPart = part ?? "chest"
             justForgiven = false
-        } else if let change = Self.touchFriendship[kind] {
+        } else if let change = kind == "carry"
+            ? Self.carryFriendship[Self.level(for: store.relationship.friendship)]
+            : Self.touchFriendship[kind] {
             if change < 0 {
                 store.relationship.friendship = max(0, store.relationship.friendship + change)
             } else if !isOffended {

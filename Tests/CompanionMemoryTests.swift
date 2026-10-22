@@ -38,6 +38,50 @@ struct CompanionMemoryTests {
             try JSONSerialization.data(withJSONObject: object).write(to: url)
             return url
         }
+        func preciseFriendship(_ memory: CompanionMemory) throws -> Double {
+            guard let value = memory.relationshipPayload()["friendship"] as? Double else {
+                throw TestFailure(message: "Relationship payload must contain friendship")
+            }
+            return value
+        }
+
+        for (friendship, level) in [(24.9, 0), (25, 1), (49.9, 1), (50, 2), (74.9, 2), (75, 3)] {
+            try check(CompanionMemory.level(for: friendship) == level, "Friendship level boundary at \(friendship)")
+        }
+
+        for (index, sample) in [(10.0, 9.7), (25.0, 25.0), (50.0, 50.3), (75.0, 75.4)].enumerated() {
+            let memory = CompanionMemory(
+                fileURL: try fixture("carry-level-\(index)", friendship: sample.0),
+                defaults: defaults
+            )
+            memory.recordTouch("carry")
+            let friendship = try preciseFriendship(memory)
+            try check(friendship == sample.1, "Carry score at friendship \(sample.0)")
+        }
+
+        let touchCap = CompanionMemory(fileURL: try fixture("touch-cap", friendship: 60), defaults: defaults)
+        for _ in 0..<13 { touchCap.recordTouch("headPat") }
+        let cappedFriendship = try preciseFriendship(touchCap)
+        try check(cappedFriendship == 65, "Positive touches stop at the daily +5 cap")
+
+        let negativeThenPositive = CompanionMemory(
+            fileURL: try fixture("negative-then-positive", friendship: 10),
+            defaults: defaults
+        )
+        for _ in 0..<5 { negativeThenPositive.recordTouch("carry") }
+        for _ in 0..<13 { negativeThenPositive.recordTouch("headPat") }
+        let friendshipAfterLossAndGain = try preciseFriendship(negativeThenPositive)
+        try check(
+            friendshipAfterLossAndGain == 13.5,
+            "Negative carry scores do not consume the positive daily cap"
+        )
+
+        let offendedCarry = CompanionMemory(fileURL: try fixture("offended-carry", friendship: 80), defaults: defaults)
+        offendedCarry.recordTouch("boundary", part: "chest")
+        let offendedScore = try preciseFriendship(offendedCarry)
+        offendedCarry.recordTouch("carry")
+        let friendshipAfterOffendedCarry = try preciseFriendship(offendedCarry)
+        try check(friendshipAfterOffendedCarry == offendedScore, "Being carried cannot add friendship while upset")
 
         let highURL = try fixture("high", friendship: 80)
         let high = CompanionMemory(fileURL: highURL, defaults: defaults)

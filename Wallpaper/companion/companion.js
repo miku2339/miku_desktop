@@ -1339,28 +1339,68 @@ function applyWave(progress, elapsed, side = '左', variant = null) {
   setMorph('笑い', 0.08 * raise * Math.max(0, Math.sin(elapsed * 1.7)));
 }
 
-function applyStretch(progress, variant = null) {
-  const weight = gestureEnvelope(progress);
-  const rise = Math.sin(Math.PI * progress);
-  if (variant?.style === 'yawn') {
-    setMorph('あ', 0.55 * rise * weight);
-    setMorph('まばたき', 0.75 * rise * weight);
-  } else if (variant?.style === 'side') {
-    rotateBone('上半身', 0, 0, 0.12 * (variant.flip ?? 1) * rise * weight);
+function applyStretch(progress, variant = null, elapsed = 0) {
+  // A proper morning stretch: arms go up, fingers lace together above her head with the
+  // palms turned up, she rises onto her toes and leans back with her eyes shut, holds it
+  // for a moment (trembling a little), then lets her arms drop and relaxes with a sigh.
+  const style = variant?.style ?? 'plain';
+  const flip = variant?.flip ?? 1;
+  const up = smoothstep(THREE.MathUtils.clamp(progress / 0.24, 0, 1));
+  const down = smoothstep(THREE.MathUtils.clamp((progress - 0.66) / 0.2, 0, 1));
+  const reach = up * (1 - down);
+  const hold = THREE.MathUtils.clamp((progress - 0.2) / 0.1, 0, 1) * (1 - down);
+  const settle = down * (1 - THREE.MathUtils.clamp((progress - 0.9) / 0.1, 0, 1));
+  const tremble = Math.sin(elapsed * 23) * 0.012 * hold;
+
+  // Arms: straight up, elbows soft, hands meeting over her head.
+  // Calibrated so the hands meet in an arch just above her head.
+  const raise = 2.45;
+  const forward = 0.25;
+  const elbow = 0.2;
+  const twist = 1.3;
+  for (const [index, side] of ['左', '右'].entries()) {
+    const s = index === 0 ? 1 : -1;
+    rotateBone(`${side}肩`, 0, 0, s * 0.18 * reach);
+    rotateBone(`${side}腕`, 0, -s * forward * reach, s * (raise * reach + tremble));
+    rotateBone(`${side}ひじ`, 0, 0, s * elbow * reach);
+    twistBone(`${side}ひじ`, `${side}手首`, s * twist * reach);
+    rotateBone(`${side}手首`, 0, 0, s * 0.35 * reach);
+    // Fingers laced: curled most of the way.
+    for (const finger of ['人指', '中指', '薬指', '小指']) {
+      rotateBone(`${side}${finger}１`, 0, 0, -s * 0.55 * reach);
+      rotateBone(`${side}${finger}２`, 0, 0, -s * 0.7 * reach);
+    }
+    // Arms dropping afterwards: a loose swing past her sides.
+    rotateBone(`${side}腕`, 0, 0, -s * 0.12 * settle);
   }
-  offsetBone('センター', 0, 0.24 * rise, 0, weight);
-  rotateBone('上半身', -0.12, 0, 0, weight);
-  rotateBone('首', 0.08, 0, 0, weight);
-  rotateBone('頭', 0.06, 0, 0, weight);
-  rotateBone('左肩', 0, 0, 0.12, weight);
-  rotateBone('右肩', 0, 0, -0.12, weight);
-  rotateBone('左腕', 0.08, 0, 1.87, weight);
-  rotateBone('右腕', -0.08, 0, -1.87, weight);
-  rotateBone('左ひじ', 0, 0, 0.02, weight);
-  rotateBone('右ひじ', 0, 0, -0.02, weight);
-  rotateBone('左手首', 0, 0, 0.1, weight);
-  rotateBone('右手首', 0, 0, -0.1, weight);
-  setMorph('なごみ', 0.28 * weight);
+  // Body: up on her toes, chest open, leaning back a little; or bending to one side.
+  offsetBone('センター', 0, 0.3 * hold, 0);
+  for (const side of ['左', '右']) rotateBone(`${side}足首`, 0.35 * hold, 0, 0);
+  if (style === 'side') {
+    const lean = Math.sin(THREE.MathUtils.clamp((progress - 0.24) / 0.42, 0, 1) * Math.PI) * reach;
+    rotateBone('上半身', -0.04 * reach, 0, 0.16 * flip * lean);
+    rotateBone('下半身', 0, 0, -0.05 * flip * lean);
+  } else {
+    rotateBone('上半身', -0.1 * reach, 0, tremble);
+  }
+  rotateBone('首', -0.1 * hold, 0, 0);
+  rotateBone('頭', -0.12 * hold, 0, 0);
+  // Shoulders drop and the head nods forward as she relaxes.
+  rotateBone('上半身', 0.05 * settle, 0, 0);
+  rotateBone('頭', 0.08 * settle, 0, 0);
+
+  // Face: eyes squeezed shut while stretching (a big yawn in the 'yawn' style), then a
+  // contented smile.
+  setMorph('まばたき', Math.max(blinkAmount(elapsed), 0.95 * hold));
+  if (style === 'yawn') {
+    setMorph('あ', 0.75 * hold * (0.85 + 0.15 * Math.sin(elapsed * 2)));
+    setMorph('困る', 0.35 * hold);
+  } else {
+    setMorph('い', 0.35 * hold);
+    setMorph('困る', 0.2 * hold);
+  }
+  setMorph('なごみ', 0.45 * settle);
+  setSmile(Math.max(0.12, 0.45 * settle));
 }
 
 /** Sideways skirt trail from horizontal motion (models with a full skirt rig). */
@@ -1905,7 +1945,7 @@ function updateModel(elapsed) {
   if (behaviorName === 'wave') applyWave(behavior.progress, elapsed, behavior.side ?? behavior.variant?.side, behavior.variant);
   if (behaviorName === 'handHold') applyHandHold(behavior.progress, elapsed, behavior.side, behavior.variant);
   if (behaviorName === 'poke') applyPoke(behavior.progress, elapsed, behavior.side, behavior.variant);
-  if (behaviorName === 'stretch') applyStretch(behavior.progress, behavior.variant);
+  if (behaviorName === 'stretch') applyStretch(behavior.progress, behavior.variant, elapsed);
   if (behaviorName === 'lookAround') applyLookAround(behavior.progress, behavior.variant);
   if (behaviorName === 'hum') applyHum(behavior.progress, elapsed, behavior.variant);
   if (behaviorName === 'rest-standing' || behaviorName === 'rest') applyRest(behavior.progress);

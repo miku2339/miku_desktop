@@ -68,10 +68,13 @@ export function createRelationship({ friendship = 30 } = {}) {
 
   /** Local guess at the friendship change, until the app sends the real value. */
   function noteTouch(kind) {
-    const change = {
-      headPat: 0.3, headStroke: 0.3, handHold: 0.4, wave: 0.15, hello: 0.15, poke: 0.05,
-      dizzy: -1.5, sulk: -3, ouch: -0.5
-    }[kind] ?? 0;
+    // Being picked up depends on how close you are (mirrors CompanionMemory.carryFriendship).
+    const change = kind === 'carry'
+      ? [-0.3, 0, 0.3, 0.4][data.level]
+      : {
+        headPat: 0.3, headStroke: 0.3, handHold: 0.4, wave: 0.15, hello: 0.15, poke: 0.05,
+        dizzy: -1.5, sulk: -3, ouch: -0.5
+      }[kind] ?? 0;
     if (data.offended && change > 0) return;
     data.friendship = clamp(data.friendship + change, 0, 100);
     data.level = friendshipLevel(data.friendship);

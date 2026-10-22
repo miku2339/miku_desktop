@@ -6,8 +6,10 @@ test('friendship levels', () => {
   assert.equal(friendshipLevel(0), 0);
   assert.equal(friendshipLevel(24.9), 0);
   assert.equal(friendshipLevel(25), 1);
-  assert.equal(friendshipLevel(60), 2);
-  assert.equal(friendshipLevel(90), 3);
+  assert.equal(friendshipLevel(49.9), 1);
+  assert.equal(friendshipLevel(50), 2);
+  assert.equal(friendshipLevel(74.9), 2);
+  assert.equal(friendshipLevel(75), 3);
 });
 
 test('touching her chest upsets her whatever the friendship, and twice is worse', () => {
@@ -55,4 +57,18 @@ test('bad payloads are ignored', () => {
   assert.equal(relationship.friendship, 30);
   relationship.set({ friendship: 500 });
   assert.equal(relationship.friendship, 100);
+});
+
+test('being picked up: a bit much from a stranger, nice from a close friend', () => {
+  for (const [friendship, expected] of [[10, 9.7], [25, 25], [50, 50.3], [75, 75.4]]) {
+    const relationship = createRelationship({ friendship });
+    relationship.noteTouch('carry');
+    assert.equal(relationship.friendship, expected);
+  }
+
+  const offended = createRelationship({ friendship: 80 });
+  offended.noteBoundary();
+  const before = offended.friendship;
+  offended.noteTouch('carry');
+  assert.equal(offended.friendship, before, 'being carried cannot add friendship while upset');
 });

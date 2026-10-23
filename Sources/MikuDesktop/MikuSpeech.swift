@@ -548,14 +548,30 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
         var request = request
         request.setValue("MikuDesktop/0.2.0", forHTTPHeaderField: "User-Agent")
         request.setValue(accept, forHTTPHeaderField: "Accept")
+        let session: URLSession
         switch url.scheme?.lowercased() {
         case "http":
-            return try await loopbackSession.data(for: request)
+            session = loopbackSession
         case "https":
-            return try await httpsSession.data(for: request)
+            session = httpsSession
         default:
             throw SpeechError.invalidEndpoint
         }
+
+        let mayRetry = request.httpMethod == "GET" && url.path != "/api/session"
+        for attempt in 0..<3 {
+            try Task.checkCancellation()
+            do {
+                return try await session.data(for: request)
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                guard mayRetry, attempt < 2, Self.isRetryableNetworkError(error) else { throw error }
+                let delay: UInt64 = attempt == 0 ? 500_000_000 : 1_000_000_000
+                try await Task.sleep(nanoseconds: delay)
+            }
+        }
+        throw SpeechError.connectionUnavailable
     }
 
     private func protectedRequest(url: URL, token: String) -> URLRequest {
@@ -735,6 +751,20 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
         if error is URLError { return true }
         let value = error as NSError
         return value.domain == NSURLErrorDomain
+    }
+
+    private static func isRetryableNetworkError(_ error: Error) -> Bool {
+        let value = error as NSError
+        guard value.domain == NSURLErrorDomain else { return false }
+        let retryable: Set<Int> = [
+            URLError.networkConnectionLost.rawValue,
+            URLError.timedOut.rawValue,
+            URLError.cannotConnectToHost.rawValue,
+            URLError.dnsLookupFailed.rawValue,
+            URLError.cannotFindHost.rawValue,
+            URLError.notConnectedToInternet.rawValue
+        ]
+        return retryable.contains(value.code)
     }
 
     private static func shouldBootstrap(after error: Error) -> Bool {

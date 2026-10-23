@@ -9,6 +9,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var chatController: ChatWindowController?
     private var settingsController: SettingsWindowController?
     private var notebookController: DiaryWindowController?
+    private var albumController: MemoryAlbumWindowController?
+    private var knowledgeController: SongKnowledgeWindowController?
     private var rhythmController: RhythmGameWindowController?
     private var settingsObserver: NSObjectProtocol?
     private let weatherService = WeatherService()
@@ -38,6 +40,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.chatController?.refreshLocalization()
                 self?.settingsController?.refreshLocalization()
                 self?.desktopControlsController?.refreshLocalization()
+                self?.albumController?.refreshLocalization()
+                self?.knowledgeController?.refreshLocalization()
                 self?.settingsController?.refreshInteraction()
                 self?.wallpaperController?.setLanguage(AppLanguage.resolved.rawValue)
             }
@@ -70,6 +74,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.weatherService.start()
                     let controls = DesktopControlsWindowController()
                     controls.onOpenChat = { [weak self] in self?.openChat(nil) }
+                    controls.onOpenAlbum = { [weak self] in self?.openAlbum(nil) }
                     controls.onOpenSettings = { [weak self] in self?.openSettings(nil) }
                     self.desktopControlsController = controls
                 case .failure:
@@ -118,6 +123,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let notebook = NSMenuItem(title: L10n.text("notebookMenu"), action: #selector(openNotebook(_:)), keyEquivalent: "")
         notebook.target = self
         menu.addItem(notebook)
+
+        for (key, action) in [
+            ("comeOver", #selector(callCompanionOver(_:))),
+            ("memoryAlbum", #selector(openAlbum(_:))),
+            ("takeMemoryPhoto", #selector(takeMemoryPhoto(_:))),
+            ("songKnowledge", #selector(openKnowledge(_:)))
+        ] {
+            let item = NSMenuItem(title: L10n.text(key), action: action, keyEquivalent: "")
+            item.target = self
+            menu.addItem(item)
+        }
 
         let interaction = NSMenuItem(title: L10n.text("interaction"), action: #selector(toggleInteraction(_:)), keyEquivalent: "")
         interaction.target = self
@@ -225,6 +241,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             controller.onOpenSettings = { [weak self] in
                 self?.openSettings(nil)
             }
+            controller.onCallOver = { [weak self] in self?.callCompanionOver(nil) }
+            controller.onOpenAlbum = { [weak self] in self?.openAlbum(nil) }
+            controller.onTakeMemoryPhoto = { [weak self] in self?.takeMemoryPhoto(nil) }
+            controller.onOpenKnowledge = { [weak self] in self?.openKnowledge(nil) }
             controller.onGameEvent = { [weak self] event in
                 switch event {
                 case let .rps(hand, outcome):
@@ -236,6 +256,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             chatController = controller
         }
         chatController?.present()
+    }
+
+    @objc private func callCompanionOver(_ sender: Any?) {
+        if SleepSchedule.shared.isAsleep() { SleepSchedule.shared.wake(minutes: 30) }
+        wallpaperController?.callCompanionOver()
+    }
+
+    private func prepareAlbum() -> MemoryAlbumWindowController {
+        if let albumController { return albumController }
+        let controller = MemoryAlbumWindowController(capture: { [weak self] in
+            guard let wallpaper = self?.wallpaperController else {
+                throw NSError(domain: "MikuDesktop.Album", code: 1, userInfo: [
+                    NSLocalizedDescriptionKey: L10n.text("memoryPhotoUnavailable")
+                ])
+            }
+            return try await wallpaper.captureMemoryPhoto()
+        })
+        albumController = controller
+        return controller
+    }
+
+    @objc private func openAlbum(_ sender: Any?) {
+        prepareAlbum().present()
+    }
+
+    @objc private func takeMemoryPhoto(_ sender: Any?) {
+        prepareAlbum().presentAndCapture()
+    }
+
+    @objc private func openKnowledge(_ sender: Any?) {
+        if knowledgeController == nil { knowledgeController = SongKnowledgeWindowController() }
+        knowledgeController?.present()
     }
 
     @objc private func toggleInteraction(_ sender: NSMenuItem) {

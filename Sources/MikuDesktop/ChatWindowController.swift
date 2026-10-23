@@ -5,6 +5,10 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
     var onReply: ((CompanionReply) -> Void)?
     var onThinking: ((Bool) -> Void)?
     var onOpenSettings: (() -> Void)?
+    var onCallOver: (() -> Void)?
+    var onOpenAlbum: (() -> Void)?
+    var onTakeMemoryPhoto: (() -> Void)?
+    var onOpenKnowledge: (() -> Void)?
     var onGameEvent: ((GameEvent) -> Void)?
 
     private let ai: LocalAI
@@ -27,6 +31,7 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
     private let clearButton = MikuPillButton(frame: .zero)
     private let settingsButton = MikuPillButton(frame: .zero)
     private let gameButton = MikuPillButton(frame: .zero)
+    private let companionButton = MikuPillButton(frame: .zero)
     private var activeGame: GameSession?
     private var choiceRow: NSView?
 
@@ -325,6 +330,8 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
         clearButton.setAccessibilityLabel(L10n.text("clearChat"))
         gameButton.toolTip = L10n.text("gamesMenu")
         gameButton.setAccessibilityLabel(L10n.text("gamesMenu"))
+        companionButton.toolTip = L10n.text("companionTools")
+        companionButton.setAccessibilityLabel(L10n.text("companionTools"))
         settingsButton.toolTip = L10n.text("settingsButton")
         settingsButton.setAccessibilityLabel(L10n.text("settingsButton"))
         attachButton.toolTip = L10n.text("attachImage")
@@ -430,6 +437,26 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
         onOpenSettings?()
     }
 
+    @objc private func showCompanionTools(_ sender: NSButton) {
+        let menu = NSMenu()
+        for (key, action) in [
+            ("comeOver", #selector(callOver)),
+            ("takeMemoryPhoto", #selector(takeMemoryPhoto)),
+            ("memoryAlbum", #selector(openAlbum)),
+            ("songKnowledge", #selector(openKnowledge))
+        ] {
+            let item = NSMenuItem(title: L10n.text(key), action: action, keyEquivalent: "")
+            item.target = self
+            menu.addItem(item)
+        }
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.maxY + 4), in: sender)
+    }
+
+    @objc private func callOver() { onCallOver?() }
+    @objc private func takeMemoryPhoto() { onTakeMemoryPhoto?() }
+    @objc private func openAlbum() { onOpenAlbum?() }
+    @objc private func openKnowledge() { onOpenKnowledge?() }
+
     private func send(_ text: String, image: Data? = nil, appendUser: Bool = true) {
         guard !isSending else { return }
         cancelPendingBedtime()
@@ -457,10 +484,12 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
             sleep.wake(minutes: 30)
         }
         let sleepRevision = sleep.revision
+        if appendUser, CompanionRequest.isComeOver(text) { onCallOver?() }
         // An apology can settle things before she answers, so the reply already knows.
         memory.noteUserMessage(text)
         let history = memory.recentHistory(from: completedHistory())
         let context = memory.context()
+        let rememberSongPreferences = memory.isEnabled
         memory.record(messages)
         setSending(true)
 
@@ -468,7 +497,10 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
         chatTask = Task { [weak self] in
             guard let self else { return }
             do {
-                let reply = try await ai.reply(to: prompt, image: image, history: history, memory: context)
+                let reply = try await ai.reply(
+                    to: prompt, image: image, history: history, memory: context,
+                    rememberSongPreferences: rememberSongPreferences
+                )
                 guard !Task.isCancelled, generation == conversationGeneration else { return }
                 let assistantMessage = ChatMessage(role: .assistant, text: reply.text)
                 chatTask = nil
@@ -593,11 +625,13 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
         configureIconButton(clearButton, symbol: "sparkles", action: #selector(clearChat))
         configureIconButton(settingsButton, symbol: "gearshape.fill", action: #selector(openSettings))
         configureIconButton(gameButton, symbol: "gamecontroller.fill", action: #selector(showGames(_:)))
+        configureIconButton(companionButton, symbol: "ellipsis", action: #selector(showCompanionTools(_:)))
+        companionButton.setAccessibilityIdentifier("chat-companion-tools")
 
         let spacer = NSView()
         spacer.setContentHuggingPriority(NSLayoutConstraint.Priority(1), for: .horizontal)
         spacer.setContentCompressionResistancePriority(NSLayoutConstraint.Priority(1), for: .horizontal)
-        let headerStack = NSStackView(views: [headerAvatar, titleStack, spacer, gameButton, clearButton, settingsButton])
+        let headerStack = NSStackView(views: [headerAvatar, titleStack, spacer, gameButton, companionButton, clearButton, settingsButton])
         headerStack.orientation = .horizontal
         headerStack.distribution = .fill
         headerStack.alignment = .centerY

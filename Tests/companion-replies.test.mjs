@@ -19,6 +19,10 @@ function sourceSection(startMarker, endMarker) {
 
 const allowlistsSource = sourceSection('const ALLOWED_EMOTIONS', 'const CONTROLLED_BONES');
 const talkingSource = sourceSection('const MOUTH_VOWELS', '// How she feels');
+const replySource = sourceSection(
+  'function applyReply(',
+  '\n\nwindow.mikuCompanion = Object.freeze({'
+);
 const companionAPISource = sourceSection(
   'window.mikuCompanion = Object.freeze({',
   "\n\ndocument.body.classList.toggle('interaction-enabled'"
@@ -65,10 +69,12 @@ function createHarness({ reduced = false } = {}) {
     model: { morphTargetInfluences: influences },
     morphs: Object.fromEntries(vowelNames.map((name, index) => [name, index])),
     pinnedAnchor: null,
+    pendingCallReply: null,
     pointer: null,
     previewElapsed: null,
     reaction: null,
     ready: true,
+    callOverRequested: false,
     sceneSlotSeconds: 300,
     sunrise: 6,
     sunset: 18,
@@ -83,6 +89,7 @@ function createHarness({ reduced = false } = {}) {
   };
   const bubbleText = { textContent: '' };
   const relationship = createRelationship();
+  const dailyResult = { arrived: false, calling: null };
 
   const context = vm.createContext({
     THREE: {
@@ -95,6 +102,7 @@ function createHarness({ reduced = false } = {}) {
     chooseVariant: () => ({ flip: 1 }),
     clearTimeout() {},
     document: { body: { classList: new FakeClassList() } },
+    dailyResult,
     endHover() {},
     finishPointer() {},
     hitTest() {},
@@ -137,11 +145,13 @@ function createHarness({ reduced = false } = {}) {
     context,
     { filename: 'companion.js#talking' }
   );
+  vm.runInContext(replySource, context, { filename: 'companion.js#reply' });
   vm.runInContext(companionAPISource, context, { filename: 'companion.js#api' });
 
   return {
     api: context.window.mikuCompanion,
     bubbleText,
+    dailyResult,
     influences,
     reactionCalls,
     reducedMotion,
@@ -249,6 +259,30 @@ test('ordinary relationship sync keeps the current reply speaking', () => {
   assert.equal(harness.state.talk, activeTalk);
   assert.equal(harness.speechBubble.classList.contains('visible'), true);
   assert.equal(harness.state.emotion, 'happy');
+});
+
+test('a reply is delayed only while an explicit call-over is still approaching', () => {
+  const ordinary = createHarness();
+  ordinary.api.receiveReply({ emotion: 'happy', action: 'idle', text: '普通回覆' });
+  assert.equal(ordinary.speechBubble.classList.contains('visible'), true);
+
+  const called = createHarness();
+  called.state.callOverRequested = true;
+  called.dailyResult.calling = 'walking';
+  called.api.receiveReply({ emotion: 'happy', action: 'wave', text: '行近先講' });
+
+  assert.equal(called.speechBubble.classList.contains('visible'), false);
+  assert.equal(JSON.stringify(called.state.pendingCallReply), JSON.stringify({ emotion: 'happy', action: 'wave', text: '行近先講' }));
+  assert.equal(called.state.reaction, null);
+
+  const returning = createHarness();
+  returning.state.callOverRequested = true;
+  returning.dailyResult.calling = 'returning';
+  returning.api.receiveReply({ emotion: 'happy', action: 'wave', text: '返途中回覆' });
+
+  assert.equal(returning.speechBubble.classList.contains('visible'), true);
+  assert.equal(returning.state.pendingCallReply, null);
+  assert.equal(returning.state.reaction?.type, 'wave');
 });
 
 test('every supported reply action routes to its intended reaction', () => {

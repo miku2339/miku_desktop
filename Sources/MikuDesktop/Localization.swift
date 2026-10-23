@@ -21,6 +21,12 @@ enum AppLanguage: String, CaseIterable {
 enum L10n {
     private static let strings: [String: [AppLanguage: String]] = [
         // Menus
+        "comeOver": [.traditionalChinese: "過來一下", .english: "Come over here", .japanese: "こっちに来て"],
+        "companionTools": [.traditionalChinese: "陪伴工具", .english: "Companion tools", .japanese: "ミクのツール"],
+        "memoryAlbum": [.traditionalChinese: "共同回憶相簿…", .english: "Our memory album…", .japanese: "思い出アルバム…"],
+        "takeMemoryPhoto": [.traditionalChinese: "拍照留念…", .english: "Take a keepsake photo…", .japanese: "記念写真を撮る…"],
+        "songKnowledge": [.traditionalChinese: "歌曲知識庫…", .english: "Song knowledge…", .japanese: "楽曲データベース…"],
+        "memoryPhotoUnavailable": [.traditionalChinese: "場景還沒準備好，請稍後再拍照。", .english: "The scene is not ready yet. Please try again shortly.", .japanese: "シーンの準備中です。少し待ってから撮影してください。"],
         "chat": [.traditionalChinese: "聊天", .english: "Chat", .japanese: "チャット"],
         "interaction": [.traditionalChinese: "互動模式", .english: "Interaction Mode", .japanese: "インタラクション"],
         "scene": [.traditionalChinese: "場景", .english: "Scene", .japanese: "シーン"],

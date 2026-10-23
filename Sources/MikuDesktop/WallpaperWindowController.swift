@@ -216,6 +216,11 @@ final class WallpaperWindowController: NSObject, WKNavigationDelegate, WKScriptM
         evaluate("window.mikuCompanion?.setThinking(\(thinking ? "true" : "false"))")
     }
 
+    func callCompanionOver() {
+        guard pageReady else { return }
+        evaluate("window.mikuCompanion?.callOver?.()")
+    }
+
     /// Friendship and whether she's upset, so her reactions match what she remembers.
     @MainActor
     func pushRelationship() {
@@ -270,6 +275,31 @@ final class WallpaperWindowController: NSObject, WKNavigationDelegate, WKScriptM
             "emotion": reply.emotion,
             "action": reply.action
         ])
+    }
+
+    /// Photographs only the two app-rendered wallpaper layers. This never reads the desktop
+    /// or other applications and therefore does not need Screen Recording permission.
+    @MainActor
+    func captureMemoryPhoto() async throws -> CapturedScene {
+        guard backgroundReady, pageReady,
+              backgroundWebView.bounds.width > 1, backgroundWebView.bounds.height > 1,
+              webView.bounds.size == backgroundWebView.bounds.size else {
+            throw MemoryPhotoCaptureError.notReady
+        }
+
+        let status = try await MemoryPhotoCapture.companionStatus(in: webView)
+        guard (status["ready"] as? Bool) == true,
+              (status["mode"] as? String) == "webgl-mmd" else {
+            throw MemoryPhotoCaptureError.notReady
+        }
+        guard let scene = status["scene"] as? String, !scene.isEmpty else {
+            throw MemoryPhotoCaptureError.sceneUnavailable
+        }
+        return try await MemoryPhotoCapture.capture(
+            background: backgroundWebView,
+            character: webView,
+            scene: scene
+        )
     }
 
     // MARK: - WKNavigationDelegate

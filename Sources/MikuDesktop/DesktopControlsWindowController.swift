@@ -23,10 +23,12 @@ private final class GripView: NSView {
 final class DesktopControlsWindowController: NSWindowController, NSWindowDelegate {
     var onOpenChat: (() -> Void)?
     var onOpenSettings: (() -> Void)?
+    var onOpenAlbum: (() -> Void)?
 
     private static let originKey = "desktopControlsOrigin"
     private let chatButton = MikuPillButton(frame: .zero)
     private let settingsButton = MikuPillButton(frame: .zero)
+    private let albumButton = MikuPillButton(frame: .zero)
     private var screenObserver: NSObjectProtocol?
     private var isRestoringPosition = false
 
@@ -80,7 +82,15 @@ final class DesktopControlsWindowController: NSWindowController, NSWindowDelegat
         settingsButton.action = #selector(openSettings)
         settingsButton.setAccessibilityIdentifier("desktop-settings")
 
-        let stack = NSStackView(views: [grip, chatButton, settingsButton])
+        albumButton.style = .soft
+        albumButton.symbolName = "photo.on.rectangle.angled"
+        albumButton.iconOnly = true
+        albumButton.controlHeight = 32
+        albumButton.target = self
+        albumButton.action = #selector(openAlbum)
+        albumButton.setAccessibilityIdentifier("desktop-album")
+
+        let stack = NSStackView(views: [grip, chatButton, albumButton, settingsButton])
         stack.orientation = .horizontal
         stack.alignment = .centerY
         stack.spacing = 6
@@ -90,6 +100,7 @@ final class DesktopControlsWindowController: NSWindowController, NSWindowDelegat
             grip.widthAnchor.constraint(equalToConstant: 22),
             grip.heightAnchor.constraint(equalToConstant: 32),
             settingsButton.widthAnchor.constraint(equalToConstant: 32),
+            albumButton.widthAnchor.constraint(equalToConstant: 32),
             stack.leadingAnchor.constraint(equalTo: background.leadingAnchor, constant: 8),
             stack.trailingAnchor.constraint(equalTo: background.trailingAnchor, constant: -7),
             stack.centerYAnchor.constraint(equalTo: background.centerYAnchor)
@@ -118,7 +129,8 @@ final class DesktopControlsWindowController: NSWindowController, NSWindowDelegat
     func refreshLocalization() {
         chatButton.title = L10n.text("chat")
         settingsButton.title = L10n.text("settingsButton")
-        for button in [chatButton, settingsButton] {
+        albumButton.title = L10n.text("memoryAlbum")
+        for button in [chatButton, albumButton, settingsButton] {
             button.toolTip = button.title
             button.setAccessibilityLabel(button.title)
         }
@@ -133,7 +145,7 @@ final class DesktopControlsWindowController: NSWindowController, NSWindowDelegat
     private func resizeToFit() {
         guard let window, let contentView = window.contentView else { return }
         contentView.layoutSubtreeIfNeeded()
-        let width = 8 + 22 + 6 + chatButton.intrinsicContentSize.width + 6 + 32 + 7
+        let width = 8 + 22 + 6 + chatButton.intrinsicContentSize.width + 6 + 32 + 6 + 32 + 7
         var frame = window.frame
         frame.size = NSSize(width: width, height: 46)
         isRestoringPosition = true
@@ -148,8 +160,12 @@ final class DesktopControlsWindowController: NSWindowController, NSWindowDelegat
         if let saved = UserDefaults.standard.string(forKey: Self.originKey) {
             let origin = NSPointFromString(saved)
             let frame = NSRect(origin: origin, size: window.frame.size)
-            if NSScreen.screens.contains(where: { $0.visibleFrame.intersects(frame.insetBy(dx: 20, dy: 10)) }) {
-                window.setFrameOrigin(origin)
+            if let screen = NSScreen.screens.first(where: { $0.visibleFrame.intersects(frame.insetBy(dx: 20, dy: 10)) }) {
+                let visible = screen.visibleFrame
+                window.setFrameOrigin(NSPoint(
+                    x: max(visible.minX, min(origin.x, visible.maxX - window.frame.width)),
+                    y: max(visible.minY, min(origin.y, visible.maxY - window.frame.height))
+                ))
                 return
             }
         }
@@ -167,5 +183,9 @@ final class DesktopControlsWindowController: NSWindowController, NSWindowDelegat
 
     @objc private func openSettings() {
         onOpenSettings?()
+    }
+
+    @objc private func openAlbum() {
+        onOpenAlbum?()
     }
 }

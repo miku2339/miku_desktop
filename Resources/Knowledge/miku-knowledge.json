@@ -1,0 +1,359 @@
+{
+  "schemaVersion": 1,
+  "version": "2026.10.23.1",
+  "entries": [
+    {
+      "id": "song.polestar",
+      "aliases": [
+        "ポールスター",
+        "Polestar",
+        "Pole Star"
+      ],
+      "creators": [
+        "LamazeP",
+        "Lamaze-P",
+        "ラマーズP"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ポールスター〉— LamazeP（ラマーズP）作品，初音未來演唱。",
+        "en": "“ポールスター” (Polestar) — by LamazeP, sung by Hatsune Miku.",
+        "ja": "「ポールスター」— ラマーズP（LamazeP）の曲、歌は初音ミク。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm46743769",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.world-is-mine",
+      "aliases": [
+        "ワールドイズマイン",
+        "World is Mine",
+        "WorldIsMine",
+        "世界第一的公主殿下"
+      ],
+      "creators": [
+        "ryo",
+        "supercell"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ワールドイズマイン／World is Mine／世界第一的公主殿下〉— ryo（supercell）。",
+        "en": "“World is Mine” (ワールドイズマイン) — ryo (supercell).",
+        "ja": "「ワールドイズマイン／World is Mine」— ryo（supercell）。"
+      },
+      "sourceURL": "https://www.youtube.com/watch?v=jhl5afLEKdo",
+      "featured": true,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.melt",
+      "aliases": [
+        "メルト",
+        "Melt"
+      ],
+      "creators": [
+        "ryo",
+        "supercell"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈メルト／Melt〉— ryo（supercell）。",
+        "en": "“Melt” (メルト) — ryo (supercell).",
+        "ja": "「メルト／Melt」— ryo（supercell）。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm1715919",
+      "featured": true,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.tell-your-world",
+      "aliases": [
+        "Tell Your World",
+        "TellYourWorld"
+      ],
+      "creators": [
+        "livetune",
+        "kz"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈Tell Your World〉— livetune／kz。",
+        "en": "“Tell Your World” — livetune/kz.",
+        "ja": "「Tell Your World」— livetune／kz。"
+      },
+      "sourceURL": "https://www.youtube.com/watch?v=PqJNc9KVIZE",
+      "featured": true,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.hand-in-hand",
+      "aliases": [
+        "Hand in Hand",
+        "HandInHand"
+      ],
+      "creators": [
+        "livetune",
+        "kz"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈Hand in Hand〉— livetune／kz。",
+        "en": "“Hand in Hand” — livetune/kz.",
+        "ja": "「Hand in Hand」— livetune／kz。"
+      },
+      "sourceURL": "https://blog.piapro.net/2015/07/c1507081-1.html",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.39",
+      "aliases": [
+        "39（サンキュー）",
+        "39(サンキュー)",
+        "39 サンキュー"
+      ],
+      "creators": [
+        "sasakure.UK",
+        "DECO*27"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "歌曲〈39（サンキュー）〉— sasakure.UK×DECO*27。",
+        "en": "The song “39 (サンキュー)” — sasakure.UK × DECO*27.",
+        "ja": "楽曲「39（サンキュー）」— sasakure.UK×DECO*27。"
+      },
+      "sourceURL": "https://www.youtube.com/watch?v=ecU_uJRzhfk",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.39-music",
+      "aliases": [
+        "39みゅーじっく！",
+        "39みゅーじっく",
+        "39 Music"
+      ],
+      "creators": [
+        "みきとP",
+        "MikitoP"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈39みゅーじっく！〉— みきとP。",
+        "en": "“39みゅーじっく！” — MikitoP.",
+        "ja": "「39みゅーじっく！」— みきとP。"
+      },
+      "sourceURL": "https://www.youtube.com/watch?v=elMXZGJp9Qg",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.dune",
+      "aliases": [
+        "砂の惑星",
+        "DUNE"
+      ],
+      "creators": [
+        "ハチ",
+        "Hachi",
+        "米津玄師",
+        "Kenshi Yonezu"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈砂の惑星／DUNE〉— ハチ（Hachi／米津玄師）。",
+        "en": "“DUNE” (砂の惑星) — Hachi (Kenshi Yonezu).",
+        "ja": "「砂の惑星／DUNE」— ハチ（米津玄師）。"
+      },
+      "sourceURL": "https://www.youtube.com/watch?v=AS4q9yaWJkI",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.ai-kotoba",
+      "aliases": [
+        "愛言葉",
+        "Ai Kotoba"
+      ],
+      "creators": [
+        "DECO*27"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈愛言葉〉— DECO*27。",
+        "en": "“愛言葉” (Ai Kotoba) — DECO*27.",
+        "ja": "「愛言葉」— DECO*27。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm7696158",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.greenlights-serenade",
+      "aliases": [
+        "グリーンライツ・セレナーデ",
+        "Greenlights Serenade"
+      ],
+      "creators": [
+        "Omoi"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈グリーンライツ・セレナーデ〉— Omoi。",
+        "en": "“Greenlights Serenade” (グリーンライツ・セレナーデ) — Omoi.",
+        "ja": "「グリーンライツ・セレナーデ」— Omoi。"
+      },
+      "sourceURL": "https://karent.jp/album/2503",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.rolling-girl",
+      "aliases": [
+        "ローリンガール",
+        "Rolling Girl",
+        "Rollin Girl"
+      ],
+      "creators": [
+        "wowaka"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ローリンガール／Rolling Girl〉— wowaka。",
+        "en": "“Rolling Girl” (ローリンガール) — wowaka.",
+        "ja": "「ローリンガール／Rolling Girl」— wowaka。"
+      },
+      "sourceURL": "https://www.youtube.com/watch?v=vnw8zURAxkU",
+      "featured": true,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.senbonzakura",
+      "aliases": [
+        "千本桜",
+        "千本櫻",
+        "Senbonzakura"
+      ],
+      "creators": [
+        "黒うさP",
+        "Kurousa-P"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "和風 rock 歌曲〈千本桜／Senbonzakura／千本櫻〉— 黒うさP。",
+        "en": "Japanese-style rock song “Senbonzakura” (千本桜) — Kurousa-P (黒うさP).",
+        "ja": "和風ロックの「千本桜／Senbonzakura」— 黒うさP。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm15630734",
+      "featured": true,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.sekai",
+      "aliases": [
+        "セカイ",
+        "SEKAI",
+        "Project SEKAI"
+      ],
+      "creators": [
+        "DECO*27",
+        "堀江晶太",
+        "kemu",
+        "Rockwell",
+        "OTOIRO"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈セカイ／SEKAI〉是 2020 年《Project SEKAI》主題曲：作詞 DECO*27、作曲堀江晶太（kemu）、編曲 Rockwell、MV 製作 OTOIRO，由初音未來演唱。",
+        "en": "“SEKAI” (セカイ) is the 2020 Project SEKAI theme song: lyrics by DECO*27, music by 堀江晶太 (kemu), arrangement by Rockwell, MV by OTOIRO, sung by Hatsune Miku.",
+        "ja": "「セカイ／SEKAI」は2020年の「Project SEKAI」テーマ曲。作詞DECO*27、作曲・堀江晶太（kemu）、編曲Rockwell、MV制作OTOIRO、歌は初音ミク。"
+      },
+      "sourceURL": "https://pjsekai.sega.jp/music/comment02/index.html",
+      "featured": true,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "character.hatsune-miku",
+      "aliases": [
+        "初音ミク",
+        "初音未來",
+        "Hatsune Miku",
+        "Miku"
+      ],
+      "creators": [
+        "Crypton Future Media"
+      ],
+      "kind": "character",
+      "content": {
+        "zh-Hant": "初音未來是 Crypton Future Media 開發的虛擬歌手軟體角色；官方設定為 16 歲、158 cm、42 kg，聲源由藤田咲提供。",
+        "en": "Hatsune Miku is a virtual singer software character developed by Crypton Future Media. Her official profile lists age 16, height 158 cm, weight 42 kg, with voice samples by Saki Fujita.",
+        "ja": "初音ミクはクリプトン・フューチャー・メディアが開発したバーチャル・シンガー・ソフトウェアのキャラクター。公式プロフィールは16歳、158 cm、42 kgで、声の元は藤田咲さんです。"
+      },
+      "sourceURL": "https://piapro.net/intl/en_character.html",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "character.snow-miku",
+      "aliases": [
+        "雪ミク",
+        "雪未來",
+        "Snow Miku"
+      ],
+      "creators": [
+        "Crypton Future Media"
+      ],
+      "kind": "character",
+      "content": {
+        "zh-Hant": "雪未來是為北海道加油的角色，源自札幌雪祭的白色初音未來雪像，並成為每年 SNOW MIKU 節慶的主角。",
+        "en": "Snow Miku is a character who supports Hokkaido. She was inspired by a white Hatsune Miku snow sculpture at the Sapporo Snow Festival and leads the annual SNOW MIKU festival.",
+        "ja": "雪ミクは北海道を応援するキャラクター。さっぽろ雪まつりの真っ白な初音ミク雪像をきっかけに誕生し、毎年の「SNOW MIKU」フェスティバルで主役を務めています。"
+      },
+      "sourceURL": "https://snowmiku.com/about.html",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "performance.magical-mirai",
+      "aliases": [
+        "マジカルミライ",
+        "Magical Mirai",
+        "魔法未來"
+      ],
+      "creators": [
+        "Crypton Future Media",
+        "TOKYO MX"
+      ],
+      "kind": "performance",
+      "content": {
+        "zh-Hant": "「魔法未來」是結合初音未來等虛擬歌手 3DCG 現場演出，以及讓參加者體驗創作樂趣之企劃展的活動。",
+        "en": "Magical Mirai combines a 3DCG live show by Hatsune Miku and the other virtual singers with an exhibition where visitors can experience the joy of creativity.",
+        "ja": "「マジカルミライ」は、初音ミクたちバーチャル・シンガーの3DCGライブと、創作の楽しさを体感できる企画展を併催するイベントです。"
+      },
+      "sourceURL": "https://magicalmirai.com/",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "performance.snow-miku",
+      "aliases": [
+        "SNOW MIKU",
+        "SNOW MIKU Festival",
+        "雪ミク祭典"
+      ],
+      "creators": [
+        "Crypton Future Media"
+      ],
+      "kind": "performance",
+      "content": {
+        "zh-Hant": "「SNOW MIKU」是以雪未來為主角、為冬季北海道加油的節慶，每年在北海道舉行。",
+        "en": "SNOW MIKU is an annual festival in Hokkaido led by Snow Miku to support the region in winter.",
+        "ja": "「SNOW MIKU」は、雪ミクが主役となって冬の北海道を応援する、北海道で毎年開催されるフェスティバルです。"
+      },
+      "sourceURL": "https://snowmiku.com/",
+      "featured": false,
+      "sourceStatus": "bundled"
+    }
+  ]
+}

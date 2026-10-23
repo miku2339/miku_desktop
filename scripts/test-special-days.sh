@@ -12,6 +12,7 @@ swiftc \
   "$project_root/Sources/MikuDesktop/AIConfiguration.swift" \
   "$project_root/Sources/MikuDesktop/Localization.swift" \
   "$project_root/Sources/MikuDesktop/LocalAI.swift" \
+  "$project_root/Sources/MikuDesktop/SongKnowledge.swift" \
   "$project_root/Sources/MikuDesktop/SpecialDays.swift" \
   "$project_root/Tests/SpecialDaysTests.swift" \
   -o "$temporary_dir/special-days-tests"

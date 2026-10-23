@@ -20,6 +20,7 @@ Hatsune Miku, living on your macOS desktop. She walks around animated Tokyo stre
 
 - Move the pointer near her, pat her head, poke her cheek, hold her hand (she follows the pointer), drag her, pick her up, and let her drop back down.
 - After dragging her, you can pin her in place or let her wander freely again.
+- **Connected daily activities**: She randomly chooses scene-, weather-, and music-aware walks, drinks, or listening breaks without repeating the same plan in a row. Say “come here” or use the ♪ menu: she puts her prop away, approaches and stays for a moment, then walks back to resume her activity. Chat and touch pause the routine.
 - Depending on the scene, weather, season, and events, she carries a clear umbrella, a drink, a leek, a fan, or glowsticks, and wears a hat on holidays. While music plays, she rests a hand on her headset and moves to the beat.
 
 ### Chat and memory
@@ -27,6 +28,8 @@ Hatsune Miku, living on your macOS desktop. She walks around animated Tokyo stre
 - **Three languages**: Traditional Chinese, Japanese, and English. Choose a cheerful, gentle, quiet, or custom personality, and set what she calls you.
 - **Sounds like Miku**: Upbeat and direct, and she lights up when the talk turns to music. She never quotes copyrighted lyrics. Replies come with facial expressions, gestures, and lip sync.
 - **Understands images**: Select, drag, or paste an image into the chat window (requires a local model with image input).
+- **Updatable song knowledge**: Open Song Knowledge from the ♪ menu or Companion tools in chat to search songs, creators, characters, and events, view sources, and mark favorite songs. Check for updates manually, or export JSON, edit it, and import it again; custom entries are labelled as user-provided. With memory enabled, explicitly saying you like a recognized song also adds it to favorites.
+- **Our memory album**: Open it from the desktop album button or ♪ menu to manually photograph Miku and her scene, add a title and note, and choose everyday, first meeting, birthday, or achievement. Export photos or delete them individually.
 - **Long-term memory**: Keeps conversations, summaries, preferences, interaction history, affection, and relationship status. Remembered facts can be deleted one at a time. Resetting memory takes two confirmations and keeps one backup you can restore.
 
 ### Her daily life
@@ -110,14 +113,16 @@ For safety, only loopback (local) endpoints are accepted. When the settings matc
 ## Privacy and network access
 
 - Conversations, memories, diary entries, and chat images are stored in `~/Library/Application Support/MikuDesktop/`. Preferences such as personality and language are stored in macOS user defaults.
-- Chat messages and any observations you turn on go only to the local AI. Screen captures are never saved and need Screen Recording permission; the music and video options may need macOS Automation permission.
+- Chat messages and any observations you turn on go only to the local AI. Screen captures for proactive observations are never saved and need Screen Recording permission; the music and video options may need macOS Automation permission.
 - Resetting memory clears conversations, summaries, remembered facts, interaction history, and relationship data, but keeps her personality and other settings. You can restore from the backup afterwards or delete it permanently.
-- The app only connects to these sites on its own:
+- Manually saved photos and song favorites are kept separately and managed in their own windows; conversation-memory resets leave them intact. Photos contain only Miku and her scene and are resized into `album/`; knowledge and favorites live in `Knowledge/`.
+- The app makes the following network connections:
 
 | Connects to | Why | How often |
 | --- | --- | --- |
 | Open-Meteo | Weather for the selected city's coordinates | Periodically |
 | magicalmirai.com, snowmiku.com | Reads public pages to confirm Magical Mirai and SNOW MIKU dates | Every three days, cached locally |
+| raw.githubusercontent.com | Downloads the song knowledge file maintained in this repository | Only when you click Check for Updates |
 
 ## Project layout
 
@@ -142,6 +147,9 @@ node --test Tests/*.test.mjs
 ./scripts/test-sleep-schedule.sh
 ./scripts/test-special-days.sh
 ./scripts/test-mini-games.sh
+./scripts/test-companion-requests.sh
+./scripts/test-song-knowledge.sh
+./scripts/test-memory-album.sh
 ```
 
 Issues and pull requests are welcome. When reporting a problem, please include your macOS version, steps to reproduce, and relevant screenshots. Before sharing logs, remove private conversations, API keys, and other personal information.

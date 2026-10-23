@@ -6,6 +6,7 @@ import { createTouchGestures } from './touch-gestures.js';
 import { createShake, shakeAftermath } from './shake.js';
 import { createGestures, GESTURE_PHRASES } from './gestures.js';
 import { createRoutine, createVariety } from './variety.js';
+import { createDailyActivities } from './daily-activities.js';
 import { characterEnvironment, defaultWeather, normalizeWeather, timeAnchors, useShibuyaScramble } from './environment.js';
 import { createAmbient } from './ambient.js';
 import { createRelationship, RELATIONSHIP_TOUCH_KINDS } from './relationship.js';
@@ -234,7 +235,10 @@ const state = {
   nextStartle: 0,
   language: 'zh-Hant',
   specialDays: { today: [], day: '' },
-  music: { playing: false, title: '' }
+  music: { playing: false, title: '' },
+  pendingCallReply: null,
+  callOverRequested: false,
+  callPinnedAnchor: undefined
 };
 
 const HOVER_PHRASES = {
@@ -857,6 +861,18 @@ const routine = createRoutine({
   startAnchor: POSITION_ANCHORS[0],
   contextWeights: idleContextWeights
 });
+const dailyActivities = createDailyActivities({
+  seed: (Date.now() ^ Math.floor(Math.random() * 1e9)) >>> 0
+});
+let dailyResult = {
+  activity: null,
+  stage: null,
+  behavior: null,
+  prop: undefined,
+  ownsProp: false,
+  calling: null,
+  arrived: false
+};
 
 const REACTION_STYLES = {
   wave: ['big', 'small', 'tilt'],
@@ -1240,6 +1256,7 @@ function anchorAt(elapsed, behavior) {
     const to = behavior.toAnchor;
     return THREE.MathUtils.lerp(from, to, walkingProgress(from, to, behavior.progress, behavior.duration));
   }
+  if (Number.isFinite(behavior.anchor)) return behavior.anchor;
   return routine.restingAnchorAt(elapsed);
 }
 
@@ -1945,7 +1962,54 @@ function updateModel(elapsed) {
   else if (state.pendingShake) startShakeAftermath(elapsed);
   state.turnOffset = 0;
   state.hopLift = 0;
-  let routineBehavior = behaviorAt(elapsed);
+  const activeReaction = reducedMotion.matches ? null : activeReactionAt(elapsed);
+  const pointerBusy = Boolean(state.pointer);
+  const sleeping = sleepState.phase !== 'awake';
+  const priority = reducedMotion.matches
+    ? 'reducedMotion'
+    : relationship.offended ? 'angry'
+      : carrying ? 'carried'
+        : state.pointer?.dragging ? 'dragged'
+          : state.pinnedAnchor !== null ? 'pinned'
+            : sleeping && !state.callOverRequested ? 'sleep' : null;
+  const userEngaged = state.thinking || speechBubble.classList.contains('visible');
+  dailyResult = dailyActivities.update({
+    time: elapsed,
+    currentAnchor: state.currentAnchor,
+    context: {
+      hour: currentHour(),
+      scene: state.activeScene,
+      weather: state.weather?.kind,
+      musicPlaying: state.music?.playing
+    },
+    interrupted: pointerBusy || Boolean(activeReaction) || carrying || sleeping,
+    engaged: userEngaged,
+    priority,
+    propReady: !propState.shown && propState.hold.x < 0.04
+  });
+  if (Number.isFinite(dailyResult.completedAnchor)) holdAnchor(dailyResult.completedAnchor, elapsed, 0);
+  if (state.callOverRequested && (dailyResult.arrived
+    || (dailyResult.calling === 'returning' && (userEngaged || pointerBusy || Boolean(activeReaction))))) {
+    state.lookTarget = { x: 0.5, y: 0.35, until: elapsed + 0.8 };
+    if (state.pendingCallReply) {
+      const pending = state.pendingCallReply;
+      state.pendingCallReply = null;
+      applyReply(pending, { render: false });
+    }
+  } else if (state.callOverRequested && !dailyResult.calling) {
+    state.callOverRequested = false;
+    if (state.callPinnedAnchor !== undefined) state.pinnedAnchor = state.callPinnedAnchor;
+    state.callPinnedAnchor = undefined;
+    if (state.pendingCallReply) {
+      const pending = state.pendingCallReply;
+      state.pendingCallReply = null;
+      applyReply(pending, { render: false });
+    }
+  }
+  let routineBehavior = dailyResult.behavior
+    || (dailyResult.activity || dailyResult.calling
+      ? { name: 'idle', progress: 0, anchor: dailyResult.anchor }
+      : behaviorAt(elapsed));
   if (relationship.offended && CHEERFUL_ACTIONS.has(routineBehavior.name)) routineBehavior = { name: 'idle', progress: 0 };
   if (sleepState.phase !== 'awake' && !['yawn', 'idle'].includes(routineBehavior.name)) routineBehavior = { name: 'idle', progress: 0 };
   let routineAnchor = anchorAt(elapsed, routineBehavior);
@@ -1976,7 +2040,7 @@ function updateModel(elapsed) {
     snubTouch(state.pointer.side);
   }
   const carryReaction = carrying ? { type: carryPose.phase, progress: carryPose.landingProgress ?? 0.5 } : null;
-  const reaction = reducedMotion.matches ? null : carryReaction || pointerReaction || activeReactionAt(elapsed);
+  const reaction = reducedMotion.matches ? null : carryReaction || pointerReaction || activeReaction;
   const behavior = reaction || (reducedMotion.matches ? { name: 'idle', progress: 0 } : routineBehavior);
   const source = reducedMotion.matches
     ? 'reduced'
@@ -2094,7 +2158,8 @@ function updateModel(elapsed) {
 
   // An umbrella, a drink, a leek…: only while her arms are free.
   const armsFree = !reaction && !state.pointer && !carrying && ARMS_FREE.has(behaviorName) && !reducedMotion.matches;
-  const held = updateHeldProp(elapsed, armsFree || (reducedMotion.matches && !carrying));
+  const activityProp = dailyResult.ownsProp ? dailyResult.prop : undefined;
+  const held = updateHeldProp(elapsed, armsFree || (reducedMotion.matches && !carrying), activityProp);
   applyHoldPose(held, propState.hold.x, elapsed);
   updateHat();
   greetSpecialDay(elapsed);
@@ -2394,7 +2459,7 @@ function propDay() {
  * Every frame: decide what she's holding (or doing with her hands) and ease into it.
  * `armsFree` is false while she's busy with you or doing a gesture with her arms.
  */
-function updateHeldProp(elapsed, armsFree) {
+function updateHeldProp(elapsed, armsFree, requestedProp = undefined) {
   if (!props) return null;
   const today = new Set(state.specialDays?.today ?? []);
   const awake = sleepState.phase === 'awake';
@@ -2405,7 +2470,8 @@ function updateHeldProp(elapsed, armsFree) {
   propState.nextFan ??= elapsed + variety.range(60, 240);
   propState.nextCheer ??= elapsed + variety.range(60, 180);
   propState.nextListen ??= elapsed + variety.range(40, 120);
-  if (calm) {
+  const activityOwnsProp = requestedProp !== undefined;
+  if (calm && !activityOwnsProp) {
     if (elapsed >= propState.nextLeek) {
       propState.leekUntil = elapsed + variety.range(11, 16);
       propState.nextLeek = elapsed + variety.range(festive ? 240 : 900, festive ? 540 : 2100);
@@ -2432,20 +2498,22 @@ function updateHeldProp(elapsed, armsFree) {
       sayProp('listen');
     }
   }
-  let wanted = chooseHandProp({
-    weather: state.weather?.kind,
-    // The old Shibuya picture is inside the station; the new one is the street.
-    scene: state.activeScene === 'shibuya' && state.fallbackScenes.has('shibuya') ? 'shibuya-station' : state.activeScene,
-    hour,
-    idle: calm,
-    awake,
-    drinkUntil: propState.drinkUntil,
-    leekUntil: propState.leekUntil,
-    fanUntil: propState.fanUntil,
-    cheerUntil: propState.cheerUntil,
-    now: elapsed
-  });
-  if (!wanted && calm && state.music?.playing && elapsed < propState.listenUntil) wanted = 'listen';
+  let wanted = activityOwnsProp
+    ? calm ? requestedProp : null
+    : chooseHandProp({
+      weather: state.weather?.kind,
+      // The old Shibuya picture is inside the station; the new one is the street.
+      scene: state.activeScene === 'shibuya' && state.fallbackScenes.has('shibuya') ? 'shibuya-station' : state.activeScene,
+      hour,
+      idle: calm,
+      awake,
+      drinkUntil: propState.drinkUntil,
+      leekUntil: propState.leekUntil,
+      fanUntil: propState.fanUntil,
+      cheerUntil: propState.cheerUntil,
+      now: elapsed
+    });
+  if (!activityOwnsProp && !wanted && calm && state.music?.playing && elapsed < propState.listenUntil) wanted = 'listen';
   if (reducedMotion.matches) wanted = wanted === 'umbrella' || wanted === 'closedUmbrella' ? wanted : null;
   // Swap through empty hands: put one thing away before picking up the next.
   if (wanted !== propState.shown) {
@@ -3963,10 +4031,37 @@ function status() {
     turnYaw: turning.yaw.x,
     turnSpin: turning.yaw.v,
     reaction: state.reaction ? state.reaction.type : null,
+    dailyActivity: dailyResult.activity,
+    dailyStage: dailyResult.stage,
+    callOver: dailyResult.calling,
     emotion: state.emotion,
     bones: requiredBones,
     availableMorphs: Object.keys(state.morphs)
   };
+}
+
+function applyReply(payload = {}, { render = true } = {}) {
+  const emotion = ALLOWED_EMOTIONS.has(payload.emotion) ? payload.emotion : 'calm';
+  const action = ALLOWED_REPLY_ACTIONS.has(payload.action) ? payload.action : 'idle';
+  state.emotion = emotion;
+  state.emotionAt = currentElapsed();
+  showBubble(typeof payload.text === 'string' ? payload.text : '', emotion);
+  const moody = relationship.offended && CHEERFUL_ACTIONS.has(action);
+  if (moody || reducedMotion.matches) {
+    if (!state.reaction?.touch) state.reaction = null;
+  } else if (action === 'wave') startReaction(waveOrNod(currentElapsed()));
+  else if (action === 'stretch' || action === 'rest') startReaction(action);
+  else if (action === 'nod') startReaction('hello');
+  else if (GESTURE_TYPES.includes(action)) {
+    // Body language for what she's saying; the words are already in the bubble.
+    const variant = { ...chooseVariant(action), said: 0, talk: false };
+    if (action === 'think') variant.style = 'plain';
+    if (action === 'sad') variant.tears = emotion === 'sad' && variety.chance(0.3);
+    startReaction(action, { variant });
+  }
+  else if (!state.reaction?.touch && state.reaction?.type !== 'forgive') state.reaction = null;
+  if (render) renderState(performance.now());
+  return status();
 }
 
 window.mikuCompanion = Object.freeze({
@@ -3997,25 +4092,31 @@ window.mikuCompanion = Object.freeze({
   },
   receiveReply(payload = {}) {
     if (!showsCharacter || !payload || typeof payload !== 'object') return false;
-    const emotion = ALLOWED_EMOTIONS.has(payload.emotion) ? payload.emotion : 'calm';
-    const action = ALLOWED_REPLY_ACTIONS.has(payload.action) ? payload.action : 'idle';
-    state.emotion = emotion;
-    state.emotionAt = currentElapsed();
-    showBubble(typeof payload.text === 'string' ? payload.text : '', emotion);
-    const moody = relationship.offended && CHEERFUL_ACTIONS.has(action);
-    if (moody || reducedMotion.matches) {
-      if (!state.reaction?.touch) state.reaction = null;
-    } else if (action === 'wave') startReaction(waveOrNod(currentElapsed()));
-    else if (action === 'stretch' || action === 'rest') startReaction(action);
-    else if (action === 'nod') startReaction('hello');
-    else if (GESTURE_TYPES.includes(action)) {
-      // Body language for what she's saying; the words are already in the bubble.
-      const variant = { ...chooseVariant(action), said: 0, talk: false };
-      if (action === 'think') variant.style = 'plain';
-      if (action === 'sad') variant.tears = emotion === 'sad' && variety.chance(0.3);
-      startReaction(action, { variant });
+    if (state.callOverRequested && (dailyResult.calling === 'putAway' || dailyResult.calling === 'walking')) {
+      state.pendingCallReply = { ...payload };
+      return status();
     }
-    else if (!state.reaction?.touch && state.reaction?.type !== 'forgive') state.reaction = null;
+    return applyReply(payload);
+  },
+  callOver() {
+    if (!showsCharacter || reducedMotion.matches || relationship.offended || state.pointer || carry.status().phase !== 'idle') return false;
+    if (sleepState.phase !== 'awake') wakeUp(20);
+    const pinnedAnchor = state.callOverRequested && state.callPinnedAnchor !== undefined
+      ? state.callPinnedAnchor
+      : state.pinnedAnchor;
+    const targetAnchor = handLeadingAnchor(0.5);
+    const started = dailyActivities.callOver({
+      time: currentElapsed(),
+      currentAnchor: state.currentAnchor,
+      targetAnchor,
+      priority: pinnedAnchor !== null ? 'pinned' : null
+    });
+    if (!started) return false;
+    if (!state.callOverRequested) state.callPinnedAnchor = pinnedAnchor === null ? undefined : pinnedAnchor;
+    state.callOverRequested = true;
+    state.pinnedAnchor = null;
+    state.anchorHold = null;
+    if (!state.reaction?.touch) state.reaction = null;
     renderState(performance.now());
     return status();
   },
@@ -4086,6 +4187,16 @@ window.mikuCompanion = Object.freeze({
   },
   setPinnedAnchor(anchor = null) {
     const value = anchor === null ? null : Number(anchor);
+    if (state.callOverRequested) {
+      dailyActivities.reset();
+      state.callOverRequested = false;
+      state.callPinnedAnchor = undefined;
+      if (state.pendingCallReply) {
+        const pending = state.pendingCallReply;
+        state.pendingCallReply = null;
+        applyReply(pending, { render: false });
+      }
+    }
     state.pinnedAnchor = value === null || !Number.isFinite(value) ? null : THREE.MathUtils.clamp(value, 0.16, 0.68);
     state.anchorHold = null;
     renderState(performance.now());

@@ -4,11 +4,35 @@
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   const language = root.lang === "en" ? "en" : root.lang === "ja" ? "ja" : "zh-Hant";
-  const languagePaths = { "zh-Hant": "/", en: "/en/", ja: "/ja/" };
-  const languageSelect = document.getElementById("site-language");
-  if (languageSelect) {
-    languageSelect.value = languagePaths[language];
-    languageSelect.addEventListener("change", () => window.location.assign(languageSelect.value));
+  // Language menu: close on outside click or Escape.
+  const lang = document.querySelector(".lang");
+  if (lang) {
+    document.addEventListener("click", (e) => { if (lang.open && !lang.contains(e.target)) lang.open = false; });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape" && lang.open) { lang.open = false; lang.querySelector("summary").focus(); } });
+  }
+
+  // GitHub star count: shown only once there is at least one star; cached per browser session.
+  const gh = document.querySelector(".gh[data-repo]");
+  if (gh) {
+    const key = `stars:${gh.dataset.repo}`;
+    const showStars = (n) => {
+      if (typeof n !== "number" || n < 1) return;
+      const stars = gh.querySelector(".stars");
+      stars.querySelector("b").textContent = n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
+      stars.hidden = false;
+    };
+    let cached = null;
+    try { cached = sessionStorage.getItem(key); } catch (e) {}
+    if (cached !== null) showStars(Number(cached));
+    else {
+      fetch(`https://api.github.com/repos/${gh.dataset.repo}`)
+        .then((r) => (r.ok ? r.json() : Promise.reject()))
+        .then((repo) => {
+          try { sessionStorage.setItem(key, String(repo.stargazers_count)); } catch (e) {}
+          showStars(repo.stargazers_count);
+        })
+        .catch(() => {});
+    }
   }
 
   // ---------- Time of day: match the hero to the visitor's clock, like the app does ----------

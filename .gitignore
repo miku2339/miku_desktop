@@ -1,4 +1,5 @@
 .build/
+/voice-training/
 /outputs/
 .DS_Store
 *.app/

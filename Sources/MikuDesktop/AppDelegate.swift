@@ -99,6 +99,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        MikuSpeech.shared.stop()
         server?.stop()
         CompanionMemory.shared.saveNow()
         if let settingsObserver { NotificationCenter.default.removeObserver(settingsObserver) }
@@ -222,6 +223,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Something she noticed and wanted to say: speech bubble on the desktop, and in the chat.
     private func deliverProactive(_ reply: CompanionReply) {
         wallpaperController?.receiveReply(reply)
+        MikuSpeech.shared.speak(reply.text)
         if let chatController {
             chatController.receiveProactive(reply)
         } else {
@@ -234,6 +236,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let controller = ChatWindowController()
             controller.onReply = { [weak self] reply in
                 self?.wallpaperController?.receiveReply(reply)
+                MikuSpeech.shared.speak(reply.text)
             }
             controller.onThinking = { [weak self] thinking in
                 self?.wallpaperController?.setThinking(thinking)
@@ -349,10 +352,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func resetMemory(_ sender: Any?) {
+        MikuSpeech.shared.stop()
         MemoryResetConfirmation.run()
     }
 
     @objc private func quit(_ sender: Any?) {
+        MikuSpeech.shared.stop()
         NSApp.terminate(nil)
     }
 

@@ -51,6 +51,14 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
     private let testButton = MikuPillButton(frame: .zero)
     private let connectionDot = StatusDotView()
     private let connectionLabel = NSTextField.mikuLabel("", size: 12, color: MikuTheme.secondaryText)
+    private let speechSwitch = NSSwitch()
+    private let speechLanguagePopup = NSPopUpButton()
+    private let speechPreviewButton = MikuPillButton(frame: .zero)
+    private let speechStopButton = MikuPillButton(frame: .zero)
+    private let speechTestButton = MikuPillButton(frame: .zero)
+    private let speechStatusLabel = NSTextField.mikuLabel("", size: 12, color: MikuTheme.secondaryText)
+    private let speechTokenField = NSSecureTextField()
+    private let speechTokenButton = MikuPillButton(frame: .zero)
     private let interactionSwitch = NSSwitch()
     private let ambientSwitch = NSSwitch()
     private let ambientHint = NSTextField.mikuLabel("", size: 11.5, color: MikuTheme.secondaryText)
@@ -80,6 +88,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
     private var rowLabels: [String: NSTextField] = [:]
     private var sectionLabels: [String: NSTextField] = [:]
     private var connectionTask: Task<Void, Never>?
+    private var speechTask: Task<Void, Never>?
 
     init(configuration: AIConfiguration? = nil) {
         self.configuration = configuration ?? AIConfiguration.shared
@@ -101,6 +110,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         super.init(window: window)
         window.delegate = self
         buildUI()
+        MikuSpeech.shared.onStateChanged = { [weak self] in self?.refreshSpeech() }
         loadValues()
         window.center()
         memoryObserver = NotificationCenter.default.addObserver(forName: .mikuMemoryChanged, object: nil, queue: .main) { [weak self] _ in
@@ -132,6 +142,10 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         updatePopupTitles(rotationPopup, keys: SceneRotation.choices.map { $0.key })
         updatePopupTitles(replyLanguagePopup, keys: languageKeys)
         updatePopupTitles(interfaceLanguagePopup, keys: languageKeys)
+        updatePopupTitles(speechLanguagePopup, keys: [
+            "speechLanguageAuto", "speechLanguageCantonese", "speechLanguageMandarin",
+            "speechLanguageJapanese", "speechLanguageEnglish"
+        ])
         for (index, key) in personalityKeys.enumerated() {
             personalitySegment.setLabel(L10n.text(key), forSegment: index)
         }
@@ -139,6 +153,10 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         nicknameField.placeholderString = L10n.text("nicknamePlaceholder")
         resetPositionButton.title = L10n.text("resetPosition")
         testButton.title = L10n.text("testConnection")
+        speechPreviewButton.title = L10n.text("speechPreview")
+        speechStopButton.title = L10n.text("speechStop")
+        speechTestButton.title = L10n.text("testConnection")
+        speechTokenButton.title = L10n.text("speechSaveToken")
         openLoginSettingsButton.title = L10n.text("openSystemSettings")
         interactionHint.stringValue = L10n.text("interactionHint")
         ambientHint.stringValue = L10n.text("ambientHint")
@@ -154,6 +172,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         deleteBackupButton.title = L10n.text("memoryBackupDelete")
         refreshMemory()
         refreshAwareness()
+        refreshSpeech()
     }
 
     // MARK: - Awareness
@@ -249,6 +268,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
     }
 
     @objc private func eraseMemory() {
+        MikuSpeech.shared.stop()
         MemoryResetConfirmation.run()
     }
 
@@ -259,6 +279,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         alert.addButton(withTitle: L10n.text("cancel"))
         alert.addButton(withTitle: L10n.text("memoryRestore"))
         guard alert.runModal() == .alertSecondButtonReturn else { return }
+        MikuSpeech.shared.stop()
         if !CompanionMemory.shared.restoreResetBackup() { showMemoryError() }
     }
 
@@ -398,6 +419,38 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         connectionLabel.preferredMaxLayoutWidth = 240
         connectionLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
+        configurePopup(
+            speechLanguagePopup,
+            titles: [
+                "speechLanguageAuto", "speechLanguageCantonese", "speechLanguageMandarin",
+                "speechLanguageJapanese", "speechLanguageEnglish"
+            ].map(L10n.text),
+            values: MikuSpeech.Language.allCases.map(\.rawValue),
+            action: #selector(speechLanguageChanged)
+        )
+        speechSwitch.target = self
+        speechSwitch.action = #selector(speechEnabledChanged)
+        for (button, symbol, action) in [
+            (speechPreviewButton, "speaker.wave.2.fill", #selector(previewSpeech)),
+            (speechStopButton, "stop.fill", #selector(stopSpeech)),
+            (speechTestButton, "network", #selector(testSpeechConnection)),
+            (speechTokenButton, "key.fill", #selector(saveSpeechToken))
+        ] {
+            button.style = .soft
+            button.symbolName = symbol
+            button.controlHeight = 26
+            button.font = MikuTheme.font(12, .semibold)
+            button.target = self
+            button.action = action
+        }
+        speechStatusLabel.lineBreakMode = .byWordWrapping
+        speechStatusLabel.maximumNumberOfLines = 3
+        speechStatusLabel.preferredMaxLayoutWidth = 250
+        speechTokenField.bezelStyle = .roundedBezel
+        speechTokenField.font = MikuTheme.font(13)
+        speechTokenField.target = self
+        speechTokenField.action = #selector(saveSpeechToken)
+
         interactionSwitch.target = self
         interactionSwitch.action = #selector(interactionChanged)
         launchSwitch.target = self
@@ -469,6 +522,26 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
             row("aiEndpoint", endpointField),
             row("aiModel", modelField),
             [NSGridCell.emptyContentView, connectionRow]
+        ])
+
+        let speechButtons = NSStackView(views: [speechPreviewButton, speechStopButton])
+        speechButtons.orientation = .horizontal
+        speechButtons.alignment = .centerY
+        speechButtons.spacing = 8
+        let speechConnection = NSStackView(views: [speechTestButton, speechStatusLabel])
+        speechConnection.orientation = .horizontal
+        speechConnection.alignment = .centerY
+        speechConnection.spacing = 8
+        let speechToken = NSStackView(views: [speechTokenField, speechTokenButton])
+        speechToken.orientation = .horizontal
+        speechToken.alignment = .centerY
+        speechToken.spacing = 8
+        let speechCard = card("sectionSpeech", symbol: "waveform", rows: [
+            row("speechEnabled", speechSwitch),
+            row("speechLanguage", speechLanguagePopup),
+            row("speechPlayback", speechButtons),
+            row("speechConnection", speechConnection),
+            row("speechAccessToken", speechToken)
         ])
 
         let interactionStack = NSStackView(views: [interactionSwitch, interactionHint])
@@ -562,7 +635,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
 
         footerLabel.alignment = .center
 
-        let stack = NSStackView(views: [header, sceneCard, characterCard, memoryCard, awarenessCard, languageCard, aiCard, generalCard, footerLabel])
+        let stack = NSStackView(views: [header, sceneCard, characterCard, memoryCard, awarenessCard, languageCard, speechCard, aiCard, generalCard, footerLabel])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 14
@@ -596,10 +669,11 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
             footerLabel.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -44),
             customField.widthAnchor.constraint(greaterThanOrEqualToConstant: 280),
             endpointField.widthAnchor.constraint(greaterThanOrEqualToConstant: 280),
+            speechTokenField.widthAnchor.constraint(greaterThanOrEqualToConstant: 190),
             connectionDot.widthAnchor.constraint(equalToConstant: 8),
             connectionDot.heightAnchor.constraint(equalToConstant: 8)
         ]
-        for card in [sceneCard, characterCard, memoryCard, awarenessCard, languageCard, aiCard, generalCard] {
+        for card in [sceneCard, characterCard, memoryCard, awarenessCard, languageCard, speechCard, aiCard, generalCard] {
             constraints.append(card.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -44))
         }
         NSLayoutConstraint.activate(constraints)
@@ -692,6 +766,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         select(configuration.interfaceLanguage, in: interfaceLanguagePopup)
         endpointField.stringValue = configuration.endpoint
         modelField.stringValue = configuration.model
+        refreshSpeech()
         refreshLoginState()
     }
 
@@ -772,6 +847,77 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
 
     @objc private func interactionChanged() {
         onInteractiveChanged?(interactionSwitch.state == .on)
+    }
+
+    @objc private func speechEnabledChanged() {
+        MikuSpeech.shared.enabled = speechSwitch.state == .on
+        refreshSpeech()
+    }
+
+    @objc private func speechLanguageChanged() {
+        guard let raw = speechLanguagePopup.selectedItem?.representedObject as? String,
+              let language = MikuSpeech.Language(rawValue: raw) else { return }
+        MikuSpeech.shared.language = language
+        refreshSpeech()
+    }
+
+    @objc private func previewSpeech() {
+        MikuSpeech.shared.playSample(language: MikuSpeech.shared.language)
+    }
+
+    @objc private func stopSpeech() {
+        MikuSpeech.shared.stop()
+    }
+
+    @objc private func testSpeechConnection() {
+        speechTask?.cancel()
+        speechTestButton.isEnabled = false
+        speechStatusLabel.stringValue = L10n.text("statusChecking")
+        speechTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await MikuSpeech.shared.testConnection()
+                speechStatusLabel.stringValue = L10n.text("speechConnectionOK")
+            } catch {
+                speechStatusLabel.stringValue = L10n.text("speechConnectionFailed")
+            }
+            guard !Task.isCancelled else { return }
+            speechTask = nil
+            speechTestButton.isEnabled = true
+        }
+    }
+
+    @objc private func saveSpeechToken() {
+        let token = speechTokenField.stringValue
+        guard !token.isEmpty else { return }
+        do {
+            try MikuSpeech.shared.storeAccessToken(token)
+            speechTokenField.stringValue = ""
+            refreshSpeech()
+            speechStatusLabel.stringValue = L10n.text("speechTokenSaved")
+        } catch {
+            speechStatusLabel.stringValue = L10n.text("speechTokenSaveFailed")
+        }
+    }
+
+    private func refreshSpeech() {
+        let speech = MikuSpeech.shared
+        let hasAccessToken = speech.hasAccessToken
+        speechSwitch.state = speech.enabled ? .on : .off
+        select(speech.language.rawValue, in: speechLanguagePopup)
+        speechPreviewButton.isEnabled = hasAccessToken && speech.enabled
+        speechStopButton.isEnabled = speech.isBusy
+        speechTestButton.isEnabled = speechTask == nil
+        speechTokenField.placeholderString = L10n.text(
+            hasAccessToken ? "speechTokenReplacePlaceholder" : "speechTokenPlaceholder"
+        )
+        if !hasAccessToken {
+            speechStatusLabel.stringValue = L10n.text("speechTokenMissing")
+        } else if speech.status.isEmpty {
+            speechStatusLabel.stringValue = L10n.text("speechReady")
+        } else {
+            speechStatusLabel.stringValue = speech.status
+        }
     }
 
     @objc private func testConnection() {

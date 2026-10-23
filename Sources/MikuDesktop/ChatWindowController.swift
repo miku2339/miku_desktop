@@ -34,6 +34,7 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
     private let companionButton = MikuPillButton(frame: .zero)
     private var activeGame: GameSession?
     private var choiceRow: NSView?
+    private var lastReplyText: String?
 
     // Conversation
     private let scrollView = NSScrollView()
@@ -108,6 +109,7 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
 
     /// A line she said on her own (she noticed what you were doing).
     func receiveProactive(_ reply: CompanionReply) {
+        lastReplyText = reply.text
         let message = ChatMessage(role: .assistant, text: reply.text)
         hideEmptyState()
         messages.append(message)
@@ -149,6 +151,7 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
     /// Starts a game in the chat (also when you ask for one by typing).
     func startGame(_ game: MiniGame) {
         guard !isSending else { return }
+        MikuSpeech.shared.stop()
         hideEmptyState()
         removeChoiceRow()
         activeGame = nil
@@ -184,6 +187,7 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
         }
         memory.record(messages)
         if let last = lines.last {
+            lastReplyText = last.text
             onReply?(CompanionReply(text: last.text, emotion: last.emotion, action: last.rps == nil ? last.action : "idle"))
         }
         if let rps = lines.compactMap(\.rps).last {
@@ -228,6 +232,7 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
 
     @objc private func choiceTapped(_ sender: NSButton) {
         guard let game = activeGame, let id = sender.identifier?.rawValue, !isSending else { return }
+        MikuSpeech.shared.stop()
         removeChoiceRow()
         let (said, lines) = game.choose(id)
         guard !lines.isEmpty else { return }
@@ -300,6 +305,7 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
     /// Picks up where you left off last time (only the latest turns are drawn).
     private func restoreConversation() {
         messages = memory.storedMessages
+        lastReplyText = messages.last(where: { $0.role == .assistant })?.text
         guard !messages.isEmpty else { return }
         hideEmptyState()
         for message in messages.suffix(60) { appendBubble(message) }
@@ -425,9 +431,11 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
 
     @objc private func clearChat() {
         guard !isSending else { return }
+        MikuSpeech.shared.stop()
         activeGame = nil
         choiceRow = nil
         messages.removeAll()
+        lastReplyText = nil
         failedText = nil
         memory.clearConversation()
         showEmptyState()
@@ -435,6 +443,15 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
 
     @objc private func openSettings() {
         onOpenSettings?()
+    }
+
+    @objc private func replayLastReply() {
+        guard let lastReplyText else { return }
+        MikuSpeech.shared.speak(lastReplyText)
+    }
+
+    @objc private func stopSpeech() {
+        MikuSpeech.shared.stop()
     }
 
     @objc private func showCompanionTools(_ sender: NSButton) {
@@ -449,6 +466,15 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
             item.target = self
             menu.addItem(item)
         }
+        menu.addItem(.separator())
+        let replay = NSMenuItem(title: L10n.text("speechReplay"), action: #selector(replayLastReply), keyEquivalent: "")
+        replay.target = self
+        replay.isEnabled = lastReplyText != nil && MikuSpeech.shared.enabled
+        menu.addItem(replay)
+        let stop = NSMenuItem(title: L10n.text("speechStop"), action: #selector(stopSpeech), keyEquivalent: "")
+        stop.target = self
+        stop.isEnabled = MikuSpeech.shared.isBusy
+        menu.addItem(stop)
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.maxY + 4), in: sender)
     }
 
@@ -506,6 +532,7 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
                 chatTask = nil
                 setSending(false)
                 messages.append(assistantMessage)
+                lastReplyText = reply.text
                 appendBubble(assistantMessage)
                 memory.record(messages)
                 memory.didExchange(user: userMessage, reply: assistantMessage, ai: ai)
@@ -539,6 +566,7 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
     }
 
     private func cancelActiveConversation() {
+        MikuSpeech.shared.stop()
         conversationGeneration &+= 1
         chatTask?.cancel()
         chatTask = nil
@@ -583,6 +611,7 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
     }
 
     private func setSending(_ sending: Bool) {
+        if sending { MikuSpeech.shared.stop() }
         isSending = sending
         inputField.isEnabled = !sending
         updateSendButton()

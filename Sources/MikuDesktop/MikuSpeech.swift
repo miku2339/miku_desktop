@@ -109,6 +109,7 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
         case wrongProfile
         case serverResponse(Int)
         case missingAccessToken
+        case unverifiedConnection
         case emptyText
         case textTooLong
         case generationFailed
@@ -132,6 +133,8 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
                 return L10n.format("speechErrorHTTP", String(status))
             case .missingAccessToken:
                 return L10n.text("speechErrorMissingToken")
+            case .unverifiedConnection:
+                return L10n.text("speechErrorUnverifiedConnection")
             case .emptyText:
                 return L10n.text("speechErrorEmptyText")
             case .textTooLong:
@@ -223,7 +226,7 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
 
     private static let profileID = "miku-four-language-gpt-sovits-v2"
     private static let profileSHA256 = "85a367fe5d21da466e2cb03182561ab11b012a24b2eb342e2bc6e2b64edad145"
-    private static let defaultEndpoint = "http://127.0.0.1:9882"
+    private static let defaultEndpoint = MikuSpeechAuthorization.officialEndpoint
     private static let maximumTextLength = 2_000
     private static let maximumAudioBytes = 64 * 1_024 * 1_024
     private static let jobIDPattern = try! NSRegularExpression(pattern: "^[0-9a-f]{32}$")
@@ -446,7 +449,7 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
 
     private func authenticate(endpoint: URL, token: String) async throws {
         let url = endpoint.appendingPathComponent("api/session")
-        var request = protectedRequest(url: url, token: token)
+        var request = try protectedRequest(url: url, token: token)
         request.httpMethod = "GET"
         let (_, response) = try await self.data(for: request)
         try validate(response, expectedURL: url, statusCode: 200)
@@ -460,7 +463,7 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
         token: String
     ) async throws -> Data {
         let createURL = endpoint.appendingPathComponent("api/jobs")
-        var createRequest = protectedRequest(url: createURL, token: token)
+        var createRequest = try protectedRequest(url: createURL, token: token)
         createRequest.httpMethod = "POST"
         createRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         createRequest.httpBody = try JSONEncoder().encode(CreateJobRequest(
@@ -479,7 +482,7 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
         let deadline = Date().addingTimeInterval(360)
         while Date() < deadline {
             try Task.checkCancellation()
-            var request = protectedRequest(url: jobURL, token: token)
+            var request = try protectedRequest(url: jobURL, token: token)
             request.httpMethod = "GET"
             let (data, response) = try await self.data(for: request)
             try validate(response, expectedURL: jobURL, statusCode: 200)
@@ -496,7 +499,7 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
                       validAudioURL(audioURL, endpoint: endpoint, jobID: created.id) else {
                     throw SpeechError.invalidResponse
                 }
-                var audioRequest = protectedRequest(url: audioURL, token: token)
+                var audioRequest = try protectedRequest(url: audioURL, token: token)
                 audioRequest.httpMethod = "GET"
                 let (audio, audioResponse) = try await self.data(for: audioRequest, accept: "audio/wav")
                 try validate(audioResponse, expectedURL: audioURL, statusCode: 200)
@@ -574,10 +577,12 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
         throw SpeechError.connectionUnavailable
     }
 
-    private func protectedRequest(url: URL, token: String) -> URLRequest {
-        var request = URLRequest(url: url)
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        return request
+    private func protectedRequest(url: URL, token: String) throws -> URLRequest {
+        do {
+            return try MikuSpeechAuthorization.protectedRequest(url: url, token: token)
+        } catch {
+            throw SpeechError.unverifiedConnection
+        }
     }
 
     private func validate(_ response: URLResponse, expectedURL: URL, statusCode: Int) throws {
@@ -618,8 +623,13 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
 
     private func serviceEndpoint() throws -> URL {
         let value = connectionConfiguration()?.endpoint ?? Self.defaultEndpoint
-        guard let url = URL(string: value), Self.validServiceEndpoint(url) else {
+        guard let url = URL(string: value) else {
             throw SpeechError.invalidEndpoint
+        }
+        do {
+            try MikuSpeechAuthorization.validateServiceEndpoint(url)
+        } catch {
+            throw SpeechError.unverifiedConnection
         }
         return url
     }
@@ -630,6 +640,7 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
     }
 
     private func runLauncher() async throws {
+        _ = try serviceEndpoint()
         guard let connection = connectionConfiguration(), let launcher = connection.launcherPath else {
             throw SpeechError.launcherUnavailable
         }
@@ -703,24 +714,8 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
             .appendingPathComponent("tts-connection.json")
     }
 
-    private static func validServiceEndpoint(_ url: URL) -> Bool {
-        let validPath = isLoopbackHTTP(url) ? (url.path.isEmpty || url.path == "/") : url.path.isEmpty
-        guard isAllowedServiceOrigin(url),
-              url.user == nil,
-              url.password == nil,
-              url.query == nil,
-              url.fragment == nil,
-              validPath else {
-            return false
-        }
-        return true
-    }
-
     private static func isAllowedServiceOrigin(_ url: URL) -> Bool {
-        if isLoopbackHTTP(url) { return true }
-        return url.scheme?.lowercased() == "https"
-            && url.host?.lowercased() == "miku-tts.qimake.si"
-            && (url.port == nil || url.port == 443)
+        MikuSpeechAuthorization.isOfficialServiceURL(url)
     }
 
     private static func isLoopbackHTTP(_ url: URL) -> Bool {

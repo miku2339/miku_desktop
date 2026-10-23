@@ -163,6 +163,7 @@ enum L10n {
         "speechErrorWrongProfile": [.traditionalChinese: "語音服務設定不相符", .english: "The voice service configuration does not match", .japanese: "音声サービスの設定が一致しません"],
         "speechErrorHTTP": [.traditionalChinese: "語音服務傳回 HTTP %@", .english: "The voice service returned HTTP %@", .japanese: "音声サービスから HTTP %@ が返されました"],
         "speechErrorMissingToken": [.traditionalChinese: "尚未設定語音服務存取金鑰", .english: "The voice service access token is not set", .japanese: "音声サービスのアクセストークンが未設定です"],
+        "speechErrorUnverifiedConnection": [.traditionalChinese: "此連線未通過安全驗證，請使用官方語音服務。", .english: "This connection could not be verified. Please use the official voice service.", .japanese: "この接続は安全性を確認できません。公式の音声サービスを使用してください。"],
         "speechErrorEmptyText": [.traditionalChinese: "沒有可朗讀的文字", .english: "There is no text to read", .japanese: "読み上げるテキストがありません"],
         "speechErrorTextTooLong": [.traditionalChinese: "每次最多朗讀 2000 個字", .english: "Up to 2,000 characters can be read at a time", .japanese: "一度に読み上げられるのは2,000文字までです"],
         "speechErrorGenerationFailed": [.traditionalChinese: "Miku 語音生成失敗，請稍後再試", .english: "Miku's voice could not be generated. Try again later", .japanese: "ミクの音声を生成できませんでした。あとでもう一度お試しください"],

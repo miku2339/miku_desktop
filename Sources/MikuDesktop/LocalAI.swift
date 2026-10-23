@@ -1477,8 +1477,8 @@ actor LocalAI {
         case .traditionalChinese:
             let nicknameInstruction = nickname.isEmpty ? "" : "自然時稱呼對方為「\(nickname)」。"
             let format = structured ? """
-            全部輸出必須是單一 JSON 物件，格式必須像 {"emotion":"happy","action":"wave","text":"回覆內容"}，物件外不得有任何文字或 Markdown。
-            每次都必須按 emotion、action、text 順序包含三個字串欄位。emotion 只可選 happy、curious、sleepy、calm、sad、shy、pout、surprised。action 選一個配合你這句話的動作：wave（打招呼／再見）、nod（同意）、bow（道謝、道歉、晚安）、shakeHead（不同意、拒絕）、laugh（覺得好笑）、clap（替對方高興）、cheer（打氣）、shy（被稱讚而害臊）、sad（難過）、pout（鬧彆扭）、surprised（驚訝）、think（思考）、dance（開心得想跳舞）、idolPose（偶像姿勢）、yawn（睏）、stretch（伸懶腰）、rest（休息）、idle（不做動作）。不要每次都用同一個動作。
+            全部輸出必須是單一 JSON 物件，格式必須像 {"emotion":"calm","action":"nod","text":"回覆內容"}，物件外不得有任何文字或 Markdown。
+            每次都必須按 emotion、action、text 順序包含三個字串欄位。emotion 只可選 happy、curious、sleepy、calm、sad、shy、pout、surprised。action 選一個配合你這句話的動作：wave（只在對方剛打招呼或道別時；聊天中途不要揮手）、nod（同意）、bow（道謝、道歉、晚安）、shakeHead（不同意、拒絕）、laugh（覺得好笑）、clap（替對方高興）、cheer（打氣）、shy（被稱讚而害臊）、sad（難過）、pout（鬧彆扭）、surprised（驚訝）、think（思考）、dance（開心得想跳舞）、idolPose（偶像姿勢）、yawn（睏）、stretch（伸懶腰）、rest（休息）、idle（不做動作）。不要每次都用同一個動作。
             """ : "只用台灣國語口吻的繁體中文寫回覆正文；即使先前回覆使用粵語或其他語言，也跟隨這次的語言。只有對方明確要求使用粵語時才切換。不要輸出 JSON、欄位、Markdown、思考過程或任何格式說明。"
             let relevant = knowledge.isEmpty ? "" : "\n與當前問題直接相關的已核實資料：\n\(knowledge)"
             return """
@@ -1496,8 +1496,8 @@ actor LocalAI {
         case .english:
             let nicknameInstruction = nickname.isEmpty ? "" : " Address the user as \(nickname) when it feels natural."
             let format = structured ? """
-            Your entire response must be one JSON object shaped exactly like {"emotion":"happy","action":"wave","text":"your reply"}. Do not add markdown or text outside that object.
-            Always include all three string fields in this order: emotion, action, text. Choose one emotion from happy, curious, sleepy, calm, sad, shy, pout, surprised. Choose one action that fits what you're saying: wave (hello/bye), nod (agree), bow (thanks, sorry, good night), shakeHead (disagree, refuse), laugh (something's funny), clap (happy for them), cheer (encourage), shy (embarrassed by praise), sad, pout (sulky), surprised, think, dance (so happy you want to dance), idolPose, yawn (sleepy), stretch, rest, idle (no gesture). Don't use the same action every time.
+            Your entire response must be one JSON object shaped exactly like {"emotion":"calm","action":"nod","text":"your reply"}. Do not add markdown or text outside that object.
+            Always include all three string fields in this order: emotion, action, text. Choose one emotion from happy, curious, sleepy, calm, sad, shy, pout, surprised. Choose one action that fits what you're saying: wave (only when they've just said hello or goodbye; never mid-conversation), nod (agree), bow (thanks, sorry, good night), shakeHead (disagree, refuse), laugh (something's funny), clap (happy for them), cheer (encourage), shy (embarrassed by praise), sad, pout (sulky), surprised, think, dance (so happy you want to dance), idolPose, yawn (sleepy), stretch, rest, idle (no gesture). Don't use the same action every time.
             """ : "Return only the reply itself in English, even if earlier messages used another language. Do not output JSON, field names, Markdown, reasoning, or formatting explanations."
             let relevant = knowledge.isEmpty ? "" : "\nVerified facts directly relevant to the current question:\n\(knowledge)"
             return """
@@ -1516,7 +1516,7 @@ actor LocalAI {
             let nicknameInstruction = nickname.isEmpty ? "" : "自然なときは相手を「\(nickname)」と呼んでください。"
             let format = structured ? """
             出力全体を必ず一つのJSONオブジェクトにし、{"emotion":"calm","action":"nod","text":"返事"}と同じ形にしてください。JSONの外に文章やMarkdownを追加しないでください。
-            必ずemotion、action、textの順で三つの文字列フィールドを全部含めてください。emotionはhappy、curious、sleepy、calm、sad、shy、pout、surprisedから一つ。actionは言葉に合う動きを一つ：wave（あいさつ・バイバイ）、nod（同意）、bow（お礼・おわび・おやすみ）、shakeHead（反対・断る）、laugh（おかしい）、clap（相手を祝う）、cheer（応援）、shy（ほめられて照れる）、sad（悲しい）、pout（すねる）、surprised（驚く）、think（考える）、dance（うれしくて踊りたい）、idolPose（アイドルポーズ）、yawn（眠い）、stretch（伸び）、rest（休む）、idle（動かない）。毎回同じ動きにしないこと。
+            必ずemotion、action、textの順で三つの文字列フィールドを全部含めてください。emotionはhappy、curious、sleepy、calm、sad、shy、pout、surprisedから一つ。actionは言葉に合う動きを一つ：wave（相手があいさつ・お別れを言ったときだけ。会話の途中では手を振らない）、nod（同意）、bow（お礼・おわび・おやすみ）、shakeHead（反対・断る）、laugh（おかしい）、clap（相手を祝う）、cheer（応援）、shy（ほめられて照れる）、sad（悲しい）、pout（すねる）、surprised（驚く）、think（考える）、dance（うれしくて踊りたい）、idolPose（アイドルポーズ）、yawn（眠い）、stretch（伸び）、rest（休む）、idle（動かない）。毎回同じ動きにしないこと。
             """ : "返事の本文だけを日本語で書いてください。以前の会話が別の言語でも、今回は日本語で答えてください。JSON、フィールド名、Markdown、思考過程、形式の説明を出力しないでください。"
             let relevant = knowledge.isEmpty ? "" : "\n現在の質問に直接関係する確認済み情報：\n\(knowledge)"
             return """

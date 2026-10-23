@@ -148,6 +148,16 @@ const GESTURE_TYPES = ['dance', 'idolPose', 'think', 'tidyHair', 'yawn', 'doze',
 const INTERACTION_TYPES = new Set(['headPat', 'headStroke', 'poke', 'wave', 'stretch', 'rest', 'hello', 'look', 'move', 'dizzy', 'ouch', 'boundary', 'snub', 'forgive', 'rps', ...GESTURE_TYPES]);
 // Idle actions she isn't in the mood for while she's upset with you.
 const CHEERFUL_ACTIONS = new Set(['dance', 'idolPose', 'cheer', 'bored', 'hum', 'wave', 'clap', 'laugh', 'shy']);
+// Waving is for hello and goodbye. Waving again so soon looks like a tic, so within this
+// many seconds of the last wave she nods instead (a tap on her hand gets a shorter gap).
+const WAVE_GAP = 150;
+const TOUCH_WAVE_GAP = 20;
+/** 'wave', or 'hello' (a nod) if she waved a moment ago; remembers the wave. */
+function waveOrNod(elapsed, gap = WAVE_GAP) {
+  if (elapsed - (state.lastWaveAt ?? -Infinity) < gap) return 'hello';
+  state.lastWaveAt = elapsed;
+  return 'wave';
+}
 const CONTROLLED_BONES = [
   'センター', '上半身', '下半身', '首', '頭', '両目',
   '左肩', '左腕', '左腕捩', '左ひじ', '左手捩', '左手首',
@@ -3766,7 +3776,7 @@ function finishPointer(event = null, { reset = false } = {}) {
     if (relationship.snubs('wave')) {
       if (!pointer.greeted) snubTouch(pointer.side);
     } else {
-      startReaction('wave', { touch: true, side: pointer.side });
+      startReaction(waveOrNod(currentElapsed(), TOUCH_WAVE_GAP), { touch: true, side: pointer.side });
       if (!pointer.greeted) reportTouch('wave');
     }
   }
@@ -3995,7 +4005,8 @@ window.mikuCompanion = Object.freeze({
     const moody = relationship.offended && CHEERFUL_ACTIONS.has(action);
     if (moody || reducedMotion.matches) {
       if (!state.reaction?.touch) state.reaction = null;
-    } else if (action === 'wave' || action === 'stretch' || action === 'rest') startReaction(action);
+    } else if (action === 'wave') startReaction(waveOrNod(currentElapsed()));
+    else if (action === 'stretch' || action === 'rest') startReaction(action);
     else if (action === 'nod') startReaction('hello');
     else if (GESTURE_TYPES.includes(action)) {
       // Body language for what she's saying; the words are already in the bubble.

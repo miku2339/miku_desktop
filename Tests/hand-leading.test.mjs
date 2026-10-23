@@ -63,12 +63,15 @@ function harness({ offended = false, scene = 'shibuya' } = {}) {
       releasePointerCapture: () => {}
     },
     window: { innerWidth: 1600, innerHeight: 1000 },
-    CAMERA_HEIGHT: 29
+    CAMERA_HEIGHT: 29,
+    WAVE_GAP: 150,
+    TOUCH_WAVE_GAP: 20
   });
   vm.runInContext([
     sourceFor('holdAnchor'),
     sourceFor('handLeadingAnchor'),
     sourceFor('moveGrabbedPointer'),
+    sourceFor('waveOrNod'),
     sourceFor('finishPointer'),
     'globalThis.api = { handLeadingAnchor, moveGrabbedPointer, finishPointer };'
   ].join('\n'), context);

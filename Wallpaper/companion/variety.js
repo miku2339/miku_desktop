@@ -94,7 +94,8 @@ const IDLE_ACTIONS = [
   { id: 'walk', weight: 2.6 },
   { id: 'lookAround', weight: 1.6 },
   { id: 'hum', weight: 1.4 },
-  { id: 'wave', weight: 1 },
+  // Waving at nobody in particular: now and then, not often.
+  { id: 'wave', weight: 0.25 },
   { id: 'stretch', weight: 0.9 },
   { id: 'rest-standing', weight: 1 },
   { id: 'dance', weight: 1.1 },

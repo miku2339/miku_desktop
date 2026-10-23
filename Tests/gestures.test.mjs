@@ -158,7 +158,7 @@ test('clap meets and separates open palms in front of the chest without crossing
   const closedGap = closedLeft.palm.distanceTo(closedRight.palm);
 
   t.diagnostic(`vertical left elbow/palm/tip ${closedLeft.elbow.y.toFixed(3)}/${closedLeft.palm.y.toFixed(3)}/${closedLeft.fingertip.y.toFixed(3)}, right ${closedRight.elbow.y.toFixed(3)}/${closedRight.palm.y.toFixed(3)}/${closedRight.fingertip.y.toFixed(3)}`);
-  assert.ok(closedLeft.wrist.x > closedRight.wrist.x, `wrists cross at clap contact: ${closedLeft.wrist.x}, ${closedRight.wrist.x}; palms ${closedLeft.palm.toArray()}, ${closedRight.palm.toArray()}; gap ${closedGap}`);
+  assert.ok(closedLeft.wrist.x - closedRight.wrist.x > 0.6, `wrists too close (the cuffs collide) or crossed at clap contact: ${closedLeft.wrist.x}, ${closedRight.wrist.x}; palms ${closedLeft.palm.toArray()}, ${closedRight.palm.toArray()}; gap ${closedGap}`);
   assert.ok(Math.abs(closedLeft.palm.y - 14.9) < 1.2, `left palm height ${closedLeft.palm.y}`);
   assert.ok(Math.abs(closedRight.palm.y - 14.9) < 1.2, `right palm height ${closedRight.palm.y}`);
   assert.ok(closedLeft.palm.z > 0.8 && closedRight.palm.z > 0.8, 'palms are not in front of the chest');
@@ -169,6 +169,9 @@ test('clap meets and separates open palms in front of the chest without crossing
     assert.ok(hand.palm.y > hand.elbow.y + 0.15, `forearm does not rise toward the palm: ${hand.elbow.y} -> ${hand.palm.y}`);
   }
   assert.ok(Math.abs(closedLeft.normal.x) > 0.65 && Math.abs(closedRight.normal.x) > 0.65, `palm planes do not face across the chest: ${closedLeft.normal.toArray()}, ${closedRight.normal.toArray()}`);
+  // Palms, not the backs of the hands, meet: on this rig that is a negative x normal for both
+  // (the index-to-little axis flips between hands, so the cross product doesn't mirror).
+  assert.ok(closedLeft.normal.x < 0 && closedRight.normal.x < 0, `the backs of the hands meet instead of the palms: ${closedLeft.normal.toArray()}, ${closedRight.normal.toArray()}`);
   assert.ok(closedLeft.wristBend < 0.35 && closedRight.wristBend < 0.35, 'wrist bend is too sharp');
 
   poseClap(rig, 0);
@@ -178,4 +181,74 @@ test('clap meets and separates open palms in front of the chest without crossing
   assert.ok(openLeft.wrist.x > openRight.wrist.x, 'wrists cross while hands separate');
   assert.ok(openGap > closedGap + 0.35, `palm gap does not animate: ${closedGap} -> ${openGap}`);
   t.diagnostic(`closed gap ${closedGap.toFixed(3)}, open gap ${openGap.toFixed(3)}, palms y ${closedLeft.palm.y.toFixed(3)}/${closedRight.palm.y.toFixed(3)}, z ${closedLeft.palm.z.toFixed(3)}/${closedRight.palm.z.toFixed(3)}, wrist x ${closedLeft.wrist.x.toFixed(3)}/${closedRight.wrist.x.toFixed(3)}, normals x ${closedLeft.normal.x.toFixed(3)}/${closedRight.normal.x.toFixed(3)}, wrist bend ${closedLeft.wristBend.toFixed(3)}/${closedRight.wristBend.toFixed(3)}`);
+});
+
+function poseGesture(rig, name, progress, variant = {}) {
+  resetRig(rig);
+  applyBaseArms(rig);
+  const gestures = createGestures({
+    rotateBone: (...args) => rotateBone(rig, ...args),
+    twistBone: (...args) => twistBone(rig, ...args),
+    offsetBone: () => {},
+    setMorph: () => {},
+    setSmile: () => {},
+    scaleMorph: () => {},
+    blinkAmount: () => 0,
+    easeBetween: (value, start, end) => smoothstep((value - start) / (end - start)),
+    envelope: () => 1,
+    symbol: () => {},
+    say: () => {},
+    setTurnOffset: () => {},
+    lift: () => {}
+  });
+  gestures[name](progress, 0, { side: '右', ...variant });
+  applyGrantRotations(rig);
+  rig.model.updateMatrixWorld(true);
+}
+
+// Which way the palm faces: the way the fingertips move when the fingers start to curl
+// (towards the palm: -z on the left, +z on the right), minus any movement along the hand.
+function palmFacing(rig, side) {
+  const world = name => rig.bones.get(`${side}${name}`).getWorldPosition(new THREE.Vector3());
+  const wrist = world('手首');
+  const knuckle = world('中指１');
+  const tip = world('中指３');
+  const along = knuckle.clone().sub(wrist).normalize();
+  for (const finger of ['人指', '中指', '薬指', '小指']) rotateBone(rig, `${side}${finger}１`, 0, 0, (side === '右' ? 1 : -1) * 0.1);
+  rig.model.updateMatrixWorld(true);
+  const moved = world('中指３').sub(tip);
+  const palm = moved.addScaledVector(along, -moved.dot(along)).normalize();
+  return { palm, along, centre: wrist.clone().lerp(knuckle, 0.7), elbow: world('ひじ'), wrist };
+}
+
+test('hands by the face show the palm the right way, not the back of the hand or the cuff', () => {
+  const rig = loadRig();
+  for (const [name, progress] of [['yawn', 0.4], ['think', 0.5], ['laugh', 0.5], ['surprised', 0.5]]) {
+    poseGesture(rig, name, progress, { style: 'plain' });
+    const sides = name === 'surprised' ? ['左', '右'] : ['右'];
+    for (const side of sides) {
+      const hand = palmFacing(rig, side);
+      assert.ok(hand.palm.z < -0.5, `${name} ${side}: the palm does not face her (back of the hand to her face) ${hand.palm.toArray()}`);
+      assert.ok(hand.along.y > 0.5, `${name} ${side}: fingers point into her face instead of up ${hand.along.toArray()}`);
+      assert.ok(hand.centre.z > 1.3, `${name} ${side}: hand is behind her face (${hand.centre.z})`);
+      const forearm = hand.wrist.clone().sub(hand.elbow).normalize();
+      assert.ok(forearm.y > 0.5, `${name} ${side}: forearm points at the camera ${forearm.toArray()}`);
+    }
+    if (name === 'surprised') {
+      const left = palmFacing(rig, '左');
+      const right = palmFacing(rig, '右');
+      assert.ok(left.elbow.x > right.elbow.x + 1, 'forearms cross in front of her chest');
+    }
+  }
+});
+
+test('the idol "V" shows the palm and catching the rain holds the palm up', () => {
+  const rig = loadRig();
+  poseGesture(rig, 'idolPose', 0.5);
+  const v = palmFacing(rig, '右');
+  assert.ok(v.palm.z > 0.6, `idol V: palm does not face the front ${v.palm.toArray()}`);
+  assert.ok(v.along.y > 0.5, `idol V: fingers do not point up ${v.along.toArray()}`);
+  poseGesture(rig, 'skyLook', 0.5);
+  const sky = palmFacing(rig, '右');
+  assert.ok(sky.palm.y > 0.7, `rain check: palm does not face up ${sky.palm.toArray()}`);
 });

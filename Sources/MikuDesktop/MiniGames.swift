@@ -113,7 +113,7 @@ final class RPSSession: GameSession {
     func start() -> [GameLine] {
         [GameLine(
             text: MiniGame.text("嚟玩包剪揼！三盤兩勝～包、剪、揼！你出咩？", "Rock-paper-scissors! Best of three~ Rock, paper, scissors… what's yours?", "じゃんけんしよ！三本勝負～じゃん、けん…何出す？"),
-            emotion: "happy", action: "wave", choices: choices
+            emotion: "happy", action: "cheer", choices: choices
         )]
     }
 

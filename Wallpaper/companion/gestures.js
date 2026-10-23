@@ -41,20 +41,28 @@ export function createGestures(api) {
   };
   const point = (side, amount) => curl(side, 1.35 * amount, ['中指', '薬指', '小指'], 1.1 * amount);
 
-  // Hand up by the face. Calibrated against the model: forward swing, raise, elbow bend.
+  // Hand up by the face, fitted against the model so the palm (not the back of the hand
+  // or the sleeve cuff) faces the right way: shoulder lift, upper arm forward / raise, elbow,
+  // forearm twist, wrist. Left-side values; the right side mirrors.
   const FACE_SPOTS = {
-    chin: { forward: 1.4, raise: 0.8, elbow: 2.7 },
-    mouth: { forward: 1.45, raise: 0.95, elbow: 2.75 },
-    temple: { forward: 0.8, raise: 1.15, elbow: 2.25 }
+    // Covering her mouth: palm on the mouth, fingers up (yawn, giggle, sneeze).
+    mouth: { shoulder: 0.169, armY: 1.235, armZ: 0.04, elbowY: -1.175, elbowZ: 2.899, twist: 0.973, wristX: -0.49, wristZ: 0.36 },
+    // Thinking: a loosely curled hand under the chin, palm towards it.
+    chin: { shoulder: -0.169, armY: 0.942, armZ: -0.012, elbowY: -0.751, elbowZ: 3.106, twist: 1.145, wristX: -0.265, wristZ: 0.586 },
+    // One of both hands up by her mouth, elbows out so the forearms don't cross (a gasp).
+    gasp: { shoulder: 0.546, armY: 1.567, armZ: -0.407, elbowY: 2.119, elbowZ: 2.026, twist: -0.468, wristX: 0.395, wristZ: -0.063 },
+    // Beside the eye, palm to the front (the idol "V").
+    temple: { shoulder: 0.209, armY: 0.953, armZ: 1.065, elbowY: 0.658, elbowZ: 1.694, twist: -0.352, wristX: -0.196, wristZ: -0.55 }
   };
   function handToFace(side, weight, spot = 'chin') {
     if (weight <= 0.001) return;
     const s = mirror(side);
-    const { forward, raise, elbow } = FACE_SPOTS[spot] ?? FACE_SPOTS.chin;
-    rotateBone(`${side}肩`, 0, 0, s * 0.06 * weight);
-    rotateBone(`${side}腕`, 0, -s * forward * weight, s * raise * weight);
-    rotateBone(`${side}ひじ`, 0, 0, s * elbow * weight);
-    rotateBone(`${side}手首`, 0, 0, s * 0.2 * weight);
+    const p = FACE_SPOTS[spot] ?? FACE_SPOTS.chin;
+    rotateBone(`${side}肩`, 0, 0, s * p.shoulder * weight);
+    rotateBone(`${side}腕`, 0, -s * p.armY * weight, s * p.armZ * weight);
+    rotateBone(`${side}ひじ`, 0, -s * p.elbowY * weight, s * p.elbowZ * weight);
+    twistBone(`${side}ひじ`, `${side}手首`, s * p.twist * weight);
+    rotateBone(`${side}手首`, s * p.wristX * weight, 0, s * p.wristZ * weight);
   }
 
   function armUp(side, weight, { height = 1, bend = 0.35 } = {}) {
@@ -126,7 +134,6 @@ export function createGestures(api) {
     // Peace sign beside the eye, a wink, head tilted.
     const s = mirror(side);
     handToFace(side, weight, 'temple');
-    twistBone(`${side}ひじ`, `${side}手首`, -s * 0.9 * weight);
     peace(side, weight);
     rotateBone('頭', 0, 0, s * 0.12 * weight);
     rotateBone('上半身', 0, 0, s * 0.05 * weight);
@@ -339,9 +346,12 @@ export function createGestures(api) {
     rotateBone('首', -0.12 * look, 0, 0);
     rotateBone('頭', -0.2 * look, -s * 0.05 * look, 0);
     rotateBone('両目', -0.1 * look, 0, 0);
-    rotateBone(`${side}腕`, 0, -s * 0.95 * palm, -s * 0.05 * palm);
-    rotateBone(`${side}ひじ`, 0, -s * 0.9 * palm, 0);
-    twistBone(`${side}ひじ`, `${side}手首`, s * 1.4 * palm);
+    // Hand out in front, palm up (fitted against the model).
+    rotateBone(`${side}肩`, 0, 0, -s * 0.158 * palm);
+    rotateBone(`${side}腕`, 0, -s * 0.198 * palm, -s * 0.38 * palm);
+    rotateBone(`${side}ひじ`, 0, -s * 1.213 * palm, s * 0.942 * palm);
+    twistBone(`${side}ひじ`, `${side}手首`, -s * 1.303 * palm);
+    rotateBone(`${side}手首`, s * 0.596 * palm, 0, s * 0.292 * palm);
     curl(side, 0.25 * palm);
     setSmile(Math.max(0.12, 0.5 * look));
     setMorph('あ', 0.15 * look);
@@ -437,12 +447,16 @@ export function createGestures(api) {
     const weight = envelope(progress);
     const beat = span(progress, 0.15, 0.85, 0.08);
     const open = 0.5 + 0.5 * Math.cos(elapsed * Math.PI * 2 * 2.6);
+    // Palms facing each other (fingers curl towards the other hand), elbows down, forearms
+    // up, wrists apart so the hands meet in a V and the wide cuffs don't run into each
+    // other; fitted against the model so the forearm twist stays small.
     for (const side of ['左', '右']) {
       const s = mirror(side);
       rotateBone(`${side}肩`, 0, 0, s * 0.05 * weight);
-      rotateBone(`${side}腕`, 0, -s * (1.05 - 0.12 * open * beat) * weight, (s * 0.23 + 0.08) * weight);
-      rotateBone(`${side}ひじ`, 0, -s * (1.14 - 0.28 * open * beat) * weight, s * 0.65 * weight);
-      twistBone(`${side}ひじ`, `${side}手首`, s * 1.35 * weight);
+      rotateBone(`${side}腕`, 0, -s * (1.05 - 0.12 * open * beat) * weight, (-s * 0.43 + 0.08) * weight);
+      rotateBone(`${side}ひじ`, 0, -s * (1.1 - 0.28 * open * beat) * weight, s * 1.32 * weight);
+      twistBone(`${side}ひじ`, `${side}手首`, -s * 0.66 * weight);
+      rotateBone(`${side}手首`, 0, 0, -s * 0.02 * weight);
     }
     setSmile(Math.max(0.12, 0.85 * weight));
     setMorph('笑い', 0.4 * weight);
@@ -504,7 +518,7 @@ export function createGestures(api) {
     const hands = span(progress, 0.04, 0.85, 0.1);
     lift(0.6 * jump);
     offsetBone('センター', 0, 0, -0.3 * hands);
-    for (const side of ['左', '右']) handToFace(side, hands, 'chin');
+    for (const side of ['左', '右']) handToFace(side, hands, 'gasp');
     rotateBone('上半身', -0.06 * hands, 0, 0);
     ahoge(-0.5 * jump);
     setMorph('びっくり', 0.9 * span(progress, 0, 0.5, 0.06));

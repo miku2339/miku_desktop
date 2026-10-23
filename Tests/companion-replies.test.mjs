@@ -284,6 +284,19 @@ test('every supported reply action routes to its intended reaction', () => {
   }
 });
 
+test('she waves once for hello, then nods instead of waving again and again', () => {
+  const harness = createHarness();
+  harness.setElapsed(10);
+  harness.api.receiveReply({ emotion: 'happy', action: 'wave', text: '嗨！' });
+  assert.equal(harness.state.reaction?.type, 'wave');
+  harness.setElapsed(40);
+  harness.api.receiveReply({ emotion: 'happy', action: 'wave', text: '對呀！' });
+  assert.equal(harness.state.reaction?.type, 'hello', 'a second wave half a minute later is a nod');
+  harness.setElapsed(10 + 151);
+  harness.api.receiveReply({ emotion: 'happy', action: 'wave', text: '掰掰～' });
+  assert.equal(harness.state.reaction?.type, 'wave', 'a while later she can wave again');
+});
+
 test('offended cheerful replies do not replace an active touch reaction', () => {
   for (const action of ['clap', 'laugh', 'dance', 'shy']) {
     const harness = createHarness();

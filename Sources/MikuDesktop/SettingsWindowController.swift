@@ -57,8 +57,8 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
     private let speechStopButton = MikuPillButton(frame: .zero)
     private let speechTestButton = MikuPillButton(frame: .zero)
     private let speechStatusLabel = NSTextField.mikuLabel("", size: 12, color: MikuTheme.secondaryText)
-    private let speechTokenField = NSSecureTextField()
-    private let speechTokenButton = MikuPillButton(frame: .zero)
+    private let speechEndpointField = NSTextField()
+    private let speechModelCombo = NSComboBox()
     private let interactionSwitch = NSSwitch()
     private let ambientSwitch = NSSwitch()
     private let ambientHint = NSTextField.mikuLabel("", size: 11.5, color: MikuTheme.secondaryText)
@@ -89,6 +89,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
     private var sectionLabels: [String: NSTextField] = [:]
     private var connectionTask: Task<Void, Never>?
     private var speechTask: Task<Void, Never>?
+    private var discoveredSpeechModels: [String] = []
 
     init(configuration: AIConfiguration? = nil) {
         self.configuration = configuration ?? AIConfiguration.shared
@@ -156,7 +157,9 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         speechPreviewButton.title = L10n.text("speechPreview")
         speechStopButton.title = L10n.text("speechStop")
         speechTestButton.title = L10n.text("testConnection")
-        speechTokenButton.title = L10n.text("speechSaveToken")
+        speechEndpointField.placeholderString = MikuSpeechAuthorization.defaultEndpoint
+        speechModelCombo.placeholderString = L10n.text("speechModelPlaceholder")
+        updateSpeechModels(discoveredSpeechModels)
         openLoginSettingsButton.title = L10n.text("openSystemSettings")
         interactionHint.stringValue = L10n.text("interactionHint")
         ambientHint.stringValue = L10n.text("ambientHint")
@@ -433,8 +436,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         for (button, symbol, action) in [
             (speechPreviewButton, "speaker.wave.2.fill", #selector(previewSpeech)),
             (speechStopButton, "stop.fill", #selector(stopSpeech)),
-            (speechTestButton, "network", #selector(testSpeechConnection)),
-            (speechTokenButton, "key.fill", #selector(saveSpeechToken))
+            (speechTestButton, "network", #selector(testSpeechConnection))
         ] {
             button.style = .soft
             button.symbolName = symbol
@@ -446,10 +448,15 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         speechStatusLabel.lineBreakMode = .byWordWrapping
         speechStatusLabel.maximumNumberOfLines = 3
         speechStatusLabel.preferredMaxLayoutWidth = 250
-        speechTokenField.bezelStyle = .roundedBezel
-        speechTokenField.font = MikuTheme.font(13)
-        speechTokenField.target = self
-        speechTokenField.action = #selector(saveSpeechToken)
+        for field in [speechEndpointField, speechModelCombo] {
+            field.font = MikuTheme.font(13)
+            field.target = self
+            field.action = #selector(speechConfigurationChanged)
+        }
+        speechEndpointField.bezelStyle = .roundedBezel
+        speechModelCombo.isEditable = true
+        speechModelCombo.completes = true
+        speechModelCombo.numberOfVisibleItems = 8
 
         interactionSwitch.target = self
         interactionSwitch.action = #selector(interactionChanged)
@@ -532,16 +539,13 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         speechConnection.orientation = .horizontal
         speechConnection.alignment = .centerY
         speechConnection.spacing = 8
-        let speechToken = NSStackView(views: [speechTokenField, speechTokenButton])
-        speechToken.orientation = .horizontal
-        speechToken.alignment = .centerY
-        speechToken.spacing = 8
         let speechCard = card("sectionSpeech", symbol: "waveform", rows: [
             row("speechEnabled", speechSwitch),
             row("speechLanguage", speechLanguagePopup),
+            row("speechEndpoint", speechEndpointField),
+            row("speechModel", speechModelCombo),
             row("speechPlayback", speechButtons),
-            row("speechConnection", speechConnection),
-            row("speechAccessToken", speechToken)
+            row("speechConnection", speechConnection)
         ])
 
         let interactionStack = NSStackView(views: [interactionSwitch, interactionHint])
@@ -669,7 +673,8 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
             footerLabel.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -44),
             customField.widthAnchor.constraint(greaterThanOrEqualToConstant: 280),
             endpointField.widthAnchor.constraint(greaterThanOrEqualToConstant: 280),
-            speechTokenField.widthAnchor.constraint(greaterThanOrEqualToConstant: 190),
+            speechEndpointField.widthAnchor.constraint(greaterThanOrEqualToConstant: 280),
+            speechModelCombo.widthAnchor.constraint(greaterThanOrEqualToConstant: 280),
             connectionDot.widthAnchor.constraint(equalToConstant: 8),
             connectionDot.heightAnchor.constraint(equalToConstant: 8)
         ]
@@ -766,6 +771,9 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         select(configuration.interfaceLanguage, in: interfaceLanguagePopup)
         endpointField.stringValue = configuration.endpoint
         modelField.stringValue = configuration.model
+        speechEndpointField.stringValue = MikuSpeech.shared.endpoint
+        speechModelCombo.stringValue = displayedSpeechModel(MikuSpeech.shared.configuredModelID)
+        updateSpeechModels([])
         refreshSpeech()
         refreshLoginState()
     }
@@ -870,16 +878,27 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
     }
 
     @objc private func testSpeechConnection() {
+        do {
+            try saveSpeechConfiguration()
+        } catch {
+            speechStatusLabel.stringValue = error.localizedDescription
+            return
+        }
         speechTask?.cancel()
         speechTestButton.isEnabled = false
         speechStatusLabel.stringValue = L10n.text("statusChecking")
         speechTask = Task { [weak self] in
             guard let self else { return }
             do {
-                try await MikuSpeech.shared.testConnection()
-                speechStatusLabel.stringValue = L10n.text("speechConnectionOK")
+                let models = try await MikuSpeech.shared.testConnection()
+                guard !Task.isCancelled else { return }
+                discoveredSpeechModels = models
+                updateSpeechModels(models)
+                speechStatusLabel.stringValue = models.isEmpty
+                    ? L10n.text("speechConnectionOKManualModel")
+                    : L10n.format("speechConnectionOKModels", String(models.count))
             } catch {
-                speechStatusLabel.stringValue = L10n.text("speechConnectionFailed")
+                speechStatusLabel.stringValue = error.localizedDescription
             }
             guard !Task.isCancelled else { return }
             speechTask = nil
@@ -887,37 +906,53 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         }
     }
 
-    @objc private func saveSpeechToken() {
-        let token = speechTokenField.stringValue
-        guard !token.isEmpty else { return }
+    @objc private func speechConfigurationChanged() {
         do {
-            try MikuSpeech.shared.storeAccessToken(token)
-            speechTokenField.stringValue = ""
+            try saveSpeechConfiguration()
             refreshSpeech()
-            speechStatusLabel.stringValue = L10n.text("speechTokenSaved")
         } catch {
-            speechStatusLabel.stringValue = L10n.text("speechTokenSaveFailed")
+            speechStatusLabel.stringValue = error.localizedDescription
         }
     }
 
     private func refreshSpeech() {
         let speech = MikuSpeech.shared
-        let hasAccessToken = speech.hasAccessToken
         speechSwitch.state = speech.enabled ? .on : .off
         select(speech.language.rawValue, in: speechLanguagePopup)
-        speechPreviewButton.isEnabled = hasAccessToken && speech.enabled
+        speechPreviewButton.isEnabled = speech.hasConfiguredModel && speech.enabled
         speechStopButton.isEnabled = speech.isBusy
         speechTestButton.isEnabled = speechTask == nil
-        speechTokenField.placeholderString = L10n.text(
-            hasAccessToken ? "speechTokenReplacePlaceholder" : "speechTokenPlaceholder"
-        )
-        if !hasAccessToken {
-            speechStatusLabel.stringValue = L10n.text("speechTokenMissing")
-        } else if speech.status.isEmpty {
+        if speech.status.isEmpty {
             speechStatusLabel.stringValue = L10n.text("speechReady")
         } else {
             speechStatusLabel.stringValue = speech.status
         }
+    }
+
+    private func saveSpeechConfiguration() throws {
+        let value = speechModelCombo.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        let modelID = value == L10n.text("speechAutomaticModel") ? MikuSpeech.automaticModelID : value
+        try MikuSpeech.shared.configure(
+            endpoint: speechEndpointField.stringValue,
+            modelID: modelID
+        )
+        speechEndpointField.stringValue = MikuSpeech.shared.endpoint
+        speechModelCombo.stringValue = displayedSpeechModel(MikuSpeech.shared.configuredModelID)
+    }
+
+    private func displayedSpeechModel(_ modelID: String) -> String {
+        modelID == MikuSpeech.automaticModelID ? L10n.text("speechAutomaticModel") : modelID
+    }
+
+    private func updateSpeechModels(_ models: [String]) {
+        let configured = MikuSpeech.shared.configuredModelID
+        let displayed = displayedSpeechModel(configured)
+        speechModelCombo.removeAllItems()
+        if configured == MikuSpeech.automaticModelID || MikuSpeech.ownerModelIDs.isSubset(of: Set(models)) {
+            speechModelCombo.addItem(withObjectValue: L10n.text("speechAutomaticModel"))
+        }
+        speechModelCombo.addItems(withObjectValues: models)
+        speechModelCombo.stringValue = displayed
     }
 
     @objc private func testConnection() {

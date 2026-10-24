@@ -114,6 +114,7 @@ For safety, only loopback (local) endpoints are accepted. When the settings matc
 
 - Conversations, memories, diary entries, and chat images are stored in `~/Library/Application Support/MikuDesktop/`. Preferences such as personality and language are stored in macOS user defaults.
 - Chat messages and any observations you turn on go only to the local AI. Screen captures for proactive observations are never saved and need Screen Recording permission; the music and video options may need macOS Automation permission.
+- When reading aloud is enabled, text goes only to the configured local TTS endpoint. Supply your own voice model; the app package contains no voice weights or reference audio.
 - Resetting memory clears conversations, summaries, remembered facts, interaction history, and relationship data, but keeps her personality and other settings. You can restore from the backup afterwards or delete it permanently.
 - Manually saved photos and song favorites are kept separately and managed in their own windows; conversation-memory resets leave them intact. Photos contain only Miku and her scene and are resized into `album/`; knowledge and favorites live in `Knowledge/`.
 - The app makes the following network connections:

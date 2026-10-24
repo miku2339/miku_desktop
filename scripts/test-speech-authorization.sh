@@ -11,7 +11,4 @@ swiftc \
   -o "$temporary_dir/miku-speech-authorization-tests"
 "$temporary_dir/miku-speech-authorization-tests"
 
-swiftc -typecheck \
-  "$project_root/Sources/MikuDesktop/Localization.swift" \
-  "$project_root/Sources/MikuDesktop/MikuSpeechAuthorization.swift" \
-  "$project_root/Sources/MikuDesktop/MikuSpeech.swift"
+swiftc -typecheck "$project_root"/Sources/MikuDesktop/*.swift

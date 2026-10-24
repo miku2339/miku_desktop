@@ -103,12 +103,9 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
     enum SpeechError: LocalizedError {
         case invalidEndpoint
         case connectionUnavailable
-        case launcherUnavailable
-        case launcherFailed
         case invalidResponse
-        case wrongProfile
         case serverResponse(Int)
-        case missingAccessToken
+        case missingModel
         case unverifiedConnection
         case emptyText
         case textTooLong
@@ -121,18 +118,12 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
                 return L10n.text("speechErrorInvalidEndpoint")
             case .connectionUnavailable:
                 return L10n.text("speechErrorConnectionUnavailable")
-            case .launcherUnavailable:
-                return L10n.text("speechErrorLauncherUnavailable")
-            case .launcherFailed:
-                return L10n.text("speechErrorLauncherFailed")
             case .invalidResponse:
                 return L10n.text("speechErrorInvalidResponse")
-            case .wrongProfile:
-                return L10n.text("speechErrorWrongProfile")
             case let .serverResponse(status):
                 return L10n.format("speechErrorHTTP", String(status))
-            case .missingAccessToken:
-                return L10n.text("speechErrorMissingToken")
+            case .missingModel:
+                return L10n.text("speechErrorMissingModel")
             case .unverifiedConnection:
                 return L10n.text("speechErrorUnverifiedConnection")
             case .emptyText:
@@ -150,7 +141,7 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
     var enabled: Bool {
         didSet {
             guard enabled != oldValue else { return }
-            defaults.set(enabled, forKey: "speechEnabled")
+            defaults.set(enabled, forKey: Self.enabledKey)
             if !enabled {
                 stop()
             } else {
@@ -162,9 +153,21 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
     var language: Language {
         didSet {
             guard language != oldValue else { return }
-            defaults.set(language.rawValue, forKey: "speechLanguage")
+            defaults.set(language.rawValue, forKey: Self.languageKey)
             notifyStateChanged()
         }
+    }
+
+    var endpoint: String {
+        defaults.string(forKey: Self.endpointKey) ?? MikuSpeechAuthorization.defaultEndpoint
+    }
+
+    var configuredModelID: String {
+        defaults.string(forKey: Self.modelKey) ?? ""
+    }
+
+    var hasConfiguredModel: Bool {
+        !configuredModelID.isEmpty
     }
 
     private(set) var isBusy = false
@@ -173,71 +176,32 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
     }
     var onStateChanged: (() -> Void)?
 
+    // 保留舊有擁有者 Keychain 項目與 CLI，相容既有私人設定。
     var hasAccessToken: Bool {
         guard let token = try? MikuSpeechKeychain.load() else { return false }
         return !token.isEmpty
     }
 
-    private struct ConnectionConfiguration: Decodable {
-        let endpoint: String?
-        let launcherPath: String?
-        let launcherConfig: String?
+    static let automaticModelID = "miku-four-language-auto"
+    static let ownerModelIDs: Set<String> = [
+        "miku-gpt-sovits-yue",
+        "miku-gpt-sovits-zh",
+        "miku-gpt-sovits-ja",
+        "miku-gpt-sovits-en"
+    ]
 
-        enum CodingKeys: String, CodingKey {
-            case endpoint
-            case launcherPath = "launcher_path"
-            case launcherConfig = "launcher_config"
-        }
-    }
-
-    private struct HealthResponse: Decodable {
-        let status: String
-        let engineReady: Bool
-        let profileID: String
-        let profileSHA256: String
-        let authRequired: Bool
-
-        enum CodingKeys: String, CodingKey {
-            case status
-            case engineReady = "engine_ready"
-            case profileID = "profile_id"
-            case profileSHA256 = "profile_sha256"
-            case authRequired = "auth_required"
-        }
-    }
-
-    private struct CreateJobRequest: Encodable {
-        let language: String
-        let text: String
-        let seed: Int?
-    }
-
-    private struct JobResponse: Decodable {
-        let id: String
-        let status: String
-        let audioURL: String?
-
-        enum CodingKeys: String, CodingKey {
-            case id
-            case status
-            case audioURL = "audio_url"
-        }
-    }
-
-    private static let profileID = "miku-four-language-gpt-sovits-v2"
-    private static let profileSHA256 = "85a367fe5d21da466e2cb03182561ab11b012a24b2eb342e2bc6e2b64edad145"
-    private static let defaultEndpoint = MikuSpeechAuthorization.officialEndpoint
+    private static let enabledKey = "speechEnabled"
+    private static let languageKey = "speechLanguage"
+    private static let endpointKey = "speechLocalEndpoint"
+    private static let modelKey = "speechLocalModel"
     private static let maximumTextLength = 2_000
     private static let maximumAudioBytes = 64 * 1_024 * 1_024
-    private static let jobIDPattern = try! NSRegularExpression(pattern: "^[0-9a-f]{32}$")
 
     private let defaults: UserDefaults
-    private let loopbackSession: URLSession
-    private let httpsSession: URLSession
+    private let session: URLSession
     private var audioPlayer: AVAudioPlayer?
     private var operationTask: Task<Void, Never>?
     private var generation = UUID()
-    private var bootstrapTask: Task<Void, Error>?
     private var statusKey: String
     private var statusError: Error?
 
@@ -247,32 +211,42 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
 
     init(defaults: UserDefaults) {
         self.defaults = defaults
-        enabled = defaults.object(forKey: "speechEnabled") as? Bool ?? false
-        language = Language(rawValue: defaults.string(forKey: "speechLanguage") ?? "") ?? .automatic
+        enabled = defaults.object(forKey: Self.enabledKey) as? Bool ?? false
+        language = Language(rawValue: defaults.string(forKey: Self.languageKey) ?? "") ?? .automatic
         statusKey = enabled ? "speechReady" : "speechDisabled"
 
-        func configuration(useSystemProxy: Bool) -> URLSessionConfiguration {
-            let configuration = URLSessionConfiguration.ephemeral
-            configuration.httpCookieAcceptPolicy = .never
-            configuration.httpShouldSetCookies = false
-            configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
-            configuration.urlCache = nil
-            configuration.connectionProxyDictionary = useSystemProxy ? nil : [:]
-            configuration.timeoutIntervalForRequest = 20
-            configuration.timeoutIntervalForResource = 120
-            return configuration
-        }
-        loopbackSession = URLSession(
-            configuration: configuration(useSystemProxy: false),
-            delegate: MikuSpeechNoRedirectDelegate(),
-            delegateQueue: nil
-        )
-        httpsSession = URLSession(
-            configuration: configuration(useSystemProxy: true),
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.httpCookieAcceptPolicy = .never
+        configuration.httpShouldSetCookies = false
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        configuration.urlCache = nil
+        configuration.connectionProxyDictionary = [:]
+        configuration.timeoutIntervalForRequest = 20
+        configuration.timeoutIntervalForResource = 120
+        session = URLSession(
+            configuration: configuration,
             delegate: MikuSpeechNoRedirectDelegate(),
             delegateQueue: nil
         )
         super.init()
+    }
+
+    func configure(endpoint: String, modelID: String) throws {
+        let endpoint = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+        let modelID = modelID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedEndpoint = endpoint.hasSuffix("/") ? String(endpoint.dropLast()) : endpoint
+        guard let url = URL(string: normalizedEndpoint) else { throw SpeechError.invalidEndpoint }
+        do {
+            try MikuSpeechAuthorization.validateServiceEndpoint(url)
+        } catch {
+            throw SpeechError.unverifiedConnection
+        }
+        guard modelID.isEmpty || modelID == Self.automaticModelID || MikuSpeechWire.validModelID(modelID) else {
+            throw SpeechError.missingModel
+        }
+        defaults.set(normalizedEndpoint, forKey: Self.endpointKey)
+        defaults.set(modelID, forKey: Self.modelKey)
+        notifyStateChanged()
     }
 
     func speak(_ text: String, language override: Language? = nil) {
@@ -298,7 +272,7 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
 
         let selected = override ?? language
         let resolved = selected == .automatic ? Self.detectLanguage(in: cleaned) : selected
-        start(text: cleaned, language: resolved, seed: nil)
+        start(text: cleaned, language: resolved)
     }
 
     func stop() {
@@ -306,11 +280,35 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
         setState(busy: false, key: enabled ? "speechReady" : "speechDisabled")
     }
 
-    func testConnection() async throws {
-        let token = try accessToken()
+    func testConnection() async throws -> [String] {
         let endpoint = try serviceEndpoint()
-        try await ensureHealthy(endpoint: endpoint)
-        try await authenticate(endpoint: endpoint, token: token)
+        let statusURL = endpoint.appendingPathComponent("models/status")
+        var request = try localRequest(url: statusURL, endpoint: endpoint)
+        request.httpMethod = "GET"
+        let (data, response) = try await self.data(for: request)
+        guard let response = response as? HTTPURLResponse, response.url == statusURL else {
+            throw SpeechError.invalidResponse
+        }
+        if response.statusCode == 200 {
+            do {
+                return try MikuSpeechWire.audioModelIDs(from: data)
+            } catch {
+                throw SpeechError.invalidResponse
+            }
+        }
+        guard response.statusCode == 404 else { throw SpeechError.serverResponse(response.statusCode) }
+
+        let modelsURL = endpoint.appendingPathComponent("models")
+        var fallback = try localRequest(url: modelsURL, endpoint: endpoint)
+        fallback.httpMethod = "GET"
+        let (modelsData, modelsResponse) = try await self.data(for: fallback)
+        try validate(modelsResponse, expectedURL: modelsURL, statusCode: 200)
+        do {
+            try MikuSpeechWire.validateModelsResponse(modelsData)
+        } catch {
+            throw SpeechError.invalidResponse
+        }
+        return []
     }
 
     func storeAccessToken(_ token: String) throws {
@@ -347,31 +345,29 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
             setState(busy: false, key: "speechDisabled")
             return
         }
-        start(text: sample, language: resolved, seed: nil)
+        start(text: sample, language: resolved)
     }
 
-    private func start(text: String, language: Language, seed: Int?) {
+    private func start(text: String, language: Language) {
         let currentGeneration = generation
         setState(busy: true, key: "speechConnecting")
         operationTask = Task { [weak self] in
             guard let self else { return }
             do {
-                let token = try accessToken()
                 let endpoint = try serviceEndpoint()
-                try await ensureHealthy(endpoint: endpoint)
+                let model = try modelID(for: language)
                 try Task.checkCancellation()
                 guard generation == currentGeneration else { return }
                 setState(busy: true, key: "speechGenerating")
                 let audio = try await generateAudio(
                     text: text,
                     language: language,
-                    seed: seed,
-                    endpoint: endpoint,
-                    token: token
+                    model: model,
+                    endpoint: endpoint
                 )
                 try Task.checkCancellation()
                 guard generation == currentGeneration else { return }
-                try play(audio, language: language)
+                try play(audio)
             } catch is CancellationError {
                 return
             } catch {
@@ -392,131 +388,37 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
         audioPlayer = nil
     }
 
-    private func ensureHealthy(endpoint: URL) async throws {
-        do {
-            try await checkHealth(endpoint: endpoint)
-            return
-        } catch {
-            guard Self.isLoopbackHTTP(endpoint), Self.shouldBootstrap(after: error) else { throw error }
-        }
-
-        try await bootstrapConnection()
-        do {
-            try await checkHealth(endpoint: endpoint)
-        } catch let error as SpeechError {
-            throw error
-        } catch {
-            throw SpeechError.connectionUnavailable
-        }
-    }
-
-    private func bootstrapConnection() async throws {
-        if let bootstrapTask {
-            try await bootstrapTask.value
-            return
-        }
-        let task = Task { try await runLauncher() }
-        bootstrapTask = task
-        do {
-            try await task.value
-            bootstrapTask = nil
-        } catch {
-            bootstrapTask = nil
-            throw error
-        }
-    }
-
-    private func checkHealth(endpoint: URL) async throws {
-        let url = endpoint.appendingPathComponent("api/health")
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        let (data, response) = try await self.data(for: request)
-        guard let response = response as? HTTPURLResponse else { throw SpeechError.invalidResponse }
-        guard response.statusCode == 200 else { throw SpeechError.serverResponse(response.statusCode) }
-        let health: HealthResponse
-        do {
-            health = try JSONDecoder().decode(HealthResponse.self, from: data)
-        } catch {
-            throw SpeechError.invalidResponse
-        }
-        guard health.profileID == Self.profileID,
-              health.profileSHA256.lowercased() == Self.profileSHA256,
-              health.authRequired else {
-            throw SpeechError.wrongProfile
-        }
-        guard health.status == "ok", health.engineReady else { throw SpeechError.connectionUnavailable }
-    }
-
-    private func authenticate(endpoint: URL, token: String) async throws {
-        let url = endpoint.appendingPathComponent("api/session")
-        var request = try protectedRequest(url: url, token: token)
-        request.httpMethod = "GET"
-        let (_, response) = try await self.data(for: request)
-        try validate(response, expectedURL: url, statusCode: 200)
-    }
-
     private func generateAudio(
         text: String,
         language: Language,
-        seed: Int?,
-        endpoint: URL,
-        token: String
+        model: String,
+        endpoint: URL
     ) async throws -> Data {
-        let createURL = endpoint.appendingPathComponent("api/jobs")
-        var createRequest = try protectedRequest(url: createURL, token: token)
-        createRequest.httpMethod = "POST"
-        createRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        createRequest.httpBody = try JSONEncoder().encode(CreateJobRequest(
-            language: language.rawValue,
-            text: text,
-            seed: seed
-        ))
-        let (createData, createResponse) = try await self.data(for: createRequest)
-        try validate(createResponse, expectedURL: createURL, statusCode: 202)
-        let created = try decodeJob(createData)
-        guard Self.validJobID(created.id), created.status == "queued" || created.status == "running" else {
+        let url = endpoint.appendingPathComponent("audio/speech")
+        var request = try localRequest(url: url, endpoint: endpoint)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try MikuSpeechWire.speechBody(
+            model: model,
+            input: text,
+            language: language.rawValue
+        )
+        let (audio, response) = try await self.data(for: request, accept: "audio/wav")
+        guard let response = response as? HTTPURLResponse, response.url == url else {
             throw SpeechError.invalidResponse
         }
-
-        let jobURL = endpoint.appendingPathComponent("api/jobs/\(created.id)")
-        let deadline = Date().addingTimeInterval(360)
-        while Date() < deadline {
-            try Task.checkCancellation()
-            var request = try protectedRequest(url: jobURL, token: token)
-            request.httpMethod = "GET"
-            let (data, response) = try await self.data(for: request)
-            try validate(response, expectedURL: jobURL, statusCode: 200)
-            let job = try decodeJob(data)
-            guard job.id == created.id else { throw SpeechError.invalidResponse }
-            switch job.status {
-            case "queued", "running":
-                try await Task.sleep(nanoseconds: 600_000_000)
-            case "failed":
-                throw SpeechError.generationFailed
-            case "succeeded":
-                guard let value = job.audioURL,
-                      let audioURL = URL(string: value, relativeTo: endpoint)?.absoluteURL,
-                      validAudioURL(audioURL, endpoint: endpoint, jobID: created.id) else {
-                    throw SpeechError.invalidResponse
-                }
-                var audioRequest = try protectedRequest(url: audioURL, token: token)
-                audioRequest.httpMethod = "GET"
-                let (audio, audioResponse) = try await self.data(for: audioRequest, accept: "audio/wav")
-                try validate(audioResponse, expectedURL: audioURL, statusCode: 200)
-                guard !audio.isEmpty, audio.count <= Self.maximumAudioBytes else {
-                    throw SpeechError.invalidAudio
-                }
-                return audio
-            default:
-                throw SpeechError.invalidResponse
-            }
+        guard response.statusCode == 200 else { throw SpeechError.serverResponse(response.statusCode) }
+        guard MikuSpeechWire.isAudioContentType(response.value(forHTTPHeaderField: "Content-Type")),
+              response.expectedContentLength <= Int64(Self.maximumAudioBytes),
+              !audio.isEmpty,
+              audio.count <= Self.maximumAudioBytes else {
+            throw SpeechError.invalidAudio
         }
-        throw SpeechError.generationFailed
+        return audio
     }
 
-    private func play(_ data: Data, language: Language) throws {
-        let expectedSampleRate = language == .cantonese ? 48_000 : 32_000
-        guard Self.validWAV(data, sampleRate: expectedSampleRate) else { throw SpeechError.invalidAudio }
+    private func play(_ data: Data) throws {
+        guard MikuSpeechWire.validWAV(data) else { throw SpeechError.invalidAudio }
         let player: AVAudioPlayer
         do {
             player = try AVAudioPlayer(data: data)
@@ -547,21 +449,13 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
     }
 
     private func data(for request: URLRequest, accept: String = "application/json") async throws -> (Data, URLResponse) {
-        guard let url = request.url else { throw SpeechError.invalidEndpoint }
+        guard let url = request.url, MikuSpeechAuthorization.isLoopbackServiceURL(url) else {
+            throw SpeechError.invalidEndpoint
+        }
         var request = request
         request.setValue("MikuDesktop/0.2.0", forHTTPHeaderField: "User-Agent")
         request.setValue(accept, forHTTPHeaderField: "Accept")
-        let session: URLSession
-        switch url.scheme?.lowercased() {
-        case "http":
-            session = loopbackSession
-        case "https":
-            session = httpsSession
-        default:
-            throw SpeechError.invalidEndpoint
-        }
-
-        let mayRetry = request.httpMethod == "GET" && url.path != "/api/session"
+        let mayRetry = request.httpMethod == "GET"
         for attempt in 0..<3 {
             try Task.checkCancellation()
             do {
@@ -577,55 +471,23 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
         throw SpeechError.connectionUnavailable
     }
 
-    private func protectedRequest(url: URL, token: String) throws -> URLRequest {
+    private func localRequest(url: URL, endpoint: URL) throws -> URLRequest {
         do {
-            return try MikuSpeechAuthorization.protectedRequest(url: url, token: token)
+            return try MikuSpeechAuthorization.localRequest(url: url, endpoint: endpoint)
         } catch {
             throw SpeechError.unverifiedConnection
         }
     }
 
     private func validate(_ response: URLResponse, expectedURL: URL, statusCode: Int) throws {
-        guard let response = response as? HTTPURLResponse,
-              response.url == expectedURL else {
+        guard let response = response as? HTTPURLResponse, response.url == expectedURL else {
             throw SpeechError.invalidResponse
         }
         guard response.statusCode == statusCode else { throw SpeechError.serverResponse(response.statusCode) }
     }
 
-    private func decodeJob(_ data: Data) throws -> JobResponse {
-        do {
-            return try JSONDecoder().decode(JobResponse.self, from: data)
-        } catch {
-            throw SpeechError.invalidResponse
-        }
-    }
-
-    private func accessToken() throws -> String {
-        guard let token = try MikuSpeechKeychain.load(), !token.isEmpty else {
-            throw SpeechError.missingAccessToken
-        }
-        return token
-    }
-
-    private func validAudioURL(_ url: URL, endpoint: URL, jobID: String) -> Bool {
-        guard Self.isAllowedServiceOrigin(url),
-              Self.sameOrigin(url, endpoint),
-              url.user == nil,
-              url.password == nil,
-              url.query == nil,
-              url.fragment == nil,
-              url.path == "/api/jobs/\(jobID)/audio" else {
-            return false
-        }
-        return true
-    }
-
     private func serviceEndpoint() throws -> URL {
-        let value = connectionConfiguration()?.endpoint ?? Self.defaultEndpoint
-        guard let url = URL(string: value) else {
-            throw SpeechError.invalidEndpoint
-        }
+        guard let url = URL(string: endpoint) else { throw SpeechError.invalidEndpoint }
         do {
             try MikuSpeechAuthorization.validateServiceEndpoint(url)
         } catch {
@@ -634,60 +496,18 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
         return url
     }
 
-    private func connectionConfiguration() -> ConnectionConfiguration? {
-        guard let data = try? Data(contentsOf: Self.connectionConfigurationURL) else { return nil }
-        return try? JSONDecoder().decode(ConnectionConfiguration.self, from: data)
-    }
-
-    private func runLauncher() async throws {
-        _ = try serviceEndpoint()
-        guard let connection = connectionConfiguration(), let launcher = connection.launcherPath else {
-            throw SpeechError.launcherUnavailable
-        }
-        let launcherURL = try readableFileURL(path: launcher)
-        var arguments = [launcherURL.path, "--no-open"]
-        if let config = connection.launcherConfig {
-            arguments += ["--config", try readableFileURL(path: config).path]
-        }
-
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
-        process.arguments = arguments
-        process.standardInput = FileHandle.nullDevice
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-        do {
-            try process.run()
-        } catch {
-            throw SpeechError.launcherFailed
-        }
-
-        let deadline = Date().addingTimeInterval(35)
-        while process.isRunning, Date() < deadline {
-            do {
-                try await Task.sleep(nanoseconds: 200_000_000)
-            } catch {
-                process.terminate()
-                throw error
+    private func modelID(for language: Language) throws -> String {
+        let configured = configuredModelID
+        guard configured != Self.automaticModelID else {
+            switch language {
+            case .cantonese: return "miku-gpt-sovits-yue"
+            case .mandarin, .automatic: return "miku-gpt-sovits-zh"
+            case .japanese: return "miku-gpt-sovits-ja"
+            case .english: return "miku-gpt-sovits-en"
             }
         }
-        if process.isRunning {
-            process.terminate()
-            throw SpeechError.launcherFailed
-        }
-        guard process.terminationStatus == 0 else { throw SpeechError.launcherFailed }
-    }
-
-    private func readableFileURL(path: String) throws -> URL {
-        guard path.hasPrefix("/") else { throw SpeechError.launcherUnavailable }
-        let url = URL(fileURLWithPath: path).standardizedFileURL
-        var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
-              !isDirectory.boolValue,
-              FileManager.default.isReadableFile(atPath: url.path) else {
-            throw SpeechError.launcherUnavailable
-        }
-        return url
+        guard MikuSpeechWire.validModelID(configured) else { throw SpeechError.missingModel }
+        return configured
     }
 
     private func setState(busy: Bool, key: String) {
@@ -705,41 +525,6 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
 
     private func notifyStateChanged() {
         onStateChanged?()
-    }
-
-    private static var connectionConfigurationURL: URL {
-        let applicationSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return applicationSupport
-            .appendingPathComponent("com.qimake.MikuDesktop", isDirectory: true)
-            .appendingPathComponent("tts-connection.json")
-    }
-
-    private static func isAllowedServiceOrigin(_ url: URL) -> Bool {
-        MikuSpeechAuthorization.isOfficialServiceURL(url)
-    }
-
-    private static func isLoopbackHTTP(_ url: URL) -> Bool {
-        guard url.scheme?.lowercased() == "http", let host = url.host?.lowercased() else { return false }
-        return host == "127.0.0.1" || host == "localhost"
-    }
-
-    private static func sameOrigin(_ lhs: URL, _ rhs: URL) -> Bool {
-        func port(_ url: URL) -> Int? {
-            if let port = url.port { return port }
-            switch url.scheme?.lowercased() {
-            case "http": return 80
-            case "https": return 443
-            default: return nil
-            }
-        }
-        return lhs.scheme?.lowercased() == rhs.scheme?.lowercased()
-            && lhs.host?.lowercased() == rhs.host?.lowercased()
-            && port(lhs) == port(rhs)
-    }
-
-    private static func validJobID(_ value: String) -> Bool {
-        let range = NSRange(value.startIndex..., in: value)
-        return jobIDPattern.firstMatch(in: value, range: range) != nil
     }
 
     private static func isConnectionError(_ error: Error) -> Bool {
@@ -760,13 +545,6 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
             URLError.notConnectedToInternet.rawValue
         ]
         return retryable.contains(value.code)
-    }
-
-    private static func shouldBootstrap(after error: Error) -> Bool {
-        if isConnectionError(error) { return true }
-        guard let error = error as? SpeechError else { return false }
-        if case .connectionUnavailable = error { return true }
-        return false
     }
 
     private static func sanitized(_ text: String) -> String {
@@ -823,57 +601,5 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
             return .english
         }
         return .mandarin
-    }
-
-    private static func validWAV(_ data: Data, sampleRate expectedSampleRate: Int) -> Bool {
-        guard data.count >= 44,
-              ascii(data, offset: 0, count: 4) == "RIFF",
-              ascii(data, offset: 8, count: 4) == "WAVE" else {
-            return false
-        }
-        var offset = 12
-        var validFormat = false
-        var hasAudio = false
-        while offset + 8 <= data.count {
-            let name = ascii(data, offset: offset, count: 4)
-            guard let sizeValue = uint32(data, offset: offset + 4) else { return false }
-            let size = Int(sizeValue)
-            let content = offset + 8
-            guard size >= 0, content <= data.count, size <= data.count - content else { return false }
-            if name == "fmt " {
-                guard size >= 16,
-                      uint16(data, offset: content) == 1,
-                      uint16(data, offset: content + 2) == 1,
-                      uint32(data, offset: content + 4) == UInt32(expectedSampleRate),
-                      uint16(data, offset: content + 14) == 16 else {
-                    return false
-                }
-                validFormat = true
-            } else if name == "data" {
-                hasAudio = size > 0
-            }
-            let paddedSize = size + (size % 2)
-            guard paddedSize <= data.count - content else { return false }
-            offset = content + paddedSize
-        }
-        return validFormat && hasAudio
-    }
-
-    private static func ascii(_ data: Data, offset: Int, count: Int) -> String? {
-        guard offset >= 0, count >= 0, offset <= data.count, count <= data.count - offset else { return nil }
-        return String(data: data.subdata(in: offset..<(offset + count)), encoding: .ascii)
-    }
-
-    private static func uint16(_ data: Data, offset: Int) -> UInt16? {
-        guard offset >= 0, offset + 2 <= data.count else { return nil }
-        return UInt16(data[offset]) | (UInt16(data[offset + 1]) << 8)
-    }
-
-    private static func uint32(_ data: Data, offset: Int) -> UInt32? {
-        guard offset >= 0, offset + 4 <= data.count else { return nil }
-        return UInt32(data[offset])
-            | (UInt32(data[offset + 1]) << 8)
-            | (UInt32(data[offset + 2]) << 16)
-            | (UInt32(data[offset + 3]) << 24)
     }
 }

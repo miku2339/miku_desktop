@@ -256,14 +256,137 @@ export function createProps(THREE) {
 
   function buildWitch() {
     const root = new THREE.Group();
-    const brim = mesh(new THREE.CylinderGeometry(3.3, 3.3, 0.12, 28), toon(0x2a1f3d));
-    const cone = mesh(new THREE.ConeGeometry(1.7, 3.6, 20), toon(0x2a1f3d));
-    cone.position.y = 1.85;
-    cone.rotation.z = -0.12;
-    const band = mesh(new THREE.CylinderGeometry(1.62, 1.72, 0.42, 20, 1, true), toon(TEAL, { side: THREE.DoubleSide }));
-    band.position.y = 0.3;
-    const buckle = mesh(new THREE.BoxGeometry(0.55, 0.45, 0.1), toon(0xf2c94c));
-    buckle.position.set(0, 0.3, 1.7);
+    const cloth = toon(0x2a1f3d);
+
+    // A shallow, uneven curve keeps the brim soft without changing its familiar footprint.
+    const brimGeometry = new THREE.CylinderGeometry(3.3, 3.3, 0.16, 48, 2);
+    const brimPositions = brimGeometry.attributes.position;
+    for (let i = 0; i < brimPositions.count; i += 1) {
+      const x = brimPositions.getX(i);
+      const y = brimPositions.getY(i);
+      const z = brimPositions.getZ(i);
+      const radius = Math.min(1, Math.hypot(x, z) / 3.3);
+      const angle = Math.atan2(z, x);
+      const lift = radius * radius * (
+        0.045 + Math.sin(angle - 0.45) * 0.055 + Math.cos(angle * 2 + 0.35) * 0.022
+      );
+      brimPositions.setXYZ(i, x, y + lift, z * 0.9);
+    }
+    brimPositions.needsUpdate = true;
+    brimGeometry.computeVertexNormals();
+    const brim = mesh(brimGeometry, cloth);
+    brim.name = 'witch-brim';
+
+    const spine = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(0, 0.05, 0),
+      new THREE.Vector3(0.02, 0.85, 0),
+      new THREE.Vector3(-0.08, 1.75, 0.02),
+      new THREE.Vector3(0.12, 2.55, 0.02),
+      new THREE.Vector3(0.48, 3.18, 0.08),
+      new THREE.Vector3(0.98, 3.55, 0.17),
+      new THREE.Vector3(1.42, 3.42, 0.24),
+      new THREE.Vector3(1.72, 2.95, 0.31)
+    ], false, 'catmullrom', 0.5);
+    const bodyRadius = (t, angle = 0) => {
+      const tailTaper = 1 - THREE.MathUtils.smoothstep(t, 0.58, 0.94) * 0.42;
+      return (
+        1.7 * Math.pow(1 - t, 0.78) * tailTaper + 0.012
+      ) * (1 + Math.sin(angle * 3 + 0.7) * 0.015 * (1 - t));
+    };
+    const sweptCloth = (start, end, segments, radiusAt) => {
+      const geometry = new THREE.BufferGeometry();
+      const radialSegments = 24;
+      const positions = [];
+      const indices = [];
+      const forward = new THREE.Vector3(0, 0, 1);
+      let previousNormal = null;
+
+      for (let row = 0; row <= segments; row += 1) {
+        const localT = row / segments;
+        const t = start + (end - start) * localT;
+        const centre = spine.getPointAt(t);
+        const tangent = spine.getTangentAt(t).normalize();
+        const normal = new THREE.Vector3().crossVectors(tangent, forward).normalize();
+        if (previousNormal && normal.dot(previousNormal) < 0) normal.negate();
+        const binormal = new THREE.Vector3().crossVectors(tangent, normal).normalize();
+        previousNormal = normal;
+
+        for (let column = 0; column < radialSegments; column += 1) {
+          const angle = column / radialSegments * Math.PI * 2;
+          const radius = radiusAt(t, angle);
+          positions.push(
+            centre.x + normal.x * Math.cos(angle) * radius + binormal.x * Math.sin(angle) * radius,
+            centre.y + normal.y * Math.cos(angle) * radius + binormal.y * Math.sin(angle) * radius,
+            centre.z + normal.z * Math.cos(angle) * radius + binormal.z * Math.sin(angle) * radius
+          );
+        }
+      }
+      for (let row = 0; row < segments; row += 1) {
+        for (let column = 0; column < radialSegments; column += 1) {
+          const next = (column + 1) % radialSegments;
+          const a = row * radialSegments + column;
+          const b = row * radialSegments + next;
+          const c = (row + 1) * radialSegments + next;
+          const d = (row + 1) * radialSegments + column;
+          indices.push(a, b, d, b, c, d);
+        }
+      }
+      const base = positions.length / 3;
+      const basePoint = spine.getPointAt(start);
+      positions.push(basePoint.x, basePoint.y, basePoint.z);
+      const tip = positions.length / 3;
+      const tipPoint = spine.getPointAt(end);
+      positions.push(tipPoint.x, tipPoint.y, tipPoint.z);
+      const lastRing = segments * radialSegments;
+      for (let column = 0; column < radialSegments; column += 1) {
+        const next = (column + 1) % radialSegments;
+        indices.push(base, next, column);
+        indices.push(tip, lastRing + column, lastRing + next);
+      }
+      geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      geometry.setIndex(indices);
+      geometry.computeVertexNormals();
+      geometry.computeBoundingBox();
+      geometry.computeBoundingSphere();
+      return geometry;
+    };
+
+    const cone = mesh(sweptCloth(0, 1, 30, bodyRadius), cloth);
+    cone.name = 'witch-crown';
+    const band = mesh(sweptCloth(0.035, 0.18, 5, (t, angle) => bodyRadius(t, angle) + 0.045), toon(TEAL));
+    band.name = 'witch-band';
+
+    const roundedRectangle = (path, left, bottom, width, height, radius) => {
+      const right = left + width;
+      const top = bottom + height;
+      path.moveTo(left + radius, bottom);
+      path.lineTo(right - radius, bottom);
+      path.quadraticCurveTo(right, bottom, right, bottom + radius);
+      path.lineTo(right, top - radius);
+      path.quadraticCurveTo(right, top, right - radius, top);
+      path.lineTo(left + radius, top);
+      path.quadraticCurveTo(left, top, left, top - radius);
+      path.lineTo(left, bottom + radius);
+      path.quadraticCurveTo(left, bottom, left + radius, bottom);
+    };
+    const buckleShape = new THREE.Shape();
+    roundedRectangle(buckleShape, -0.38, -0.29, 0.76, 0.58, 0.1);
+    const buckleHole = new THREE.Path();
+    roundedRectangle(buckleHole, -0.24, -0.15, 0.48, 0.3, 0.045);
+    buckleShape.holes.push(buckleHole);
+    const buckleGeometry = new THREE.ExtrudeGeometry(buckleShape, {
+      depth: 0.1,
+      steps: 1,
+      bevelEnabled: true,
+      bevelSegments: 2,
+      bevelSize: 0.025,
+      bevelThickness: 0.025,
+      curveSegments: 4
+    });
+    buckleGeometry.translate(0, 0, -0.05);
+    const buckle = mesh(buckleGeometry, toon(0xf2c94c));
+    buckle.name = 'witch-buckle';
+    buckle.position.set(0, 0.45, 1.66);
     root.add(brim, cone, band, buckle);
     return root;
   }

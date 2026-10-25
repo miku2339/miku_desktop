@@ -2213,7 +2213,6 @@ function updateModel(elapsed) {
   // Standing: feet stay planted while gestures sway her hips (no sliding).
   updateStandingStance(gaitPose, gaitDisabled);
   state.model.updateMatrixWorld(true);
-  placeHandProps(elapsed);
 }
 
 // ---- Props: umbrella, drink, leek, fan, glowsticks, hats ----------------------
@@ -2244,7 +2243,7 @@ const propState = {
 // [x, y, z] per bone, like rotateBone(). Calibrated with screenshots of the model.
 const HOLD_POSES = {
   closedUmbrella: { '右腕': [0, 0.15, 0.05], '右ひじ': [0, 0.35, 0], '右手首': [0, 0, 0] },
-  umbrella: { '右腕': [0.48, 0.5, -0.21], '右ひじ': [-0.67, 1.11, 0], '右手首': [-0.31, 0.38, -0.5] },
+  umbrella: { '右腕': [0.48, 0.5, -0.71], '右ひじ': [-0.63, 0.4, 0.12], '右手首': [-0.87, 0.5, -0.1] },
   drink: { '右腕': [-0.18, -0.36, 0.27], '右ひじ': [0.02, 1.83, -0.2], '右手首': [-0.44, 0.14, -0.19] },
   sip: { '右腕': [-0.45, 0.78, 0.94], '右ひじ': [-0.69, 1.77, -0.62], '右手首': [-0.72, -0.99, 0.71], '頭': [0.06, 0, 0] },
   leek: { '右腕': [-0.21, 0.87, -0.97], '右ひじ': [-0.02, -0.54, -0.4], '右手首': [0.11, -0.5, 0.48] },
@@ -2337,19 +2336,30 @@ const propVectors = {
   toCamera: new THREE.Vector3(0, 0, 1),
   side: new THREE.Vector3(),
   forward: new THREE.Vector3(),
-  basis: new THREE.Matrix4(),
-  tilt: new THREE.Quaternion(),
-  tiltEuler: new THREE.Euler()
+  basis: new THREE.Matrix4()
 };
 
+const umbrellaFitVectors = {
+  inverse: new THREE.Matrix4(),
+  relative: new THREE.Matrix4(),
+  vertex: new THREE.Vector3(),
+  head: new THREE.Vector3(),
+  offset: new THREE.Vector3()
+};
+const hatLocalClearancePoints = new WeakMap();
+
 // How props sit in her hand (model units). Calibrated with close-up screenshots.
-const PROP_FIT = { umbrellaLength: 8.2, umbrellaGrip: 0.55, cupOut: 0.2, cupAlong: 0.2, cupDrop: 0.4, cupUpright: 0.7, leekGrip: 1.4, fanGrip: 0.45 };
+const PROP_FIT = {
+  umbrellaLength: 9.9, umbrellaMaxLength: 15, umbrellaGrip: 0.55,
+  umbrellaHeadTop: 1.6, umbrellaCanopyDepth: 1.95, umbrellaCanopyRadius: 5.4, umbrellaClearance: 0.25,
+  cupOut: 0.2, cupAlong: 0.2, cupDrop: 0.4, cupUpright: 0.7, leekGrip: 1.4, fanGrip: 0.45
+};
 // Leans the twirling leek away from her head (radians on the wrist).
 const LEEK_LEAN = -0.2;
 // How tightly she grips each prop (0 open … 1 fist).
 const HOLD_GRIPS = { closedUmbrella: 0.85, umbrella: 0.85, drink: 0.8, leek: 0.85, fan: 0.85, glowsticks: 0.85 };
 // Forearm roll per prop so the fist faces the right way (radians, like twistBone()).
-const HOLD_TWIST = { umbrella: 0.54, drink: 0.55, leek: 0.47, fan: 0.61, glowsticks: 0.45 };
+const HOLD_TWIST = { umbrella: 0.4, drink: 0.55, leek: 0.47, fan: 0.61, glowsticks: 0.45 };
 
 const fistVectors = {
   index: new THREE.Vector3(),
@@ -2432,10 +2442,76 @@ function orientAlong(object, direction, facing) {
   object.quaternion.setFromRotationMatrix(v.basis);
 }
 
+function wornHatClearancePoints(hat) {
+  if (!hat?.visible) return null;
+  let points = hatLocalClearancePoints.get(hat);
+  if (!points) {
+    hat.updateWorldMatrix(true, true);
+    const v = umbrellaFitVectors;
+    const values = [];
+    v.inverse.copy(hat.matrixWorld).invert();
+    hat.traverse(child => {
+      const geometry = child.isMesh ? child.geometry : null;
+      if (!geometry) return;
+      if (!geometry.boundingBox) geometry.computeBoundingBox();
+      v.relative.multiplyMatrices(v.inverse, child.matrixWorld);
+      for (const x of [geometry.boundingBox.min.x, geometry.boundingBox.max.x]) {
+        for (const y of [geometry.boundingBox.min.y, geometry.boundingBox.max.y]) {
+          for (const z of [geometry.boundingBox.min.z, geometry.boundingBox.max.z]) {
+            v.vertex.set(x, y, z).applyMatrix4(v.relative);
+            values.push(v.vertex.x, v.vertex.y, v.vertex.z);
+          }
+        }
+      }
+    });
+    points = new Float32Array(values);
+    hatLocalClearancePoints.set(hat, points);
+  }
+  return points;
+}
+
+function umbrellaCanopyLength(rootPosition, axis, obstruction, metadata = {}) {
+  const depth = metadata.canopyDepth ?? PROP_FIT.umbrellaCanopyDepth;
+  const radius = metadata.canopyRadius ?? PROP_FIT.umbrellaCanopyRadius;
+  const offset = umbrellaFitVectors.offset.copy(obstruction).sub(rootPosition);
+  const along = offset.dot(axis);
+  const radial = Math.sqrt(Math.max(0, offset.lengthSq() - along * along));
+  const canopyDrop = depth * Math.pow(THREE.MathUtils.clamp(radial / radius, 0, 1), 1.48);
+  return THREE.MathUtils.clamp(
+    Math.max(PROP_FIT.umbrellaLength, along + canopyDrop + PROP_FIT.umbrellaClearance),
+    PROP_FIT.umbrellaLength,
+    PROP_FIT.umbrellaMaxLength
+  );
+}
+
+function wornHatCanopyLength(rootPosition, axis, hat, metadata = {}) {
+  const points = wornHatClearancePoints(hat);
+  if (!points?.length) return PROP_FIT.umbrellaLength;
+  hat.updateWorldMatrix(true, false);
+  const matrix = hat.matrixWorld.elements;
+  const depth = metadata.canopyDepth ?? PROP_FIT.umbrellaCanopyDepth;
+  const radius = metadata.canopyRadius ?? PROP_FIT.umbrellaCanopyRadius;
+  let length = PROP_FIT.umbrellaLength;
+  for (let index = 0; index < points.length; index += 3) {
+    const x = points[index];
+    const y = points[index + 1];
+    const z = points[index + 2];
+    const dx = matrix[0] * x + matrix[4] * y + matrix[8] * z + matrix[12] - rootPosition.x;
+    const dy = matrix[1] * x + matrix[5] * y + matrix[9] * z + matrix[13] - rootPosition.y;
+    const dz = matrix[2] * x + matrix[6] * y + matrix[10] * z + matrix[14] - rootPosition.z;
+    const along = dx * axis.x + dy * axis.y + dz * axis.z;
+    const radial = Math.sqrt(Math.max(0, dx * dx + dy * dy + dz * dz - along * along));
+    const canopyDrop = depth * Math.pow(THREE.MathUtils.clamp(radial / radius, 0, 1), 1.48);
+    length = Math.max(length, along + canopyDrop + PROP_FIT.umbrellaClearance);
+  }
+  return THREE.MathUtils.clamp(length, PROP_FIT.umbrellaLength, PROP_FIT.umbrellaMaxLength);
+}
+
 /** After the pose is final: put the held prop in her hand. */
 function placeHandProps(elapsed) {
   if (!props) return;
   props.hideHandProps();
+  if (sleepState.lying) return;
   const name = propState.shown;
   if (!name || propState.hold.x < 0.6 || name === 'listen') return;
   const hand = props.hand;
@@ -2455,15 +2531,22 @@ function placeHandProps(elapsed) {
   if (!object || !fist) return;
   object.position.copy(fist.center);
   if (name === 'umbrella') {
-    // The shaft runs through her fist; the canopy stays level over her head.
-    const length = PROP_FIT.umbrellaLength;
+    // The shaft runs through her fist and stays outside her body. Its connected canopy rises
+    // enough for the current hat; cached hat geometry keeps this inexpensive while walking.
     pointAlong(object, fist.axis);
     object.position.addScaledVector(fist.axis, -PROP_FIT.umbrellaGrip);
+    const head = state.bones.get('頭');
+    const obstruction = head?.getWorldPosition(umbrellaFitVectors.head)
+      .addScaledVector(propVectors.up, PROP_FIT.umbrellaHeadTop) ?? umbrellaFitVectors.head.copy(object.position);
+    const hat = props.wornHat ? props.hats?.[props.wornHat] : null;
+    const length = Math.max(
+      umbrellaCanopyLength(object.position, fist.axis, obstruction, object.userData),
+      wornHatCanopyLength(object.position, fist.axis, hat, object.userData)
+    );
     object.userData.shaft.scale.y = length;
     object.userData.shaft.position.y = length / 2;
     object.userData.canopyHolder.position.y = length;
-    object.userData.canopyHolder.quaternion.copy(object.quaternion).invert()
-      .multiply(propVectors.tilt.setFromEuler(propVectors.tiltEuler.set(0.12, 0, -0.08)));
+    object.userData.canopyHolder.quaternion.identity();
   } else if (name === 'drink') {
     // The cup sits in the grip, its side against her palm, held a little below the middle.
     // It turns with her hand, but she keeps it mostly upright so nothing spills.
@@ -3622,6 +3705,7 @@ function renderState(timestamp) {
       );
     }
     applySleepVisibility(background.periodWeights);
+    placeHandProps(elapsed);
     (outline || renderer).render(scene, camera);
     updateCharacterBounds(timestamp);
   }

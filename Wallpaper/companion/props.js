@@ -32,83 +32,194 @@ export function createProps(THREE) {
   // Root at the hand, +Y along the shaft. The canopy sits at y = length (set every frame).
   function buildUmbrella() {
     // A clear vinyl umbrella (ビニール傘), the kind most people in Tokyo carry: see-through
-    // with a faint blue tint, white ribs and rim, a shiny surface that catches the light.
+    // with a faint teal tint, pale ribs and a shiny surface that catches the light.
     const root = new THREE.Group();
     const radius = 5.4;
-    const squash = 0.62;
-    const arc = Math.PI * 0.36;
+    const canopyDepth = 1.85;
+    const panelSag = 0.1;
+    const panelCount = 8;
+    const panelArc = (Math.PI * 2) / panelCount;
     const noOutline = (material) => {
       material.userData.outlineParameters = { visible: false };
       return material;
     };
+
+    const panelWaveAt = (angle) => {
+      const local = ((angle % panelArc) + panelArc) % panelArc;
+      return Math.sin((local / panelArc) * Math.PI);
+    };
+    const canopyPoint = (radial, angle, panelWave = panelWaveAt(angle)) => {
+      const outer = Math.max(0, (radial - 0.5) / 0.5);
+      const scallop = 1 - panelWave * outer * outer * 0.028;
+      const distance = radius * radial * scallop;
+      return new THREE.Vector3(
+        Math.cos(angle) * distance,
+        -canopyDepth * Math.pow(radial, 1.48) - panelSag * panelWave * Math.pow(radial, 2.2),
+        Math.sin(angle) * distance
+      );
+    };
+
+    // Keep the eight vinyl panels in one mesh. Duplicated panel edges give the canopy a
+    // restrained crease at each rib without multiplying transparent draw calls.
+    const canopyPositions = [];
+    const canopyIndices = [];
+    const radialSegments = 7;
+    const angularSegments = 5;
+    for (let panel = 0; panel < panelCount; panel += 1) {
+      const panelStart = panel * panelArc;
+      const apex = canopyPositions.length / 3;
+      canopyPositions.push(0, 0, 0);
+      const ringStart = [];
+      for (let radialStep = 1; radialStep <= radialSegments; radialStep += 1) {
+        ringStart.push(canopyPositions.length / 3);
+        const radial = radialStep / radialSegments;
+        for (let angleStep = 0; angleStep <= angularSegments; angleStep += 1) {
+          const across = angleStep / angularSegments;
+          const point = canopyPoint(radial, panelStart + across * panelArc, Math.sin(across * Math.PI));
+          canopyPositions.push(point.x, point.y, point.z);
+        }
+      }
+      for (let angleStep = 0; angleStep < angularSegments; angleStep += 1) {
+        canopyIndices.push(apex, ringStart[0] + angleStep + 1, ringStart[0] + angleStep);
+      }
+      for (let radialStep = 0; radialStep < radialSegments - 1; radialStep += 1) {
+        const inner = ringStart[radialStep];
+        const outer = ringStart[radialStep + 1];
+        for (let angleStep = 0; angleStep < angularSegments; angleStep += 1) {
+          const innerLeft = inner + angleStep;
+          const innerRight = innerLeft + 1;
+          const outerLeft = outer + angleStep;
+          const outerRight = outerLeft + 1;
+          canopyIndices.push(innerLeft, outerRight, outerLeft, innerLeft, innerRight, outerRight);
+        }
+      }
+    }
+    const canopyGeometry = new THREE.BufferGeometry();
+    canopyGeometry.setAttribute('position', new THREE.Float32BufferAttribute(canopyPositions, 3));
+    canopyGeometry.setIndex(canopyIndices);
+    canopyGeometry.computeVertexNormals();
     const film = noOutline(new THREE.MeshPhongMaterial({
-      color: 0xe6f4ff,
+      color: 0xbfeeea,
       specular: 0xffffff,
-      shininess: 120,
+      emissive: 0x071817,
+      shininess: 125,
       transparent: true,
-      opacity: 0.22,
+      opacity: 0.32,
       side: THREE.DoubleSide,
-      depthWrite: false
+      depthWrite: false,
+      depthTest: true
     }));
-    const canopy = mesh(new THREE.SphereGeometry(radius, 32, 10, 0, Math.PI * 2, 0, arc), film);
-    canopy.scale.set(1, squash, 1);
-    canopy.renderOrder = 2;
+    film.forceSinglePass = true;
+    const canopy = mesh(canopyGeometry, film);
+    canopy.name = 'umbrella-vinyl-canopy';
+    canopy.renderOrder = 1;
     const canopyHolder = new THREE.Group();
     canopyHolder.add(canopy);
-    canopy.position.y = -radius * squash;
 
-    // Ribs along the canopy and the white rim tape.
-    const rib = noOutline(new THREE.MeshPhongMaterial({ color: 0xf4f7fa, specular: 0xffffff, shininess: 60 }));
-    for (let i = 0; i < 8; i += 1) {
-      const angle = (i / 8) * Math.PI * 2;
+    // Fine pale ribs and a continuous teal-edged scalloped hem make the transparent sheet
+    // readable against both light and dark backgrounds.
+    const rib = noOutline(new THREE.MeshPhongMaterial({
+      color: 0xeaf5f4, specular: 0xffffff, shininess: 75
+    }));
+    for (let i = 0; i < panelCount; i += 1) {
+      const angle = i * panelArc;
       const points = [];
-      for (let k = 0; k <= 10; k += 1) {
-        const theta = (k / 10) * arc;
-        points.push(new THREE.Vector3(
-          Math.sin(theta) * Math.cos(angle) * radius,
-          Math.cos(theta) * radius * squash - radius * squash,
-          Math.sin(theta) * Math.sin(angle) * radius
-        ));
+      for (let step = 0; step <= 10; step += 1) {
+        const point = canopyPoint(step / 10, angle, 0);
+        point.y += 0.018;
+        points.push(point);
       }
-      const tube = mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points), 12, 0.035, 5, false), rib);
+      const tube = mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points), 12, 0.038, 5, false), rib);
       canopyHolder.add(tube);
-      // A small white cap on each rib end.
-      const end = mesh(new THREE.SphereGeometry(0.07, 6, 4), rib);
-      end.position.copy(points[points.length - 1]);
-      canopyHolder.add(end);
     }
-    const rimHeight = Math.cos(arc) * radius * squash - radius * squash;
-    const rim = mesh(new THREE.TorusGeometry(Math.sin(arc) * radius, 0.05, 4, 48), noOutline(new THREE.MeshPhongMaterial({
-      color: 0xffffff, transparent: true, opacity: 0.75, shininess: 80
+    const rimPoints = [];
+    for (let step = 0; step < panelCount * 12; step += 1) {
+      const angle = (step / (panelCount * 12)) * Math.PI * 2;
+      rimPoints.push(canopyPoint(1, angle));
+    }
+    const rimCurve = new THREE.CatmullRomCurve3(rimPoints, true, 'centripetal');
+    const rim = mesh(new THREE.TubeGeometry(rimCurve, 96, 0.058, 5, true), noOutline(new THREE.MeshPhongMaterial({
+      color: 0x58cec4, specular: 0xffffff, shininess: 90, transparent: true, opacity: 0.92
     })));
-    rim.rotation.x = Math.PI / 2;
-    rim.position.y = rimHeight;
     canopyHolder.add(rim);
-    // A soft glint on the film where the light hits it.
-    const glint = mesh(new THREE.SphereGeometry(radius * 1.002, 24, 6, Math.PI * 0.15, Math.PI * 0.35, arc * 0.25, arc * 0.45), noOutline(new THREE.MeshBasicMaterial({
-      color: 0xffffff, transparent: true, opacity: 0.16, side: THREE.DoubleSide, depthWrite: false
-    })));
-    glint.scale.set(1, squash, 1);
-    glint.position.y = -radius * squash;
-    glint.renderOrder = 3;
-    canopyHolder.add(glint);
+
+    const addGlint = (angle, innerRadius, outerRadius, width, opacity) => {
+      const positions = [];
+      const indices = [];
+      const segments = 9;
+      for (let step = 0; step <= segments; step += 1) {
+        const t = step / segments;
+        const radial = innerRadius + (outerRadius - innerRadius) * t;
+        const taperedWidth = width * (0.32 + Math.sin(Math.PI * t) * 0.68);
+        const halfAngle = taperedWidth / Math.max(radius * radial, 0.5);
+        for (const side of [-1, 1]) {
+          const point = canopyPoint(radial, angle + halfAngle * side);
+          point.y += 0.028;
+          positions.push(point.x, point.y, point.z);
+        }
+        if (step < segments) {
+          const offset = step * 2;
+          indices.push(offset, offset + 3, offset + 2, offset, offset + 1, offset + 3);
+        }
+      }
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      geometry.setIndex(indices);
+      geometry.computeVertexNormals();
+      const glint = mesh(geometry, noOutline(new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        depthTest: true
+      })));
+      glint.renderOrder = 2;
+      canopyHolder.add(glint);
+    };
+    addGlint(2.03, 0.2, 0.88, 0.22, 0.2);
+    addGlint(0.94, 0.5, 0.9, 0.12, 0.14);
+
     const tip = mesh(new THREE.CylinderGeometry(0.05, 0.08, 0.6, 8), toon(0xf4f7fa));
     tip.position.y = 0.25;
-    canopyHolder.add(tip);
+    const hub = mesh(new THREE.SphereGeometry(0.13, 8, 5), toon(TEAL));
+    hub.position.y = 0.015;
+    canopyHolder.add(tip, hub);
     root.add(canopyHolder);
 
-    const shaft = mesh(new THREE.CylinderGeometry(0.07, 0.07, 1, 8), new THREE.MeshPhongMaterial({ color: 0xc9d2d8, specular: 0xffffff, shininess: 90 }));
+    const shaft = mesh(new THREE.CylinderGeometry(0.07, 0.07, 1, 8), noOutline(new THREE.MeshPhongMaterial({
+      color: 0xc9d2d8, specular: 0xffffff, shininess: 90
+    })));
     shaft.position.y = 0.5;
     root.add(shaft);
-    // White plastic J handle.
+    // One continuous curve keeps the white plastic J handle joined cleanly to the shaft.
     const handleMaterial = new THREE.MeshPhongMaterial({ color: 0xf2f4f6, specular: 0xffffff, shininess: 70 });
-    const handle = mesh(new THREE.TorusGeometry(0.42, 0.11, 6, 14, Math.PI), handleMaterial);
-    handle.position.set(0.42, -0.55, 0);
-    handle.rotation.z = Math.PI;
-    const grip = mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.9, 8), handleMaterial);
-    grip.position.y = -0.15;
-    root.add(handle, grip);
-    root.userData = { canopyHolder, shaft };
+    const handleCurve = new THREE.CurvePath();
+    handleCurve.add(new THREE.LineCurve3(
+      new THREE.Vector3(0, 0.12, 0),
+      new THREE.Vector3(0, -0.5, 0)
+    ));
+    handleCurve.add(new THREE.CubicBezierCurve3(
+      new THREE.Vector3(0, -0.5, 0),
+      new THREE.Vector3(0, -0.88, 0),
+      new THREE.Vector3(0.2, -1.05, 0),
+      new THREE.Vector3(0.46, -1.05, 0)
+    ));
+    handleCurve.add(new THREE.CubicBezierCurve3(
+      new THREE.Vector3(0.46, -1.05, 0),
+      new THREE.Vector3(0.76, -1.05, 0),
+      new THREE.Vector3(0.88, -0.86, 0),
+      new THREE.Vector3(0.88, -0.58, 0)
+    ));
+    const handle = mesh(new THREE.TubeGeometry(handleCurve, 28, 0.115, 8, false), handleMaterial);
+    root.add(handle);
+    root.userData = {
+      canopyHolder,
+      shaft,
+      canopyRadius: radius,
+      canopyDepth: canopyDepth + panelSag,
+      handleBottom: -1.05
+    };
     return root;
   }
 

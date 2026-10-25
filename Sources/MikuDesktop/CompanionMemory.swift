@@ -62,6 +62,7 @@ struct MemoryContext: Sendable {
     var hoursSinceLastChat: Double?
     var relationshipStatus: RelationshipStatus = .friends
     var confessionDecision: ConfessionDecision? = nil
+    var confessionToken: UUID? = nil
     /// The last diary entries (newest first), when memory is on.
     var diary: [DiaryEntry] = []
     /// For special days: event dates from the official sites and the day you met.
@@ -138,6 +139,7 @@ final class CompanionMemory {
     private var justForgiven = false
     private var forgaveAccident = false
     private var confessionDecision: ConfessionDecision?
+    private var pendingConfessionToken: UUID?
     /// The next relationship update is a reset, not her forgiving you.
     private var resetPending = false
     private let fileURL: URL
@@ -209,6 +211,7 @@ final class CompanionMemory {
             hoursSinceLastChat: hours,
             relationshipStatus: relationshipStatus,
             confessionDecision: confessionDecision,
+            confessionToken: pendingConfessionToken,
             diary: isEnabled ? Array(diary.prefix(2)) : [],
             events: EventCalendar.shared.events,
             firstMet: isEnabled ? store.firstMet : nil
@@ -236,10 +239,15 @@ final class CompanionMemory {
 
     /// Called before a message is sent. Returns true if it was an apology that she accepts.
     @discardableResult
-    func noteUserMessage(_ text: String) -> Bool {
+    func noteUserMessage(
+        _ text: String,
+        relationshipIntent: RelationshipIntent? = nil,
+        deferRelationshipChange: Bool = false
+    ) -> Bool {
         justForgiven = false
         forgaveAccident = false
         confessionDecision = nil
+        pendingConfessionToken = nil
         if store.firstMet == nil { store.firstMet = Date() }
         if isOffended, Self.isApology(text) || Self.isAccidentExplanation(text) {
             let relationship = store.relationship
@@ -263,16 +271,66 @@ final class CompanionMemory {
             friendship: store.relationship.friendship,
             status: relationshipStatus,
             offended: isOffended,
-            justForgiven: justForgiven
+            justForgiven: justForgiven,
+            intent: relationshipIntent
         )
-        if confessionDecision == .accepted {
+        if deferRelationshipChange, confessionDecision != nil {
+            pendingConfessionToken = UUID()
+        }
+        if confessionDecision == .accepted, !deferRelationshipChange {
             store.relationship.status = .dating
         }
-        if justForgiven || confessionDecision == .accepted {
+        if justForgiven || (confessionDecision == .accepted && !deferRelationshipChange) {
             scheduleSave()
             notify()
         }
         return justForgiven
+    }
+
+    func revalidateConfessionDecision(
+        for text: String,
+        relationshipIntent: RelationshipIntent?,
+        token: UUID
+    ) -> ConfessionDecision? {
+        guard pendingConfessionToken == token else { return nil }
+        return ConfessionPolicy.evaluate(
+            text,
+            friendship: store.relationship.friendship,
+            status: relationshipStatus,
+            offended: isOffended,
+            justForgiven: justForgiven,
+            intent: relationshipIntent
+        )
+    }
+
+    func discardPendingConfessionDecision() {
+        confessionDecision = nil
+        pendingConfessionToken = nil
+    }
+
+    /// Commits only the decision that is still valid for the latest relationship state.
+    /// The caller can generate a fresh local reply and retry when this returns false.
+    @discardableResult
+    func commitConfessionDecision(
+        _ expected: ConfessionDecision,
+        for text: String,
+        relationshipIntent: RelationshipIntent?,
+        token: UUID
+    ) -> Bool {
+        guard revalidateConfessionDecision(
+            for: text,
+            relationshipIntent: relationshipIntent,
+            token: token
+        ) == expected else {
+            return false
+        }
+        confessionDecision = expected
+        pendingConfessionToken = nil
+        guard expected == .accepted else { return true }
+        store.relationship.status = .dating
+        scheduleSave()
+        notify()
+        return true
     }
 
     func record(_ messages: [ChatMessage]) {
@@ -303,6 +361,7 @@ final class CompanionMemory {
         if !isOffended { gainFriendship(0.6, kind: "chat", dailyCap: 6) }
         justForgiven = false
         confessionDecision = nil
+        pendingConfessionToken = nil
         scheduleSave()
         notify()
         guard isEnabled else { return }
@@ -317,6 +376,7 @@ final class CompanionMemory {
 
     /// The chat window was cleared: forget the conversation itself, keep the facts.
     func clearConversation() {
+        discardPendingConfessionDecision()
         store.messages.removeAll()
         store.summarizedCount = 0
         store.summary = ""
@@ -511,6 +571,7 @@ final class CompanionMemory {
         store = empty
         justForgiven = false
         confessionDecision = nil
+        pendingConfessionToken = nil
         resetPending = true
         removeUnusedImages()
         NotificationCenter.default.post(name: .mikuMemoryErased, object: self)
@@ -556,6 +617,7 @@ final class CompanionMemory {
         store = restored
         justForgiven = false
         confessionDecision = nil
+        pendingConfessionToken = nil
         resetPending = true
         try? FileManager.default.removeItem(at: backupURL)
         removeUnusedImages()

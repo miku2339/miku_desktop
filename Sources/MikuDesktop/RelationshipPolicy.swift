@@ -16,6 +16,16 @@ enum RelationshipStatus: String, Codable, Sendable {
     }
 }
 
+enum RelationshipIntent: String, Codable, Sendable {
+    case confession
+    case affection
+    case quoted
+    case hypothetical
+    case thirdParty = "third_party"
+    case noRelationship = "none"
+    case uncertain
+}
+
 enum ConfessionDecision: String, Sendable {
     case accepted
     case notReady
@@ -30,9 +40,11 @@ enum ConfessionPolicy {
         friendship: Double,
         status: RelationshipStatus,
         offended: Bool,
-        justForgiven: Bool
+        justForgiven: Bool,
+        intent: RelationshipIntent? = nil
     ) -> ConfessionDecision? {
-        guard isDirectConfession(text) else {
+        let isConfession = intent.map { $0 == .confession } ?? isDirectConfession(text)
+        guard isConfession else {
             return nil
         }
 
@@ -62,19 +74,9 @@ enum ConfessionPolicy {
             return false
         }
 
-        let wholeMessagePatterns = [
-            #"^(?:(?:miku|初音|ミク|みく)[,，、]\s*)?(?:(?:所以(?:說|说)|那)[,，、]?\s*)?(?:你)?(?:可以|能|願意|愿意|願唔願意|愿唔愿意)(?:做|當|当)(?:我(?:的)?女朋友|我的彼女|私の彼女)(?:好嗎|好吗|嗎|吗)?$"#,
-            #"^我(?:真的|真係|真系)大好き(?:です|だよ)?$"#
-        ]
-        let trailingTerminators = CharacterSet(charactersIn: "。.！!？?")
-        let wholeMessage = normalized.trimmingCharacters(in: trailingTerminators)
-        if wholeMessagePatterns.contains(where: {
-            wholeMessage.range(of: $0, options: .regularExpression) != nil
-        }) {
-            return true
-        }
-
         let patterns = [
+            #"^(?:(?:miku|初音|ミク|みく)[,，、]\s*)?(?:(?:所以(?:說|说)|那)[,，、]?\s*)?(?:你)?(?:可以|能|願意|愿意|願唔願意|愿唔愿意)(?:做|當|当)(?:我(?:的)?女朋友|我的彼女|私の彼女)(?:好嗎|好吗|嗎|吗)?$"#,
+            #"^我(?:真的|真係|真系)大好き(?:です|だよ)?$"#,
             #"^(?:(?:對唔住|對不起|对不起)[,，、]\s*)?(?:(?:miku|初音|ミク|みく)[,，、]\s*)?(?:其實|其实)?我(?:真係好|真系好|真的很|真係|真系|很|好)?(?:喜歡|喜欢|鍾意|中意|愛|爱)你(?:呀|啊)?(?:\s*[,，、]\s*(?:(?:可以)?(?:做|當|当)我女朋友(?:好嗎|好吗|嗎|吗)?|想(?:同|和|跟)你交往|(?:請|请)?(?:同|和|跟)我交往(?:吧|啦|好嗎|好吗|嗎|吗)?))?$"#,
             #"^(?:(?:miku|初音|ミク|みく)[,，、]\s*)?(?:我)?想(?:同|和|跟)你交往$"#,
             #"^(?:(?:miku|初音|ミク|みく)[,，、]\s*)?(?:你)?(?:可以|願唔願意|愿唔愿意)(?:做|當|当)我(?:的)?女朋友(?:好嗎|好吗|嗎|吗)?$"#,
@@ -95,13 +97,19 @@ enum ConfessionPolicy {
             #"^(?:(?:ミク|みく)[、,]\s*)?付き合って(?:ください)?$"#
         ]
         let sentenceTerminators: Set<Character> = ["。", ".", "！", "!", "？", "?", "\n"]
-        let clauses = normalized.split(whereSeparator: sentenceTerminators.contains)
-        guard let finalClause = clauses.last else {
+        let clauses = normalized.split(whereSeparator: sentenceTerminators.contains).map {
+            String($0).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        guard !clauses.isEmpty else {
             return false
         }
-        let candidate = String(finalClause).trimmingCharacters(in: .whitespacesAndNewlines)
-        return patterns.contains {
-            candidate.range(of: $0, options: .regularExpression) != nil
+
+        // The regex fallback is deliberately strict: every sentence must itself be a
+        // direct confession. Semantic classification handles natural surrounding context.
+        return clauses.allSatisfy { clause in
+            patterns.contains {
+                clause.range(of: $0, options: .regularExpression) != nil
+            }
         }
     }
 }

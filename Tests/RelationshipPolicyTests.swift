@@ -170,6 +170,50 @@ struct RelationshipPolicyTests {
             nil,
             "已交往的普通對話仍不是告白"
         )
+        expectEqual(
+            ConfessionPolicy.evaluate(
+                "你對我來說，已經不只是普通朋友了。",
+                friendship: 75,
+                status: .friends,
+                offended: false,
+                justForgiven: false,
+                intent: .confession
+            ),
+            .accepted,
+            "語意告白可接受自然變體"
+        )
+        expectEqual(
+            ConfessionPolicy.evaluate(
+                "那我的答案是，我願意。",
+                friendship: 75,
+                status: .friends,
+                offended: false,
+                justForgiven: false,
+                intent: .confession
+            ),
+            .accepted,
+            "語意分類可承接上下文"
+        )
+        for intent in [RelationshipIntent.affection, .quoted, .hypothetical, .thirdParty, .noRelationship, .uncertain] {
+            expectEqual(
+                ConfessionPolicy.evaluate(
+                    "我愛你",
+                    friendship: 100,
+                    status: .friends,
+                    offended: false,
+                    justForgiven: false,
+                    intent: intent
+                ),
+                nil,
+                "明確非告白語意覆蓋關鍵字：\(intent.rawValue)"
+            )
+        }
+        for text in ["這是歌詞。我愛你", "朋友說。我鍾意你", "假設一下。I love you"] {
+            expectNil(
+                ConfessionPolicy.evaluate(text, friendship: 100, status: .friends, offended: false, justForgiven: false),
+                "多句備援不可只看末句：\(text)"
+            )
+        }
 
         do {
             let known = try JSONDecoder().decode(RelationshipStatus.self, from: Data("\"dating\"".utf8))

@@ -539,10 +539,6 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
         }
         let sleepRevision = sleep.revision
         if appendUser, CompanionRequest.isComeOver(text) { onCallOver?() }
-        // An apology can settle things before she answers, so the reply already knows.
-        memory.noteUserMessage(text)
-        let history = memory.recentHistory(from: completedHistory())
-        let context = memory.context()
         let rememberSongPreferences = memory.isEnabled
         memory.record(messages)
         setSending(true)
@@ -551,11 +547,63 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
         chatTask = Task { [weak self] in
             guard let self else { return }
             do {
-                let reply = try await ai.reply(
-                    to: prompt, image: image, history: history, memory: context,
-                    rememberSongPreferences: rememberSongPreferences
+                let classificationHistory = memory.recentHistory(from: completedHistory())
+                let relationshipIntent = try await ai.relationshipIntent(
+                    for: text,
+                    history: classificationHistory
                 )
                 guard !Task.isCancelled, generation == conversationGeneration else { return }
+
+                // An apology can settle things before she answers. A relationship change
+                // waits until the matching reply is ready and still current.
+                memory.noteUserMessage(
+                    text,
+                    relationshipIntent: relationshipIntent,
+                    deferRelationshipChange: true
+                )
+                let history = memory.recentHistory(from: completedHistory())
+                let context = memory.context()
+                let initialDecision = context.confessionDecision
+                let confessionToken = context.confessionToken
+                var reply = try await ai.reply(
+                    to: prompt, image: image, history: history, memory: context,
+                    rememberSongPreferences: rememberSongPreferences,
+                    relationshipIntent: relationshipIntent
+                )
+                guard !Task.isCancelled, generation == conversationGeneration else { return }
+
+                if var decision = initialDecision {
+                    guard let confessionToken else { throw CancellationError() }
+                    while true {
+                        guard let current = memory.revalidateConfessionDecision(
+                            for: text,
+                            relationshipIntent: relationshipIntent,
+                            token: confessionToken
+                        ) else {
+                            throw CancellationError()
+                        }
+                        if current != decision {
+                            reply = await ai.fallbackConfessionReply(
+                                for: current,
+                                level: memory.context().level,
+                                to: text,
+                                history: history
+                            )
+                            guard !Task.isCancelled, generation == conversationGeneration else { return }
+                            decision = current
+                            continue
+                        }
+                        if memory.commitConfessionDecision(
+                            decision,
+                            for: text,
+                            relationshipIntent: relationshipIntent,
+                            token: confessionToken
+                        ) {
+                            break
+                        }
+                        throw CancellationError()
+                    }
+                }
                 let assistantMessage = ChatMessage(role: .assistant, text: reply.text)
                 chatTask = nil
                 setSending(false)
@@ -580,8 +628,14 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
                     )
                 }
                 if statusDot.color != MikuTheme.online { refreshConnectionStatus() }
+            } catch is CancellationError {
+                guard generation == conversationGeneration else { return }
+                memory.discardPendingConfessionDecision()
+                chatTask = nil
+                setSending(false)
             } catch {
                 guard !Task.isCancelled, generation == conversationGeneration else { return }
+                memory.discardPendingConfessionDecision()
                 chatTask = nil
                 setSending(false)
                 failedText = text
@@ -598,6 +652,7 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
         conversationGeneration &+= 1
         chatTask?.cancel()
         chatTask = nil
+        memory.discardPendingConfessionDecision()
         cancelPendingBedtime()
         setSending(false)
     }

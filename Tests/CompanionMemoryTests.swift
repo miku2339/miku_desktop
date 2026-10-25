@@ -124,6 +124,157 @@ struct CompanionMemoryTests {
         try check(upset.context().confessionDecision == .recovering, "An apology cannot immediately buy acceptance")
         try check(upset.relationshipStatus == .friends, "Forgiveness does not establish dating")
 
+        let deferred = CompanionMemory(fileURL: try fixture("deferred-acceptance", friendship: 80), defaults: defaults)
+        deferred.noteUserMessage(
+            "你對我來說已經不只是朋友了",
+            relationshipIntent: .confession,
+            deferRelationshipChange: true
+        )
+        try check(deferred.context().confessionDecision == .accepted, "Semantic confession reaches the policy")
+        try check(deferred.context().relationshipStatus == .friends, "Deferred reply context keeps the actual relationship state")
+        try check(deferred.relationshipStatus == .friends, "Deferred acceptance does not persist dating early")
+        let deferredToken = try require(deferred.context().confessionToken, "Deferred acceptance has a commit token")
+        try check(
+            deferred.commitConfessionDecision(
+                .accepted,
+                for: "你對我來說已經不只是朋友了",
+                relationshipIntent: .confession,
+                token: deferredToken
+            ),
+            "A still-current acceptance can be committed"
+        )
+        try check(deferred.relationshipStatus == .dating, "Final commit establishes dating")
+
+        let uncertain = CompanionMemory(fileURL: try fixture("uncertain-intent", friendship: 100), defaults: defaults)
+        uncertain.noteUserMessage(
+            "我愛你",
+            relationshipIntent: .uncertain,
+            deferRelationshipChange: true
+        )
+        try check(uncertain.context().confessionDecision == nil, "Uncertain intent asks for clarification without a decision")
+        try check(uncertain.relationshipStatus == .friends, "Uncertain intent cannot start dating")
+
+        let semanticText = "我希望我們可以成為戀人"
+        let cancelled = CompanionMemory(fileURL: try fixture("cancelled-intent", friendship: 100), defaults: defaults)
+        cancelled.noteUserMessage(semanticText, relationshipIntent: .confession, deferRelationshipChange: true)
+        let cancelledToken = try require(cancelled.context().confessionToken, "Pending confession has a token")
+        cancelled.discardPendingConfessionDecision()
+        try check(cancelled.context().confessionDecision == nil, "Cancelling discards the pending decision")
+        try check(
+            !cancelled.commitConfessionDecision(
+                .accepted,
+                for: semanticText,
+                relationshipIntent: .confession,
+                token: cancelledToken
+            ),
+            "A discarded token cannot commit even when friendship is unchanged"
+        )
+        try check(cancelled.relationshipStatus == .friends, "Cancelling cannot commit deferred dating")
+
+        let cleared = CompanionMemory(fileURL: try fixture("cleared-intent", friendship: 100), defaults: defaults)
+        cleared.noteUserMessage(semanticText, relationshipIntent: .confession, deferRelationshipChange: true)
+        let clearedToken = try require(cleared.context().confessionToken, "Pending confession has a clear token")
+        cleared.clearConversation()
+        try check(
+            !cleared.commitConfessionDecision(
+                .accepted,
+                for: semanticText,
+                relationshipIntent: .confession,
+                token: clearedToken
+            ),
+            "Clearing conversation invalidates the old commit token"
+        )
+        try check(cleared.relationshipStatus == .friends, "Clearing cannot revive deferred dating")
+
+        let headPat = CompanionMemory(fileURL: try fixture("deferred-head-pat", friendship: 80), defaults: defaults)
+        headPat.noteUserMessage(semanticText, relationshipIntent: .confession, deferRelationshipChange: true)
+        let headPatToken = try require(headPat.context().confessionToken, "Pending confession survives ordinary touch")
+        headPat.recordTouch("headPat")
+        try check(
+            headPat.revalidateConfessionDecision(
+                for: semanticText,
+                relationshipIntent: .confession,
+                token: headPatToken
+            ) == .accepted,
+            "An ordinary touch revalidates naturally without cancelling the confession"
+        )
+        try check(
+            headPat.commitConfessionDecision(
+                .accepted,
+                for: semanticText,
+                relationshipIntent: .confession,
+                token: headPatToken
+            ),
+            "An ordinary touch keeps the commit token valid"
+        )
+
+        let changedDuringReply = CompanionMemory(
+            fileURL: try fixture("deferred-offended", friendship: 90),
+            defaults: defaults
+        )
+        changedDuringReply.noteUserMessage(
+            semanticText,
+            relationshipIntent: .confession,
+            deferRelationshipChange: true
+        )
+        let offendedToken = try require(changedDuringReply.context().confessionToken, "Pending confession has an offence token")
+        changedDuringReply.recordTouch("boundary", part: "chest")
+        try check(
+            changedDuringReply.revalidateConfessionDecision(
+                for: semanticText,
+                relationshipIntent: .confession,
+                token: offendedToken
+            ) == .upset,
+            "A boundary change revalidates to upset"
+        )
+        try check(
+            !changedDuringReply.commitConfessionDecision(
+                .accepted,
+                for: semanticText,
+                relationshipIntent: .confession,
+                token: offendedToken
+            ),
+            "An outdated acceptance cannot be committed"
+        )
+        try check(changedDuringReply.relationshipStatus == .friends, "An outdated acceptance cannot start dating")
+
+        let resetPending = CompanionMemory(fileURL: try fixture("deferred-reset", friendship: 90), defaults: defaults)
+        resetPending.noteUserMessage(
+            semanticText,
+            relationshipIntent: .confession,
+            deferRelationshipChange: true
+        )
+        let resetToken = try require(resetPending.context().confessionToken, "Pending confession has a reset token")
+        try check(resetPending.eraseAll(), "A pending confession does not block memory reset")
+        try check(resetPending.context().confessionDecision == nil, "Reset clears the pending decision")
+        try check(
+            !resetPending.commitConfessionDecision(
+                .accepted,
+                for: semanticText,
+                relationshipIntent: .confession,
+                token: resetToken
+            ),
+            "A pre-reset acceptance cannot revive after reset"
+        )
+        try check(resetPending.relationshipStatus == .friends, "Reset remains friends after stale commit attempt")
+
+        let restoredPending = CompanionMemory(fileURL: try fixture("deferred-restore", friendship: 90), defaults: defaults)
+        restoredPending.noteUserMessage(semanticText, relationshipIntent: .confession, deferRelationshipChange: true)
+        let restoreToken = try require(restoredPending.context().confessionToken, "Pending confession has a restore token")
+        try check(restoredPending.eraseAll(), "Pending confession can be reset before restore")
+        try check(restoredPending.restoreResetBackup(), "Reset backup can restore the original friendship")
+        try check(restoredPending.friendship == 90, "Restore returns the original friendship score")
+        try check(
+            !restoredPending.commitConfessionDecision(
+                .accepted,
+                for: semanticText,
+                relationshipIntent: .confession,
+                token: restoreToken
+            ),
+            "Restoring the same score still invalidates the old token"
+        )
+        try check(restoredPending.relationshipStatus == .friends, "Restore cannot revive deferred dating")
+
         defaults.set("gentle", forKey: "personalityPreset")
         defaults.set("zh-Hant", forKey: "interfaceLanguage")
         restored.eraseAll()

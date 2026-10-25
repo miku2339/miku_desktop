@@ -286,6 +286,19 @@ struct CompanionMemoryTests {
         let configuration = AIConfiguration(defaults: defaults)
         configuration.endpoint = "invalid-endpoint"
         let ai = LocalAI(configuration: configuration)
+        let mixedText = "所以說你能做私の彼女嗎"
+        let mixedURL = try fixture("mixed-language-confession", friendship: 80)
+        let mixed = CompanionMemory(fileURL: mixedURL, defaults: defaults)
+        mixed.noteUserMessage(mixedText)
+        try check(mixed.context().confessionDecision == .accepted, "Mixed-language confession reaches the relationship policy")
+        try check(mixed.relationshipStatus == .dating, "Mixed-language acceptance establishes dating")
+        try check(mixed.friendship == 80, "Mixed-language acceptance preserves existing affection")
+        let mixedReply = try await ai.reply(to: mixedText, history: [], memory: mixed.context())
+        try check(mixedReply.emotion == "happy", "Mixed-language acceptance uses the local happy reply without an API request")
+        try check(mixedReply.text.contains("交往"), "Mixed-language acceptance answers the request in Chinese")
+        mixed.saveNow()
+        let mixedRestored = CompanionMemory(fileURL: mixedURL, defaults: defaults)
+        try check(mixedRestored.relationshipStatus == .dating, "Mixed-language acceptance survives a restart")
         for language in ["zh-Hant", "en", "ja"] {
             configuration.replyLanguage = language
             for decision in [ConfessionDecision.accepted, .notReady, .upset, .recovering, .alreadyDating] {

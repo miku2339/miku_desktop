@@ -13,6 +13,10 @@ struct RelationshipPolicyTests {
             ("粵語道歉後告白並請求交往", "對唔住，我喜歡你，跟我交往吧"),
             ("詢問成為女朋友", "你可以做我女朋友嗎？"),
             ("詢問成為我的女朋友", "你可以當我的女朋友嗎？"),
+            ("自然語氣詢問成為女朋友", "所以說你能做我的女朋友嗎？"),
+            ("承接語氣詢問成為女朋友", "那你可以當我的女朋友嗎？"),
+            ("中日混合詢問成為女朋友", "所以說你能做私の彼女嗎？"),
+            ("中日混合詢問是否願意", "你願意做我的彼女嗎？"),
             ("詢問是否願意交往", "你願意和我交往嗎？"),
             ("粵語詢問成為女朋友", "Miku，願唔願意做我女朋友？"),
             ("告白後禮貌請求交往", "我很喜歡你，請和我交往"),
@@ -34,6 +38,8 @@ struct RelationshipPolicyTests {
             ("英文浪漫喜歡", "I like you romantically"),
             ("日文告白", "ミク、好きです。"),
             ("日文強烈告白", "ミク、大好きだよ"),
+            ("中日混合強烈告白", "我真的大好き"),
+            ("日文多句直接告白", "好きです。付き合ってください。"),
             ("日文交往請求", "ミク、私と付き合ってください"),
             ("日文交往邀請", "付き合ってください")
         ]
@@ -57,6 +63,13 @@ struct RelationshipPolicyTests {
             ("第三人稱分享", "我喜歡她，但唔知點同佢講"),
             ("轉述朋友告白", "朋友話：『我鍾意你』"),
             ("歌曲名稱", "《我喜歡你》呢首歌幾好聽"),
+            ("中日混合歌曲喜歡", "我真的大好き這首歌"),
+            ("中日混合歌聲喜歡", "我真的大好き你的歌聲"),
+            ("中日混合歌詞引用", "『所以說你能做私の彼女嗎』是歌詞"),
+            ("前句標示歌詞", "這是歌詞。我真的大好き"),
+            ("前句標示轉述", "朋友問。所以說你能做私の彼女嗎"),
+            ("前句標示假設", "假設一下。所以說你能做私の彼女嗎"),
+            ("前句否認告白", "我冇講。 我真的大好き"),
             ("英文歌名", "I Love You is my favorite song"),
             ("否定中文", "我不喜歡你"),
             ("否定粵語", "我唔鍾意你"),
@@ -64,12 +77,14 @@ struct RelationshipPolicyTests {
             ("否定日文", "好きじゃないです"),
             ("拒絕中文交往", "我不想同你交往"),
             ("拒絕成為女朋友", "請不要做我女朋友"),
+            ("否定中日混合邀請", "你不能做私の彼女"),
             ("拒絕英文女朋友", "I don't want you to be my girlfriend"),
             ("拒絕英文約會", "I do not want to date you"),
             ("日文朋友式喜歡", "あなたが好きです。友達として"),
             ("朋友式喜歡", "我只是作為朋友喜歡你"),
             ("粉絲式喜歡", "我作為粉絲鍾意你"),
             ("假設中文", "如果我話我喜歡你，你會點？"),
+            ("假設中日混合邀請", "如果你能做私の彼女就好了"),
             ("假設英文", "If I said I love you, what would happen?"),
             ("引用句子", "『我喜歡你』英文點講？"),
             ("詢問表白意思", "表白是甚麼？"),
@@ -78,6 +93,7 @@ struct RelationshipPolicyTests {
             ("喜歡對方歌聲", "我鍾意你嘅歌聲"),
             ("喜歡角色設定", "我喜歡你的人設"),
             ("第三人稱粵語", "佢鍾意你"),
+            ("轉述中日混合邀請", "朋友問所以說你能做私の彼女嗎？"),
             ("否認曾經告白", "我冇話過我鍾意你"),
             ("否認說過喜歡", "我冇話我中意你"),
             ("英文引用問意思", "'I love you' 是甚麼意思？"),
@@ -94,6 +110,26 @@ struct RelationshipPolicyTests {
             )
         }
 
+        expectEqual(
+            ConfessionPolicy.evaluate("所以說你能做私の彼女嗎", friendship: 75, status: .friends, offended: false, justForgiven: false),
+            .accepted,
+            "截圖原句在 75 達到接受門檻"
+        )
+        expectEqual(
+            ConfessionPolicy.evaluate("所以說你能做私の彼女嗎", friendship: 74.9, status: .friends, offended: false, justForgiven: false),
+            .notReady,
+            "截圖原句在 75 以下尚未準備好"
+        )
+        expectEqual(
+            ConfessionPolicy.evaluate("所以說你能做私の彼女嗎", friendship: 100, status: .dating, offended: false, justForgiven: false),
+            .alreadyDating,
+            "截圖原句在交往中回覆已交往"
+        )
+        expectEqual(
+            ConfessionPolicy.evaluate("所以說你能做私の彼女嗎", friendship: 100, status: .friends, offended: true, justForgiven: false),
+            .upset,
+            "截圖原句在冒犯狀態回覆不開心"
+        )
         expectEqual(
             ConfessionPolicy.evaluate("我喜歡你", friendship: 74.9, status: .friends, offended: false, justForgiven: false),
             .notReady,

@@ -13,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var knowledgeController: SongKnowledgeWindowController?
     private var rhythmController: RhythmGameWindowController?
     private var settingsObserver: NSObjectProtocol?
+    private var speechMuteObserver: NSObjectProtocol?
     private let weatherService = WeatherService()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -29,6 +30,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         awareness.start()
         EventCalendar.shared.start()
         CompanionDiary.shared.start()
+
+        // Muting (or a timed mute running out) changes the ♪ menu.
+        speechMuteObserver = NotificationCenter.default.addObserver(
+            forName: .mikuSpeechMuteChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.rebuildMenu() }
+        }
 
         settingsObserver = NotificationCenter.default.addObserver(
             forName: .mikuSettingsChanged,
@@ -109,6 +119,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         false
     }
 
+    /// `miku-desktop://` links: only the voice commands in SpeechLinkCommand (for Shortcuts
+    /// automations, e.g. keeping Miku quiet during a Focus). Anything else is ignored.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls {
+            guard let command = SpeechLinkCommand(url: url) else { continue }
+            MikuSpeech.shared.handle(command)
+        }
+    }
+
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         openChat(nil)
         return true
@@ -134,6 +153,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let item = NSMenuItem(title: L10n.text(key), action: action, keyEquivalent: "")
             item.target = self
             menu.addItem(item)
+        }
+
+        // Miku's voice: mute for a while without turning reading aloud off.
+        let speech = MikuSpeech.shared
+        if speech.enabled {
+            let voiceMenu = NSMenu()
+            if speech.isMuted {
+                if speech.isQuietByAutomation {
+                    let note = NSMenuItem(title: L10n.text("speechQuietByFocus"), action: nil, keyEquivalent: "")
+                    note.isEnabled = false
+                    voiceMenu.addItem(note)
+                } else if let until = speech.mutedUntil {
+                    let note = NSMenuItem(title: L10n.format("speechMutedUntil", until.formatted(date: .omitted, time: .shortened)), action: nil, keyEquivalent: "")
+                    note.isEnabled = false
+                    voiceMenu.addItem(note)
+                }
+                let unmute = NSMenuItem(title: L10n.text("speechUnmute"), action: #selector(unmuteSpeech(_:)), keyEquivalent: "")
+                unmute.target = self
+                voiceMenu.addItem(unmute)
+            } else {
+                for (key, action) in [
+                    ("speechMuteHour", #selector(muteSpeechForAnHour(_:))),
+                    ("speechMuteIndefinite", #selector(muteSpeechUntilUnmuted(_:)))
+                ] {
+                    let item = NSMenuItem(title: L10n.text(key), action: action, keyEquivalent: "")
+                    item.target = self
+                    voiceMenu.addItem(item)
+                }
+            }
+            voiceMenu.addItem(.separator())
+            let focus = NSMenuItem(title: L10n.text("speechFollowFocus"), action: #selector(explainFocusAutomation(_:)), keyEquivalent: "")
+            focus.target = self
+            voiceMenu.addItem(focus)
+            let voice = NSMenuItem(title: L10n.text(speech.isMuted ? "speechMenuMuted" : "speechMenu"), action: nil, keyEquivalent: "")
+            voice.submenu = voiceMenu
+            menu.addItem(voice)
         }
 
         let interaction = NSMenuItem(title: L10n.text("interaction"), action: #selector(toggleInteraction(_:)), keyEquivalent: "")
@@ -223,7 +278,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Something she noticed and wanted to say: speech bubble on the desktop, and in the chat.
     private func deliverProactive(_ reply: CompanionReply) {
         wallpaperController?.receiveReply(reply)
-        MikuSpeech.shared.speak(reply.text)
+        // Something she says on her own stays silent while she's meant to be asleep.
+        if !SleepSchedule.shared.isAsleep() { MikuSpeech.shared.speak(reply.text) }
         if let chatController {
             chatController.receiveProactive(reply)
         } else {
@@ -291,6 +347,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func openKnowledge(_ sender: Any?) {
         if knowledgeController == nil { knowledgeController = SongKnowledgeWindowController() }
         knowledgeController?.present()
+    }
+
+    @objc private func muteSpeechForAnHour(_ sender: Any?) {
+        MikuSpeech.shared.setMuted(true, for: SpeechMute.hour)
+    }
+
+    @objc private func muteSpeechUntilUnmuted(_ sender: Any?) {
+        MikuSpeech.shared.setMuted(true)
+    }
+
+    @objc private func unmuteSpeech(_ sender: Any?) {
+        MikuSpeech.shared.setMuted(false)
+    }
+
+    /// macOS doesn't let this app read Focus directly, but a Shortcuts automation can tell
+    /// it: explain the two automations and offer to open Shortcuts.
+    @objc private func explainFocusAutomation(_ sender: Any?) {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = L10n.text("speechFocusTitle")
+        alert.informativeText = L10n.text("speechFocusSteps")
+        alert.addButton(withTitle: L10n.text("speechFocusOpenShortcuts"))
+        alert.addButton(withTitle: L10n.text("speechFocusCopyOn"))
+        alert.addButton(withTitle: L10n.text("cancel"))
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            if let shortcuts = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.shortcuts") {
+                NSWorkspace.shared.openApplication(at: shortcuts, configuration: NSWorkspace.OpenConfiguration())
+            }
+        case .alertSecondButtonReturn:
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString("open -g \"miku-desktop://quiet/on\"", forType: .string)
+        default:
+            break
+        }
     }
 
     @objc private func toggleInteraction(_ sender: NSMenuItem) {

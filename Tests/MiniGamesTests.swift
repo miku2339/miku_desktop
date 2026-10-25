@@ -12,6 +12,22 @@ struct MiniGamesTests {
 
     @MainActor
     static func main() async {
+        let defaults = UserDefaults.standard
+        let previousReplyLanguage = defaults.object(forKey: "replyLanguage")
+        let previousInterfaceLanguage = defaults.object(forKey: "interfaceLanguage")
+        defer {
+            if let previousReplyLanguage {
+                defaults.set(previousReplyLanguage, forKey: "replyLanguage")
+            } else {
+                defaults.removeObject(forKey: "replyLanguage")
+            }
+            if let previousInterfaceLanguage {
+                defaults.set(previousInterfaceLanguage, forKey: "interfaceLanguage")
+            } else {
+                defaults.removeObject(forKey: "interfaceLanguage")
+            }
+        }
+
         // Asking for a game in the chat.
         expect(MiniGame.requested(in: "嚟玩包剪揼！") == .rps, "包剪揼 starts rock-paper-scissors")
         expect(MiniGame.requested(in: "じゃんけんしよう") == .rps, "じゃんけん")
@@ -19,6 +35,23 @@ struct MiniGamesTests {
         expect(MiniGame.requested(in: "玩打拍子") == .rhythm, "rhythm")
         expect(MiniGame.requested(in: "我唔想玩包剪揼") == nil, "not when you say you don't want to")
         expect(MiniGame.requested(in: "今日好攰") == nil, "ordinary chat is not a game")
+
+        // Fixed reply languages keep Mandarin and Cantonese game copy separate.
+        defaults.set("zh-Hant", forKey: "replyLanguage")
+        expect(MiniGame.text("國語", yue: "粵語", "English", "日本語") == "國語", "Mandarin game text")
+        expect(RPSHand.rock.name == "石頭", "Mandarin hand name")
+        expect(RPSSession().start().first?.text.contains("剪刀石頭布") == true, "Mandarin rock-paper-scissors copy")
+        defaults.set("yue", forKey: "replyLanguage")
+        expect(MiniGame.text("國語", yue: "粵語", "English", "日本語") == "粵語", "Cantonese game text")
+        expect(RPSHand.rock.name == "揼", "Cantonese hand name")
+        expect(RPSSession().start().first?.text.contains("嚟玩包剪揼") == true, "Cantonese rock-paper-scissors copy")
+        defaults.set("en", forKey: "replyLanguage")
+        expect(MiniGame.text("國語", yue: "粵語", "English", "日本語") == "English", "English game text")
+        defaults.set("ja", forKey: "replyLanguage")
+        expect(MiniGame.text("國語", yue: "粵語", "English", "日本語") == "日本語", "Japanese game text")
+        defaults.set("auto", forKey: "replyLanguage")
+        defaults.set("zh-Hant", forKey: "interfaceLanguage")
+        expect(MiniGame.text("國語", yue: "粵語", "English", "日本語") == "粵語", "automatic Traditional Chinese keeps existing Cantonese copy")
 
         // Rock-paper-scissors rules and a whole match.
         expect(RPSHand.rock.beats(.scissors) && RPSHand.scissors.beats(.paper) && RPSHand.paper.beats(.rock), "who beats whom")

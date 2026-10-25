@@ -31,6 +31,10 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
     private let personalityKeys = ["lively", "gentle", "quiet", "custom"]
     private let languageKeys = ["automatic", "traditionalChinese", "english", "japanese"]
     private let languageValues = ["auto", "zh-Hant", "en", "ja"]
+    // What Miku speaks: Chinese can be Mandarin or Cantonese (the app itself has no
+    // Cantonese interface, so this list is separate from the interface languages).
+    private let replyLanguageKeys = ["automatic", "replyMandarin", "replyCantonese", "japanese", "english"]
+    private let replyLanguageValues = ["auto", "zh-Hant", "yue", "ja", "en"]
 
     private let titleLabel = NSTextField.mikuLabel("", size: 20, weight: .bold, color: MikuTheme.deepTeal)
     private let subtitleLabel = NSTextField.mikuLabel("", size: 12.5, color: MikuTheme.secondaryText)
@@ -141,7 +145,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         for (key, label) in sectionLabels { label.stringValue = L10n.text(key) }
         updatePopupTitles(scenePopup, keys: sceneKeys)
         updatePopupTitles(rotationPopup, keys: SceneRotation.choices.map { $0.key })
-        updatePopupTitles(replyLanguagePopup, keys: languageKeys)
+        updatePopupTitles(replyLanguagePopup, keys: replyLanguageKeys)
         updatePopupTitles(interfaceLanguagePopup, keys: languageKeys)
         updatePopupTitles(speechLanguagePopup, keys: [
             "speechLanguageAuto", "speechLanguageCantonese", "speechLanguageMandarin",
@@ -372,7 +376,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
 
         configurePopup(scenePopup, titles: sceneKeys.map(L10n.text), values: sceneKeys, action: #selector(sceneChanged))
         configurePopup(rotationPopup, titles: SceneRotation.choices.map { L10n.text($0.key) }, values: SceneRotation.choices.map { String($0.seconds) }, action: #selector(rotationChanged))
-        configurePopup(replyLanguagePopup, titles: languageKeys.map(L10n.text), values: languageValues, action: #selector(replyLanguageChanged))
+        configurePopup(replyLanguagePopup, titles: replyLanguageKeys.map(L10n.text), values: replyLanguageValues, action: #selector(replyLanguageChanged))
         configurePopup(interfaceLanguagePopup, titles: languageKeys.map(L10n.text), values: languageValues, action: #selector(interfaceLanguageChanged))
         automaticSceneSwitch.target = self
         automaticSceneSwitch.action = #selector(automaticSceneChanged)
@@ -842,6 +846,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
     @objc private func replyLanguageChanged() {
         configuration.replyLanguage = replyLanguagePopup.selectedItem?.representedObject as? String ?? "auto"
         saveAndNotify()
+        refreshSpeech()
     }
 
     @objc private func interfaceLanguageChanged() {
@@ -870,7 +875,9 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
     }
 
     @objc private func previewSpeech() {
-        MikuSpeech.shared.playSample(language: MikuSpeech.shared.language)
+        let fixed = SpeechVoice.voice(forReplyLanguage: configuration.replyLanguage)
+            .flatMap(MikuSpeech.Language.init(rawValue:))
+        MikuSpeech.shared.playSample(language: fixed ?? MikuSpeech.shared.language)
     }
 
     @objc private func stopSpeech() {
@@ -918,7 +925,17 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
     private func refreshSpeech() {
         let speech = MikuSpeech.shared
         speechSwitch.state = speech.enabled ? .on : .off
-        select(speech.language.rawValue, in: speechLanguagePopup)
+        // With a speaking language chosen for Miku, her voice follows it (and the text
+        // itself, see SpeechVoice); the voice language only matters on Automatic.
+        if let fixed = SpeechVoice.voice(forReplyLanguage: configuration.replyLanguage) {
+            select(fixed, in: speechLanguagePopup)
+            speechLanguagePopup.isEnabled = false
+            speechLanguagePopup.toolTip = L10n.text("speechLanguageFollows")
+        } else {
+            select(speech.language.rawValue, in: speechLanguagePopup)
+            speechLanguagePopup.isEnabled = true
+            speechLanguagePopup.toolTip = nil
+        }
         speechPreviewButton.isEnabled = speech.hasConfiguredModel && speech.enabled
         speechStopButton.isEnabled = speech.isBusy
         speechTestButton.isEnabled = speechTask == nil

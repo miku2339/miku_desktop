@@ -145,7 +145,76 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
             if !enabled {
                 stop()
             } else {
-                setState(busy: false, key: "speechReady")
+                setState(busy: false, key: idleStatusKey)
+            }
+            NotificationCenter.default.post(name: .mikuSpeechMuteChanged, object: self)
+        }
+    }
+
+    // MARK: - Mute (a quick "be quiet", separate from turning reading aloud off)
+
+    var isMuted: Bool { mute.isMuted() }
+
+    /// Quiet because an automation (a Focus, through Shortcuts) asked, not because you muted.
+    var isQuietByAutomation: Bool { mute.isQuietByAutomation && !mute.isMutedByHand() }
+
+    /// From a `miku-desktop://quiet/on|off` link: a Shortcuts automation for a Focus.
+    func setQuietByAutomation(_ quiet: Bool) {
+        mute.setQuietByAutomation(quiet)
+        if quiet {
+            cancelCurrentPlayback()
+            setState(busy: false, key: "speechMuted")
+        } else if !isBusy {
+            setState(busy: false, key: idleStatusKey)
+        }
+        NotificationCenter.default.post(name: .mikuSpeechMuteChanged, object: self)
+    }
+
+    /// Carries out a `miku-desktop://` voice link.
+    func handle(_ command: SpeechLinkCommand) {
+        switch command {
+        case let .quiet(quiet):
+            setQuietByAutomation(quiet)
+        case let .mute(minutes):
+            setMuted(true, for: minutes.map { TimeInterval($0) * 60 })
+        case .unmute:
+            setMuted(false)
+        }
+    }
+
+    /// When a timed mute ends; nil while not muted or muted until unmuted.
+    var mutedUntil: Date? { mute.mutedUntil() }
+
+    /// Mutes for `duration` (nil: until unmuted) and stops what she's saying right now.
+    /// Nothing is generated while muted; replays and previews you ask for still play.
+    func setMuted(_ muted: Bool, for duration: TimeInterval? = nil) {
+        if muted {
+            mute.mute(for: duration)
+            cancelCurrentPlayback()
+            setState(busy: false, key: "speechMuted")
+        } else {
+            mute.unmute()
+            if !isBusy { setState(busy: false, key: idleStatusKey) }
+        }
+        scheduleMuteExpiry()
+        NotificationCenter.default.post(name: .mikuSpeechMuteChanged, object: self)
+    }
+
+    private var idleStatusKey: String {
+        enabled ? (isMuted ? "speechMuted" : "speechReady") : "speechDisabled"
+    }
+
+    /// A timed mute runs out on its own; tell the button and the menu when it does.
+    private func scheduleMuteExpiry() {
+        muteTimer?.invalidate()
+        muteTimer = nil
+        guard let until = mute.mutedUntil() else { return }
+        muteTimer = Timer.scheduledTimer(withTimeInterval: max(1, until.timeIntervalSinceNow + 0.5), repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.muteTimer = nil
+                if !self.isBusy { self.setState(busy: false, key: self.idleStatusKey) }
+                NotificationCenter.default.post(name: .mikuSpeechMuteChanged, object: self)
             }
         }
     }
@@ -204,6 +273,8 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
     private var generation = UUID()
     private var statusKey: String
     private var statusError: Error?
+    private let mute: SpeechMute
+    private var muteTimer: Timer?
 
     override convenience init() {
         self.init(defaults: .standard)
@@ -213,7 +284,9 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
         self.defaults = defaults
         enabled = defaults.object(forKey: Self.enabledKey) as? Bool ?? false
         language = Language(rawValue: defaults.string(forKey: Self.languageKey) ?? "") ?? .automatic
-        statusKey = enabled ? "speechReady" : "speechDisabled"
+        let mute = SpeechMute(defaults: defaults)
+        self.mute = mute
+        statusKey = enabled ? (mute.isMuted() ? "speechMuted" : "speechReady") : "speechDisabled"
 
         let configuration = URLSessionConfiguration.ephemeral
         configuration.httpCookieAcceptPolicy = .never
@@ -229,6 +302,7 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
             delegateQueue: nil
         )
         super.init()
+        scheduleMuteExpiry()
     }
 
     func configure(endpoint: String, modelID: String) throws {
@@ -249,12 +323,17 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
         notifyStateChanged()
     }
 
-    func speak(_ text: String, language override: Language? = nil) {
-        cancelCurrentPlayback()
+    /// `userInitiated`: you asked to hear it (a replay), so it plays even while muted.
+    func speak(_ text: String, language override: Language? = nil, userInitiated: Bool = false) {
         guard enabled else {
             setState(busy: false, key: "speechDisabled")
             return
         }
+        if let blockedStatus = automaticSpeechBlockStatus(userInitiated: userInitiated) {
+            if !isBusy { setState(busy: false, key: blockedStatus) }
+            return
+        }
+        cancelCurrentPlayback()
 
         guard text.count <= Self.maximumTextLength else {
             setState(busy: false, error: SpeechError.textTooLong)
@@ -270,14 +349,17 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
             return
         }
 
-        let selected = override ?? language
-        let resolved = selected == .automatic ? Self.detectLanguage(in: cleaned) : selected
-        start(text: cleaned, language: resolved)
+        // The text decides the voice (Mandarin text is never read in the Cantonese voice, or
+        // the other way round); only text that could be either follows the chosen language:
+        // Miku's speaking language when one is set, else the voice language setting.
+        let preferred = SpeechVoice.voice(forReplyLanguage: defaults.string(forKey: "replyLanguage")) ?? language.rawValue
+        let resolved = override ?? Language(rawValue: SpeechVoice.voice(for: cleaned, preferred: preferred)) ?? .mandarin
+        start(text: cleaned, language: resolved, userInitiated: userInitiated)
     }
 
     func stop() {
         cancelCurrentPlayback()
-        setState(busy: false, key: enabled ? "speechReady" : "speechDisabled")
+        setState(busy: false, key: idleStatusKey)
     }
 
     func testConnection() async throws -> [String] {
@@ -345,10 +427,10 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
             setState(busy: false, key: "speechDisabled")
             return
         }
-        start(text: sample, language: resolved)
+        start(text: sample, language: resolved, userInitiated: true)
     }
 
-    private func start(text: String, language: Language) {
+    private func start(text: String, language: Language, userInitiated: Bool) {
         let currentGeneration = generation
         setState(busy: true, key: "speechConnecting")
         operationTask = Task { [weak self] in
@@ -367,6 +449,11 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
                 )
                 try Task.checkCancellation()
                 guard generation == currentGeneration else { return }
+                if let blockedStatus = automaticSpeechBlockStatus(userInitiated: userInitiated) {
+                    operationTask = nil
+                    setState(busy: false, key: blockedStatus)
+                    return
+                }
                 try play(audio)
             } catch is CancellationError {
                 return
@@ -377,6 +464,14 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
                 operationTask = nil
             }
         }
+    }
+
+    /// Automatic speech is checked both before generation and immediately before playback.
+    private func automaticSpeechBlockStatus(userInitiated: Bool) -> String? {
+        guard !userInitiated else { return nil }
+        if isMuted { return "speechMuted" }
+        if SpeechQuietTimes.isQuietNow() { return "speechQuietNow" }
+        return nil
     }
 
     private func cancelCurrentPlayback() {
@@ -436,7 +531,7 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
         guard player === audioPlayer else { return }
         audioPlayer = nil
         if flag {
-            setState(busy: false, key: "speechReady")
+            setState(busy: false, key: idleStatusKey)
         } else {
             setState(busy: false, error: SpeechError.invalidAudio)
         }
@@ -583,23 +678,5 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
         guard let expression = try? NSRegularExpression(pattern: pattern) else { return value }
         let range = NSRange(value.startIndex..., in: value)
         return expression.stringByReplacingMatches(in: value, range: range, withTemplate: template)
-    }
-
-    private static func detectLanguage(in text: String) -> Language {
-        let scalars = text.unicodeScalars
-        if scalars.contains(where: { (0x3040...0x30FF).contains(Int($0.value)) }) {
-            return .japanese
-        }
-        let cantonese = #"唔|冇|喺|嘅|咁|嚟|啦|喇|啲|佢|哋|俾|畀|攞|睇|諗|瞓|而家|點解|乜|噉|嘢|㗎|㖭|吖|啱|傾|(?:你|我|佢|呢|就|都|唔)係"#
-        if text.range(of: cantonese, options: .regularExpression) != nil {
-            return .cantonese
-        }
-        if scalars.contains(where: { (0x3400...0x9FFF).contains(Int($0.value)) }) {
-            return .mandarin
-        }
-        if scalars.contains(where: { (0x0041...0x005A).contains(Int($0.value)) || (0x0061...0x007A).contains(Int($0.value)) }) {
-            return .english
-        }
-        return .mandarin
     }
 }

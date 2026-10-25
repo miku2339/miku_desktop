@@ -437,6 +437,7 @@ final class AwarenessService {
 
     private static var language: String {
         let chosen = UserDefaults.standard.string(forKey: "replyLanguage") ?? "auto"
+        if chosen == "yue" { return "zh-Hant" } // Cantonese: Chinese text, Cantonese prompt
         if ["zh-Hant", "en", "ja"].contains(chosen) { return chosen }
         return AppLanguage.resolved.rawValue
     }

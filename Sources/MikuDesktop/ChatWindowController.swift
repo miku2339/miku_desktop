@@ -32,6 +32,8 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
     private let settingsButton = MikuPillButton(frame: .zero)
     private let gameButton = MikuPillButton(frame: .zero)
     private let companionButton = MikuPillButton(frame: .zero)
+    /// Mutes Miku's voice in one click (shown only while reading aloud is on).
+    private let muteButton = MikuPillButton(frame: .zero)
     private var activeGame: GameSession?
     private var choiceRow: NSView?
     private var lastReplyText: String?
@@ -84,6 +86,7 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
         showEmptyState()
         restoreConversation()
         NotificationCenter.default.addObserver(self, selector: #selector(memoryErased), name: .mikuMemoryErased, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(refreshMuteButton), name: .mikuSpeechMuteChanged, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(memoryRestored), name: .mikuMemoryRestored, object: nil)
         // ⌘V with a picture on the clipboard attaches it instead of pasting text.
         pasteMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
@@ -166,7 +169,7 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
             showGameLines(session.start())
         case .rhythm:
             showGameLines([GameLine(
-                text: MiniGame.text("打拍子！數完 1、2、3、4，就跟住拍子撳空白鍵～", "Rhythm time! After 1, 2, 3, 4, tap the space bar on every beat~", "リズムゲーム！1、2、3、4のあと、拍に合わせてスペースキーを押してね～"),
+                text: MiniGame.text("打拍子！數完 1、2、3、4，就跟著拍子按空白鍵～", yue: "打拍子！數完 1、2、3、4，就跟住拍子撳空白鍵～", "Rhythm time! After 1, 2, 3, 4, tap the space bar on every beat~", "リズムゲーム！1、2、3、4のあと、拍に合わせてスペースキーを押してね～"),
                 emotion: "happy", action: "clap"
             )])
             onGameEvent?(.rhythm)
@@ -338,6 +341,7 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
         gameButton.setAccessibilityLabel(L10n.text("gamesMenu"))
         companionButton.toolTip = L10n.text("companionTools")
         companionButton.setAccessibilityLabel(L10n.text("companionTools"))
+        refreshMuteButton()
         settingsButton.toolTip = L10n.text("settingsButton")
         settingsButton.setAccessibilityLabel(L10n.text("settingsButton"))
         attachButton.toolTip = L10n.text("attachImage")
@@ -447,7 +451,31 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
 
     @objc private func replayLastReply() {
         guard let lastReplyText else { return }
-        MikuSpeech.shared.speak(lastReplyText)
+        // You asked to hear it, so it plays even while she's muted.
+        MikuSpeech.shared.speak(lastReplyText, userInitiated: true)
+    }
+
+    @objc private func toggleMute() {
+        let speech = MikuSpeech.shared
+        speech.setMuted(!speech.isMuted)
+    }
+
+    /// Speaker icon: what clicking it will do, and whether she's muted now.
+    @objc func refreshMuteButton() {
+        let speech = MikuSpeech.shared
+        muteButton.isHidden = !speech.enabled
+        let muted = speech.isMuted
+        muteButton.symbolName = muted ? "speaker.slash.fill" : "speaker.wave.2.fill"
+        let title: String
+        if muted, speech.isQuietByAutomation {
+            title = L10n.text("speechQuietByFocusUnmute")
+        } else if muted, let until = speech.mutedUntil {
+            title = L10n.format("speechMutedUntilUnmute", until.formatted(date: .omitted, time: .shortened))
+        } else {
+            title = L10n.text(muted ? "speechUnmute" : "speechMuteButton")
+        }
+        muteButton.toolTip = title
+        muteButton.setAccessibilityLabel(title)
     }
 
     @objc private func stopSpeech() {
@@ -655,12 +683,14 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
         configureIconButton(settingsButton, symbol: "gearshape.fill", action: #selector(openSettings))
         configureIconButton(gameButton, symbol: "gamecontroller.fill", action: #selector(showGames(_:)))
         configureIconButton(companionButton, symbol: "ellipsis", action: #selector(showCompanionTools(_:)))
+        configureIconButton(muteButton, symbol: "speaker.wave.2.fill", action: #selector(toggleMute))
+        muteButton.setAccessibilityIdentifier("chat-speech-mute")
         companionButton.setAccessibilityIdentifier("chat-companion-tools")
 
         let spacer = NSView()
         spacer.setContentHuggingPriority(NSLayoutConstraint.Priority(1), for: .horizontal)
         spacer.setContentCompressionResistancePriority(NSLayoutConstraint.Priority(1), for: .horizontal)
-        let headerStack = NSStackView(views: [headerAvatar, titleStack, spacer, gameButton, companionButton, clearButton, settingsButton])
+        let headerStack = NSStackView(views: [headerAvatar, titleStack, spacer, muteButton, gameButton, companionButton, clearButton, settingsButton])
         headerStack.orientation = .horizontal
         headerStack.distribution = .fill
         headerStack.alignment = .centerY

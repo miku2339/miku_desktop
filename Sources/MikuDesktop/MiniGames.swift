@@ -28,12 +28,14 @@ enum MiniGame: String, CaseIterable {
     /// The language the games talk in: the reply language if one is chosen, else the app's.
     static var language: String {
         let chosen = UserDefaults.standard.string(forKey: "replyLanguage") ?? "auto"
-        if ["zh-Hant", "en", "ja"].contains(chosen) { return chosen }
-        return AppLanguage.resolved.rawValue
+        if ["zh-Hant", "yue", "en", "ja"].contains(chosen) { return chosen }
+        let fallback = AppLanguage.resolved.rawValue
+        return fallback == "zh-Hant" ? "yue" : fallback
     }
 
-    static func text(_ zh: String, _ en: String, _ ja: String) -> String {
+    static func text(_ zh: String, yue: String, _ en: String, _ ja: String) -> String {
         switch language {
+        case "yue": return yue
         case "en": return en
         case "ja": return ja
         default: return zh
@@ -87,9 +89,9 @@ enum RPSHand: String, CaseIterable {
 
     var name: String {
         switch self {
-        case .rock: return MiniGame.text("揼", "rock", "グー")
-        case .scissors: return MiniGame.text("剪", "scissors", "チョキ")
-        case .paper: return MiniGame.text("包", "paper", "パー")
+        case .rock: return MiniGame.text("石頭", yue: "揼", "rock", "グー")
+        case .scissors: return MiniGame.text("剪刀", yue: "剪", "scissors", "チョキ")
+        case .paper: return MiniGame.text("布", yue: "包", "paper", "パー")
         }
     }
 }
@@ -112,7 +114,7 @@ final class RPSSession: GameSession {
 
     func start() -> [GameLine] {
         [GameLine(
-            text: MiniGame.text("嚟玩包剪揼！三盤兩勝～包、剪、揼！你出咩？", "Rock-paper-scissors! Best of three~ Rock, paper, scissors… what's yours?", "じゃんけんしよ！三本勝負～じゃん、けん…何出す？"),
+            text: MiniGame.text("來玩剪刀石頭布！三局兩勝～剪刀、石頭、布！你出什麼？", yue: "嚟玩包剪揼！三盤兩勝～包、剪、揼！你出咩？", "Rock-paper-scissors! Best of three~ Rock, paper, scissors… what's yours?", "じゃんけんしよ！三本勝負～じゃん、けん…何出す？"),
             emotion: "happy", action: "cheer", choices: choices
         )]
     }
@@ -124,19 +126,19 @@ final class RPSSession: GameSession {
         var line: GameLine
         if hers == theirs {
             line = GameLine(
-                text: MiniGame.text("我出\(hers.emoji)\(hers.name)！打和～再嚟！", "I threw \(hers.emoji) \(hers.name)! A draw~ again!", "わたしは\(hers.emoji)\(hers.name)！あいこ～もう一回！"),
+                text: MiniGame.text("我出\(hers.emoji)\(hers.name)！平手～再來！", yue: "我出\(hers.emoji)\(hers.name)！打和～再嚟！", "I threw \(hers.emoji) \(hers.name)! A draw~ again!", "わたしは\(hers.emoji)\(hers.name)！あいこ～もう一回！"),
                 emotion: "surprised", action: "idle", choices: choices, rps: (hers.rawValue, "draw")
             )
         } else if hers.beats(theirs) {
             mine += 1
             line = GameLine(
-                text: MiniGame.text("我出\(hers.emoji)\(hers.name)！我贏咗～（\(mine):\(yours)）", "I threw \(hers.emoji) \(hers.name)! I win~ (\(mine)–\(yours))", "わたしは\(hers.emoji)\(hers.name)！勝った～（\(mine)対\(yours)）"),
+                text: MiniGame.text("我出\(hers.emoji)\(hers.name)！我贏了～（\(mine):\(yours)）", yue: "我出\(hers.emoji)\(hers.name)！我贏咗～（\(mine):\(yours)）", "I threw \(hers.emoji) \(hers.name)! I win~ (\(mine)–\(yours))", "わたしは\(hers.emoji)\(hers.name)！勝った～（\(mine)対\(yours)）"),
                 emotion: "happy", action: "idle", choices: choices, rps: (hers.rawValue, "win")
             )
         } else {
             yours += 1
             line = GameLine(
-                text: MiniGame.text("我出\(hers.emoji)\(hers.name)…你贏咗！（\(mine):\(yours)）", "I threw \(hers.emoji) \(hers.name)… you win! (\(mine)–\(yours))", "わたしは\(hers.emoji)\(hers.name)…負けた！（\(mine)対\(yours)）"),
+                text: MiniGame.text("我出\(hers.emoji)\(hers.name)…你贏了！（\(mine):\(yours)）", yue: "我出\(hers.emoji)\(hers.name)…你贏咗！（\(mine):\(yours)）", "I threw \(hers.emoji) \(hers.name)… you win! (\(mine)–\(yours))", "わたしは\(hers.emoji)\(hers.name)…負けた！（\(mine)対\(yours)）"),
                 emotion: "pout", action: "idle", choices: choices, rps: (hers.rawValue, "lose")
             )
         }
@@ -144,8 +146,8 @@ final class RPSSession: GameSession {
         isOver = true
         line.choices = []
         let end = mine == 2
-            ? GameLine(text: MiniGame.text("我贏咗成局！嘿嘿，下次再挑戰我啦～", "I won the match! Hehe, challenge me again sometime~", "わたしの勝ち！えへへ、また挑戦してね～"), emotion: "happy", action: "cheer")
-            : GameLine(text: MiniGame.text("你贏咗成局…好唔甘心！下次一定贏返！", "You won the match… so frustrating! I'll get you next time!", "負けちゃった…くやしい！次は絶対勝つから！"), emotion: "pout", action: "pout")
+            ? GameLine(text: MiniGame.text("我贏了這局！嘿嘿，下次再挑戰我吧～", yue: "我贏咗成局！嘿嘿，下次再挑戰我啦～", "I won the match! Hehe, challenge me again sometime~", "わたしの勝ち！えへへ、また挑戦してね～"), emotion: "happy", action: "cheer")
+            : GameLine(text: MiniGame.text("你贏了這局…好不甘心！下次一定要贏回來！", yue: "你贏咗成局…好唔甘心！下次一定贏返！", "You won the match… so frustrating! I'll get you next time!", "負けちゃった…くやしい！次は絶対勝つから！"), emotion: "pout", action: "pout")
         return (said, [line, end])
     }
 }
@@ -203,13 +205,13 @@ enum SongQuiz {
             let producers = Array(Set(songs.map(\.producer)).subtracting([song.producer])).shuffled(using: &generator).prefix(3)
             var options = Array(producers) + [song.producer]
             options.shuffle(using: &generator)
-            let prompt = MiniGame.text("「\(song.title)」係邊位 P主嘅作品？", "Who made “\(song.title)”?", "「\(song.title)」を作ったのは誰？")
+            let prompt = MiniGame.text("「\(song.title)」是哪位 P 主的作品？", yue: "「\(song.title)」係邊位 P主嘅作品？", "Who made “\(song.title)”?", "「\(song.title)」を作ったのは誰？")
             return Question(prompt: prompt, options: options, answer: options.firstIndex(of: song.producer) ?? 0, song: song)
         }
         let others = songs.filter { $0.producer != song.producer }.shuffled(using: &generator).prefix(3).map(\.title)
         var options = Array(others) + [song.title]
         options.shuffle(using: &generator)
-        let prompt = MiniGame.text("以下邊首係 \(song.producer) 嘅歌？", "Which of these is by \(song.producer)?", "\(song.producer)の曲はどれ？")
+        let prompt = MiniGame.text("以下哪首是 \(song.producer) 的歌？", yue: "以下邊首係 \(song.producer) 嘅歌？", "Which of these is by \(song.producer)?", "\(song.producer)の曲はどれ？")
         return Question(prompt: prompt, options: options, answer: options.firstIndex(of: song.title) ?? 0, song: song)
     }
 }
@@ -226,7 +228,7 @@ final class QuizSession: GameSession {
 
     func start() -> [GameLine] {
         let intro = GameLine(
-            text: MiniGame.text("Vocaloid 歌曲問答！一共 \(Self.length) 題，睇吓你有幾熟～", "Vocaloid song quiz! \(Self.length) questions — let's see how well you know them~", "ボカロ曲クイズ！全\(Self.length)問、どれだけ知ってるかな～"),
+            text: MiniGame.text("Vocaloid 歌曲問答！一共 \(Self.length) 題，看看你有多熟～", yue: "Vocaloid 歌曲問答！一共 \(Self.length) 題，睇吓你有幾熟～", "Vocaloid song quiz! \(Self.length) questions — let's see how well you know them~", "ボカロ曲クイズ！全\(Self.length)問、どれだけ知ってるかな～"),
             emotion: "happy", action: "clap"
         )
         return [intro, nextQuestion()]
@@ -248,9 +250,9 @@ final class QuizSession: GameSession {
         var lines: [GameLine] = []
         if index == question.answer {
             score += 1
-            lines.append(GameLine(text: MiniGame.text("答啱喇！\(fact) ♪", "Correct! \(fact) ♪", "正解！\(fact)♪"), emotion: "happy", action: "clap"))
+            lines.append(GameLine(text: MiniGame.text("答對了！\(fact) ♪", yue: "答啱喇！\(fact) ♪", "Correct! \(fact) ♪", "正解！\(fact)♪"), emotion: "happy", action: "clap"))
         } else {
-            lines.append(GameLine(text: MiniGame.text("唔係喔～答案係：\(fact)", "Not quite~ it's \(fact)", "ざんねん～正解は\(fact)"), emotion: "sad", action: "shakeHead"))
+            lines.append(GameLine(text: MiniGame.text("不是喔～答案是：\(fact)", yue: "唔係喔～答案係：\(fact)", "Not quite~ it's \(fact)", "ざんねん～正解は\(fact)"), emotion: "sad", action: "shakeHead"))
         }
         if number < Self.length {
             lines.append(nextQuestion())
@@ -259,11 +261,11 @@ final class QuizSession: GameSession {
             let end: GameLine
             switch score {
             case Self.length:
-                end = GameLine(text: MiniGame.text("全中！\(score)/\(Self.length)！你真係好熟 Vocaloid 喔！", "Perfect, \(score)/\(Self.length)! You really know your Vocaloid!", "全問正解！\(score)/\(Self.length)！すっごく詳しいね！"), emotion: "happy", action: "cheer")
+                end = GameLine(text: MiniGame.text("全對！\(score)/\(Self.length)！你真的很熟 Vocaloid 喔！", yue: "全中！\(score)/\(Self.length)！你真係好熟 Vocaloid 喔！", "Perfect, \(score)/\(Self.length)! You really know your Vocaloid!", "全問正解！\(score)/\(Self.length)！すっごく詳しいね！"), emotion: "happy", action: "cheer")
             case 3...:
-                end = GameLine(text: MiniGame.text("\(score)/\(Self.length)，好叻呀！", "\(score)/\(Self.length) — nice!", "\(score)/\(Self.length)、やるね！"), emotion: "happy", action: "clap")
+                end = GameLine(text: MiniGame.text("\(score)/\(Self.length)，很厲害呀！", yue: "\(score)/\(Self.length)，好叻呀！", "\(score)/\(Self.length) — nice!", "\(score)/\(Self.length)、やるね！"), emotion: "happy", action: "clap")
             default:
-                end = GameLine(text: MiniGame.text("\(score)/\(Self.length)～唔緊要，下次我哋一齊聽多啲歌！", "\(score)/\(Self.length)~ That's okay, let's listen to more songs together!", "\(score)/\(Self.length)～大丈夫、もっと一緒に曲を聴こう！"), emotion: "calm", action: "nod")
+                end = GameLine(text: MiniGame.text("\(score)/\(Self.length)～沒關係，下次我們一起多聽一些歌！", yue: "\(score)/\(Self.length)～唔緊要，下次我哋一齊聽多啲歌！", "\(score)/\(Self.length)~ That's okay, let's listen to more songs together!", "\(score)/\(Self.length)～大丈夫、もっと一緒に曲を聴こう！"), emotion: "calm", action: "nod")
             }
             lines.append(end)
         }
@@ -537,11 +539,11 @@ extension RhythmJudge {
     static func comment(score: Int) -> GameLine {
         switch score {
         case 90...:
-            return GameLine(text: MiniGame.text("\(score) 分！節奏感一流，可以同我一齊上台喇♪", "\(score) points! Amazing rhythm — come on stage with me ♪", "\(score)点！リズム感バッチリ、一緒にステージ立てるね♪"), emotion: "happy", action: "cheer")
+            return GameLine(text: MiniGame.text("\(score) 分！節奏感一流，可以和我一起上台了♪", yue: "\(score) 分！節奏感一流，可以同我一齊上台喇♪", "\(score) points! Amazing rhythm — come on stage with me ♪", "\(score)点！リズム感バッチリ、一緒にステージ立てるね♪"), emotion: "happy", action: "cheer")
         case 60..<90:
-            return GameLine(text: MiniGame.text("\(score) 分～唔錯喔！再練吓就完美喇！", "\(score) points~ Not bad! A little more practice and it's perfect!", "\(score)点～いい感じ！もう少しで完璧だよ！"), emotion: "happy", action: "clap")
+            return GameLine(text: MiniGame.text("\(score) 分～不錯喔！再練一下就完美了！", yue: "\(score) 分～唔錯喔！再練吓就完美喇！", "\(score) points~ Not bad! A little more practice and it's perfect!", "\(score)点～いい感じ！もう少しで完璧だよ！"), emotion: "happy", action: "clap")
         default:
-            return GameLine(text: MiniGame.text("\(score) 分…慢慢嚟，跟住我嘅拍子一齊數就得喇！", "\(score) points… take it easy, just count along with me!", "\(score)点…ゆっくりでいいよ、わたしと一緒に数えてみて！"), emotion: "calm", action: "nod")
+            return GameLine(text: MiniGame.text("\(score) 分…慢慢來，跟著我的拍子一起數就好了！", yue: "\(score) 分…慢慢嚟，跟住我嘅拍子一齊數就得喇！", "\(score) points… take it easy, just count along with me!", "\(score)点…ゆっくりでいいよ、わたしと一緒に数えてみて！"), emotion: "calm", action: "nod")
         }
     }
 }

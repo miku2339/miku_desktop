@@ -1056,6 +1056,39 @@ function dominantBone(hit) {
   return mesh.skeleton?.bones?.[best]?.name ?? '';
 }
 
+/**
+ * Her own bounding box, without the hats (children of her head bone, so setFromObject
+ * would count them). Same as setFromObject for the model mesh itself.
+ */
+function bodyBounds(target) {
+  const mesh = state.model;
+  if (!mesh?.isMesh) return target.setFromObject(mesh);
+  if (mesh.isSkinnedMesh) {
+    if (!mesh.boundingBox) mesh.computeBoundingBox();
+    target.copy(mesh.boundingBox);
+  } else {
+    if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+    target.copy(mesh.geometry.boundingBox);
+  }
+  return target.applyMatrix4(mesh.matrixWorld);
+}
+
+/**
+ * The hat she's wearing, if the pointer is on it. Hats are left out of ordinary hit-testing
+ * (props.js), so this asks the worn one directly; hidden hats never catch the pointer.
+ */
+const hatHits = [];
+function raycastWornHat() {
+  const hat = props?.wornHat ? props.hats?.[props.wornHat] : null;
+  if (!hat?.visible) return null;
+  hatHits.length = 0;
+  hat.traverse(child => {
+    if (child.isMesh && child.visible) THREE.Mesh.prototype.raycast.call(child, raycaster, hatHits);
+  });
+  hatHits.sort((a, b) => a.distance - b.distance);
+  return hatHits[0] ?? null;
+}
+
 function raycastCharacter(clientX, clientY) {
   if (!state.model || !state.interactive) return null;
   const rect = canvas.getBoundingClientRect();
@@ -1065,9 +1098,17 @@ function raycastCharacter(clientX, clientY) {
   );
   raycaster.setFromCamera(pointerNdc, camera);
   const hit = raycaster.intersectObject(state.model, true)[0];
+  const hatHit = raycastWornHat();
+  if (hatHit && (!hit || hatHit.distance < hit.distance)) {
+    // Touching her hat is touching her head: a pat on the hat.
+    state.model.worldToLocal(hitLocalPosition.copy(hatHit.point));
+    return { hit: hatHit, zone: 'head', normalizedHeight: 1, lateral: 0, side: hitLocalPosition.x >= 0 ? '左' : '右' };
+  }
   if (!hit) return null;
 
-  modelBox.setFromObject(state.model);
+  // Her own height, not counting a hat: a tall witch's hat made her "taller", so her
+  // head was read as her body and patting it did nothing.
+  bodyBounds(modelBox);
   const height = Math.max(0.001, modelBox.max.y - modelBox.min.y);
   const width = Math.max(0.001, modelBox.max.x - modelBox.min.x);
   const normalizedHeight = (hit.point.y - modelBox.min.y) / height;
@@ -3017,7 +3058,7 @@ function updateSleepingModel(elapsed) {
     model.rotation.set(0, 0, 0);
     model.position.set(0, 0, 0);
     model.updateMatrixWorld(true);
-    modelBox.setFromObject(model);
+    bodyBounds(modelBox);
     state.standingHeight = Math.max(1, modelBox.max.y - modelBox.min.y);
   }
   model.rotation.set(0, 0, -Math.PI / 2);

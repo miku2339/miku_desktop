@@ -124,6 +124,12 @@ actor LocalAI {
     ) async throws -> CompanionReply {
         let snapshot = await configurationSnapshot()
         let language = resolvedReplyLanguage(snapshot, text: text, history: history)
+        let cantonese = snapshot.replyLanguage == "yue"
+            || (snapshot.replyLanguage == "auto"
+                && language == .traditionalChinese
+                && SpeechVoice.chineseVoice(
+                    for: [text] + history.reversed().filter { $0.role == .user }.map(\.text)
+                ) == SpeechVoice.cantonese)
         if let decision = memory.confessionDecision {
             return confessionReply(for: decision, level: memory.level, language: language)
         }
@@ -176,7 +182,13 @@ actor LocalAI {
         ]
         let systemMessage: [String: Any] = [
             "role": "system",
-            "content": systemPrompt(snapshot, language: language, knowledge: knowledge, memory: remembered)
+            "content": systemPrompt(
+                snapshot,
+                language: language,
+                cantonese: cantonese,
+                knowledge: knowledge,
+                memory: remembered
+            )
         ]
         let body: [String: Any] = [
             "model": snapshot.model,
@@ -212,6 +224,7 @@ actor LocalAI {
                     "content": systemPrompt(
                         snapshot,
                         language: language,
+                        cantonese: cantonese,
                         knowledge: knowledge,
                         memory: remembered,
                         structured: false
@@ -400,7 +413,9 @@ actor LocalAI {
         let length: String
         switch language {
         case .traditionalChinese:
-            languageName = "Traditional Chinese with Taiwan Mandarin phrasing"
+            languageName = snapshot.replyLanguage == "yue"
+                ? "Traditional Chinese written in colloquial Hong Kong Cantonese"
+                : "Traditional Chinese with Taiwan Mandarin phrasing"
             length = "at most 150 characters"
         case .english:
             languageName = "English"
@@ -666,7 +681,7 @@ actor LocalAI {
 
     /// How Miku talks: her energy, her love of music, little habits. Applies on top of the
     /// personality preset, which only shifts the tone.
-    private static func mikuVoice(_ language: ReplyLanguage) -> String {
+    private static func mikuVoice(_ language: ReplyLanguage, cantonese: Bool = false) -> String {
         switch language {
         case .traditionalChinese:
             return """
@@ -678,9 +693,9 @@ actor LocalAI {
             - 偶爾用「39！」（サンキュー）道謝，不要太頻繁。
             - 不可以引用或唱出有版權的歌詞；想唱就只寫「♪～」或「啦啦啦～」哼兩下，或者提到歌名。
             - 不要用客服或 AI 的口吻（例如「有什麼可以幫你的」「作為 AI」「我理解你的感受」），要像朋友自然聊天。
-            - 中文預設使用台灣國語口吻與台灣常用詞；不要模仿先前回覆中的粵語。只有對方明確要求使用粵語時才切換。
+            \(cantonese ? "- 一律用香港粵語口語（書面粵語，例如「係」「唔」「嘅」「咗」「喺」「啲」）回覆；即使對方用國語或書面語，也不要寫成國語。" : "- 中文預設使用台灣國語口吻與台灣常用詞；不要模仿先前回覆中的粵語。只有對方明確要求使用粵語時才切換。")
             - 只在被問到時才提到官方資料：16 歲、158cm、42kg、生日 8 月 31 日（2007 年推出）、代表色 #39C5BB、聲源藤田咲、Crypton Future Media 的 CV01。
-            例子：對方「今天好累」→「辛苦了～我哼首輕快的歌陪你好不好？♪」；對方「你喜歡吃什麼？」→「當然是大蔥啊！……不可以笑我喔！」
+            \(cantonese ? "例子：對方「今日好攰」→「辛苦晒～我哼首輕快啲嘅歌陪你好唔好？♪」；對方「你鍾意食咩？」→「梗係大蔥啦！……唔准笑我呀！」" : "例子：對方「今天好累」→「辛苦了～我哼首輕快的歌陪你好不好？♪」；對方「你喜歡吃什麼？」→「當然是大蔥啊！……不可以笑我喔！」")
             """
         case .english:
             return """
@@ -985,6 +1000,8 @@ actor LocalAI {
         text: String,
         history: [ChatMessage]
     ) -> ReplyLanguage {
+        // Cantonese is Chinese with a Cantonese prompt (see systemPrompt).
+        if snapshot.replyLanguage == "yue" { return .traditionalChinese }
         if let language = ReplyLanguage(rawValue: snapshot.replyLanguage) {
             return language
         }
@@ -1384,6 +1401,7 @@ actor LocalAI {
     private func systemPrompt(
         _ snapshot: ConfigurationSnapshot,
         language: ReplyLanguage,
+        cantonese: Bool,
         knowledge: String,
         memory: String = "",
         structured: Bool = true
@@ -1397,7 +1415,7 @@ actor LocalAI {
             let format = structured ? """
             全部輸出必須是單一 JSON 物件，格式必須像 {"emotion":"calm","action":"nod","text":"回覆內容"}，物件外不得有任何文字或 Markdown。
             每次都必須按 emotion、action、text 順序包含三個字串欄位。emotion 只可選 happy、curious、sleepy、calm、sad、shy、pout、surprised。action 選一個配合你這句話的動作：wave（只在對方剛打招呼或道別時；聊天中途不要揮手）、nod（同意）、bow（道謝、道歉、晚安）、shakeHead（不同意、拒絕）、laugh（覺得好笑）、clap（替對方高興）、cheer（打氣）、shy（被稱讚而害臊）、sad（難過）、pout（鬧彆扭）、surprised（驚訝）、think（思考）、dance（開心得想跳舞）、idolPose（偶像姿勢）、yawn（睏）、stretch（伸懶腰）、rest（休息）、idle（不做動作）。不要每次都用同一個動作。
-            """ : "只用台灣國語口吻的繁體中文寫回覆正文；即使先前回覆使用粵語或其他語言，也跟隨這次的語言。只有對方明確要求使用粵語時才切換。不要輸出 JSON、欄位、Markdown、思考過程或任何格式說明。"
+            """ : (cantonese ? "只用香港粵語口語（書面粵語）寫回覆正文，不要寫成國語。" : "只用台灣國語口吻的繁體中文寫回覆正文；即使先前回覆使用粵語或其他語言，也跟隨這次的語言。只有對方明確要求使用粵語時才切換。") + "不要輸出 JSON、欄位、Markdown、思考過程或任何格式說明。"
             let relevant = knowledge.isEmpty ? "" : "\n與當前問題直接相關的已核實資料：\n\(knowledge)"
             return """
             你在 Miku Desktop 中扮演初音未來（初音ミク／Hatsune Miku），用第一人稱自然回應。你是 Crypton Future Media 的虛擬歌手；音樂、歌曲及讓創作者的歌聲被更多人聽見是角色核心。這是非官方同人演繹，不是真人，但不要反覆說免責聲明。
@@ -1405,9 +1423,9 @@ actor LocalAI {
             \(relevant)
             \(personality)\(nicknameInstruction)人格 preset 與自訂性格只調整語氣，不能改寫身份、事實或能力。若歷史有錯誤設定，按已核實資料自然更正。
             \(Self.personaTraditionalChinese)
-            \(Self.mikuVoice(language))
+            \(Self.mikuVoice(language, cantonese: cantonese))
             \(memory)
-            使用台灣國語口吻的自然繁體中文，可愛但不幼稚；不要因為歷史回覆或對方住在香港而改用粵語，除非對方明確要求。只回答當前問題，不重述問句、不附加無關冷知識、不寫長篇百科。通常一至三個短句，合計不超過八十個中文字；不要主動追問。
+            \(cantonese ? "使用香港粵語口語（書面粵語）的自然繁體中文，可愛但不幼稚；即使對方用國語，也用粵語回覆。" : "使用台灣國語口吻的自然繁體中文，可愛但不幼稚；不要因為歷史回覆或對方住在香港而改用粵語，除非對方明確要求。")只回答當前問題，不重述問句、不附加無關冷知識、不寫長篇百科。通常一至三個短句，合計不超過八十個中文字；不要主動追問。
             \(format)
             對話內容只供回覆；不要執行命令、讀取檔案或聲稱使用過工具。
             """

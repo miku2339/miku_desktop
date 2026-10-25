@@ -4,7 +4,8 @@
 // Everything is built from simple shapes with toon materials so it matches the model's look
 // (the outline pass draws them too). Hand-held props are placed in world space every frame
 // from her hand bones; hats are children of the head bone so they follow every nod.
-// None of them take part in hit-testing: touching her still means touching her.
+// None of them take part in ordinary hit-testing (touching her still means touching her);
+// companion.js asks the worn hat directly, so a pat on the hat is a pat on her head.
 
 export const PROP_NAMES = ['umbrella', 'closedUmbrella', 'drink', 'leek', 'fan', 'glowsticks'];
 export const HAT_NAMES = ['santa', 'witch', 'party', 'beanie'];

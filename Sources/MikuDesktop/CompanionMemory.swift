@@ -862,7 +862,19 @@ final class CompanionMemory {
         let url = fileURL.deletingLastPathComponent().appendingPathComponent("diagnostics.log")
         var existing = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
         existing += line
-        let lines = existing.split(separator: "\n", omittingEmptySubsequences: true).suffix(200)
+        let lines = Self.trimmedDiagnosticLines(existing.split(separator: "\n", omittingEmptySubsequences: true).map(String.init))
         try? (lines.joined(separator: "\n") + "\n").write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    /// How many lines of each kind diagnostics.log keeps.
+    nonisolated static let diagnosticLinesPerKind = 120
+
+    /// Speech lines and everything else are kept separately, so a burst of one kind (such as
+    /// render-loop reports) can never push out the other. The original order is kept.
+    nonisolated static func trimmedDiagnosticLines(_ lines: [String]) -> [String] {
+        let isSpeech = { (line: String) in line.contains(#""type":"speech""#) }
+        let speechIndices = lines.indices.filter { isSpeech(lines[$0]) }.suffix(diagnosticLinesPerKind)
+        let otherIndices = lines.indices.filter { !isSpeech(lines[$0]) }.suffix(diagnosticLinesPerKind)
+        return Set(speechIndices).union(otherIndices).sorted().map { lines[$0] }
     }
 }

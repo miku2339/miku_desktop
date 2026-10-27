@@ -269,12 +269,27 @@ final class WallpaperWindowController: NSObject, WKNavigationDelegate, WKScriptM
         call(webView: webView, function: "setSpecialDays", payload: payload)
     }
 
-    func receiveReply(_ reply: CompanionReply) {
+    /// `voiced`: the reply will be read aloud, so her mouth waits for the audio to start.
+    func receiveReply(_ reply: CompanionReply, voiced: Bool = false) {
         call(webView: webView, function: "receiveReply", payload: [
             "text": reply.text,
             "emotion": reply.emotion,
-            "action": reply.action
+            "action": reply.action,
+            "voiced": voiced
         ])
+    }
+
+    /// Her mouth follows the audio: it moves from when playback starts, for as long as it lasts.
+    func speechPlayback(_ event: MikuSpeech.PlaybackEvent) {
+        guard pageReady else { return }
+        switch event {
+        case let .started(text, duration):
+            call(webView: webView, function: "startVoice", payload: ["text": text, "duration": duration])
+        case .ended, .interrupted:
+            evaluate("window.mikuCompanion?.stopVoice?.()")
+        case .failed:
+            evaluate("window.mikuCompanion?.voiceFailed?.()")
+        }
     }
 
     /// Photographs only the two app-rendered wallpaper layers. This never reads the desktop

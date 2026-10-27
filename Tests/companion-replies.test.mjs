@@ -4,6 +4,7 @@ import test from 'node:test';
 import vm from 'node:vm';
 
 import { createRelationship } from '../Wallpaper/companion/relationship.js';
+import * as talkingModule from '../Wallpaper/companion/talking.js';
 
 const companionSource = readFileSync(
   new URL('../Wallpaper/companion/companion.js', import.meta.url),
@@ -18,7 +19,7 @@ function sourceSection(startMarker, endMarker) {
 }
 
 const allowlistsSource = sourceSection('const ALLOWED_EMOTIONS', 'const CONTROLLED_BONES');
-const talkingSource = sourceSection('const MOUTH_VOWELS', '// How she feels');
+const talkingSource = sourceSection('// While a line is in the speech bubble', '// How she feels');
 const replySource = sourceSection(
   'function applyReply(',
   '\n\nwindow.mikuCompanion = Object.freeze({'
@@ -82,6 +83,9 @@ function createHarness({ reduced = false } = {}) {
     thinking: false,
     upset: { x: 0, v: 0, side: 1 }
   };
+  state.bubbleHideAt = 0;
+  state.pendingVoice = null;
+  const timers = [];
   const reducedMotion = { matches: reduced };
   const speechBubble = {
     classList: new FakeClassList(),
@@ -124,10 +128,14 @@ function createHarness({ reduced = false } = {}) {
     variety: { chance: () => false },
     window: {
       mikuCompanion: null,
-      setTimeout: () => nextTimer++
+      setTimeout: (callback, ms) => {
+        timers.push(ms);
+        return nextTimer++;
+      }
     }
   });
 
+  Object.assign(context, talkingModule);
   context.currentElapsed = () => elapsed;
   context.startReaction = (type, options = {}) => {
     reactionCalls.push({ type, options });
@@ -161,7 +169,8 @@ function createHarness({ reduced = false } = {}) {
     },
     speechBubble,
     state,
-    talking: context.__talking
+    talking: context.__talking,
+    timers
   };
 }
 
@@ -356,4 +365,92 @@ test('reply gestures never open a second line of dialogue', () => {
     harness.api.receiveReply({ emotion: 'calm', action, text: '好。' });
     assert.equal(harness.state.reaction?.variant?.talk, false, `${action} may speak over the reply`);
   }
+});
+
+test('a reply read aloud waits for the audio before moving her mouth', () => {
+  const harness = createHarness();
+  harness.api.receiveReply({ emotion: 'happy', action: 'idle', text: '辛苦晒～我陪你', voiced: true });
+  assert.equal(harness.speechBubble.classList.contains('visible'), true);
+  assert.equal(harness.state.talk, null);
+  harness.setElapsed(1.5);
+  harness.talking.applyTalking(1.5);
+  assert.equal(mouthIsClosed(harness.influences), true, 'the mouth stays still while the audio is generated');
+
+  harness.api.startVoice({ text: '辛苦晒～我陪你', duration: 3 });
+  assert.equal(harness.state.talk.start, 1.5);
+  assert.equal(harness.state.talk.end, 4.5);
+  harness.setElapsed(1.6);
+  harness.talking.applyTalking(1.6);
+  assert.equal(mouthIsClosed(harness.influences), false, 'the mouth moves once the audio plays');
+});
+
+test('her mouth follows the whole audio, not the 8 s text limit', () => {
+  const harness = createHarness();
+  harness.api.receiveReply({ emotion: 'calm', action: 'idle', text: '短句', voiced: true });
+  harness.api.startVoice({ text: '短句', duration: 12 });
+  harness.influences.fill(0);
+  harness.setElapsed(11.9);
+  harness.talking.applyTalking(11.9);
+  assert.notEqual(harness.state.talk, null);
+  harness.setElapsed(12.4);
+  harness.talking.applyTalking(12.4);
+  assert.equal(harness.state.talk, null, 'it stops right after the audio ends');
+});
+
+test('the bubble stays up until the audio has finished', () => {
+  const harness = createHarness();
+  harness.api.receiveReply({ emotion: 'calm', action: 'idle', text: '好', voiced: true });
+  harness.api.startVoice({ text: '好', duration: 20 });
+  assert.ok(harness.timers.at(-1) >= 21500, `bubble hides after ${harness.timers.at(-1)} ms`);
+});
+
+test('stopping the audio closes her mouth', () => {
+  const harness = createHarness();
+  harness.api.receiveReply({ emotion: 'calm', action: 'idle', text: '這是一段會被打斷的回覆', voiced: true });
+  harness.api.startVoice({ text: '這是一段會被打斷的回覆', duration: 5 });
+  harness.api.stopVoice();
+  harness.influences.fill(0);
+  harness.setElapsed(0.2);
+  harness.talking.applyTalking(0.2);
+  assert.equal(mouthIsClosed(harness.influences), true);
+});
+
+test('a voice that fails at once falls back to text timing; a late failure does not', () => {
+  const quick = createHarness();
+  quick.api.receiveReply({ emotion: 'calm', action: 'idle', text: '連唔到語音', voiced: true });
+  quick.setElapsed(0.5);
+  quick.api.voiceFailed();
+  assert.equal(quick.state.talk?.voiced, false);
+
+  const late = createHarness();
+  late.api.receiveReply({ emotion: 'calm', action: 'idle', text: '生成太耐', voiced: true });
+  late.setElapsed(9);
+  late.api.voiceFailed();
+  assert.equal(late.state.talk, null);
+});
+
+test('replies that are not read aloud still talk straight away', () => {
+  const harness = createHarness();
+  harness.api.receiveReply({ emotion: 'calm', action: 'idle', text: '冇語音' });
+  assert.equal(harness.state.talk?.voiced, false);
+});
+
+test('reduced motion keeps her mouth still even with audio', () => {
+  const harness = createHarness({ reduced: true });
+  harness.api.receiveReply({ emotion: 'calm', action: 'idle', text: '安靜', voiced: true });
+  harness.api.startVoice({ text: '安靜', duration: 2 });
+  assert.equal(harness.state.talk, null);
+});
+
+test('a reply held while she walks over keeps talking if its audio already started', () => {
+  const harness = createHarness();
+  harness.state.callOverRequested = true;
+  harness.dailyResult.calling = 'walking';
+  harness.api.receiveReply({ emotion: 'happy', action: 'idle', text: '我嚟喇', voiced: true });
+  harness.api.startVoice({ text: '我嚟喇', duration: 4 });
+  const playing = harness.state.talk;
+
+  harness.dailyResult.calling = 'returning';
+  harness.api.receiveReply(harness.state.pendingCallReply);
+  assert.equal(harness.state.talk, playing);
 });

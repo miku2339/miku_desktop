@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": "2026.10.23.1",
+  "version": "2026.10.25.3",
   "entries": [
     {
       "id": "song.polestar",
@@ -220,9 +220,9 @@
       ],
       "kind": "song",
       "content": {
-        "zh-Hant": "〈ローリンガール／Rolling Girl〉— wowaka。",
-        "en": "“Rolling Girl” (ローリンガール) — wowaka.",
-        "ja": "「ローリンガール／Rolling Girl」— wowaka。"
+        "zh-Hant": "〈ローリンガール／Rolling Girl〉— wowaka。歌曲涉及自殺或自傷等沉重題材；談到時溫和帶過，不要細說。",
+        "en": "“Rolling Girl” (ローリンガール) — wowaka. It touches on suicide or self-harm; mention it gently and don't dwell on it.",
+        "ja": "「ローリンガール／Rolling Girl」— wowaka。自殺や自傷などの重いテーマを含みます。触れるときはやさしく流し、詳しく語らないでください。"
       },
       "sourceURL": "https://www.youtube.com/watch?v=vnw8zURAxkU",
       "featured": true,
@@ -352,6 +352,3752 @@
         "ja": "「SNOW MIKU」は、雪ミクが主役となって冬の北海道を応援する、北海道で毎年開催されるフェスティバルです。"
       },
       "sourceURL": "https://snowmiku.com/",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.shishunki-sensation",
+      "aliases": [
+        "思春期♥センセーション",
+        "思春期センセーション",
+        "思春期♡センセーション",
+        "Shishunki Sensation"
+      ],
+      "creators": [
+        "まだ仔"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈思春期♥センセーション〉— まだ仔作詞、作曲及編曲，初音未來演唱，2010 年 12 月 25 日在 niconico 投稿。歌詞有明顯性暗示，屬成人向歌曲；談到時可坦白承認，但不要細說或引用歌詞。",
+        "en": "“思春期♥センセーション” (Shishunki Sensation) — words, music and arrangement by まだ仔, sung by Hatsune Miku, posted on niconico on 25 December 2010. The lyrics are openly sexual, so it is an adult-oriented song; you can say so plainly, but don't go into detail or quote the lyrics.",
+        "ja": "「思春期♥センセーション」— まだ仔の作詞・作曲・編曲、歌は初音ミク。2010年12月25日にニコニコ動画へ投稿。歌詞に性的な表現がはっきり含まれる大人向けの曲です。そう認めてかまいませんが、詳しく語ったり歌詞を引用したりしないでください。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm13126972",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.disappearance",
+      "aliases": [
+        "初音ミクの消失",
+        "Hatsune Miku no Shoushitsu",
+        "The Disappearance of Hatsune Miku"
+      ],
+      "creators": [
+        "cosMo@暴走P",
+        "cosMo"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈初音ミクの消失〉— cosMo@暴走P 作品，初音未來演唱，2007 年發表。",
+        "en": "“初音ミクの消失” — by cosMo@暴走P, sung by Hatsune Miku, released in 2007.",
+        "ja": "「初音ミクの消失」— cosMo@暴走Pの曲、歌は初音ミク。2007年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm1476648",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.miku-miku",
+      "aliases": [
+        "みくみくにしてあげる♪【してやんよ】",
+        "みくみくにしてあげる♪",
+        "みくみくにしてあげる",
+        "Miku Miku ni Shite Ageru"
+      ],
+      "creators": [
+        "ika",
+        "ika_mo"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈みくみくにしてあげる♪【してやんよ】〉— ika 作品，初音未來演唱，2007 年發表。",
+        "en": "“みくみくにしてあげる♪【してやんよ】” — by ika, sung by Hatsune Miku, released in 2007.",
+        "ja": "「みくみくにしてあげる♪【してやんよ】」— ikaの曲、歌は初音ミク。2007年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm1097445",
+      "featured": true,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.love-is-war",
+      "aliases": [
+        "恋は戦争",
+        "Koi wa Sensou",
+        "Love is War"
+      ],
+      "creators": [
+        "ryo",
+        "supercell"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈恋は戦争〉— ryo 作品，初音未來演唱，2008 年發表。",
+        "en": "“恋は戦争” — by ryo, sung by Hatsune Miku, released in 2008.",
+        "ja": "「恋は戦争」— ryoの曲、歌は初音ミク。2008年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm2397344",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.black-rock-shooter",
+      "aliases": [
+        "ブラック★ロックシューター",
+        "ブラックロックシューター",
+        "Black★Rock Shooter",
+        "Black Rock Shooter"
+      ],
+      "creators": [
+        "ryo",
+        "supercell"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ブラック★ロックシューター〉— ryo 作品，初音未來演唱，2008 年發表。",
+        "en": "“ブラック★ロックシューター” — by ryo, sung by Hatsune Miku, released in 2008.",
+        "ja": "「ブラック★ロックシューター」— ryoの曲、歌は初音ミク。2008年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm3645817",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.love-trial",
+      "aliases": [
+        "恋愛裁判",
+        "Ren'ai Saiban",
+        "Love Trial"
+      ],
+      "creators": [
+        "40mP"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈恋愛裁判〉— 40mP 作品，初音未來演唱，2014 年發表。",
+        "en": "“恋愛裁判” — by 40mP, sung by Hatsune Miku, released in 2014.",
+        "ja": "「恋愛裁判」— 40mPの曲、歌は初音ミク。2014年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm23750267",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.sakura-no-ame",
+      "aliases": [
+        "桜ノ雨",
+        "Sakura no Ame"
+      ],
+      "creators": [
+        "halyosy",
+        "absorb"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈桜ノ雨〉— halyosy 作品，初音未來演唱，2008 年發表。",
+        "en": "“桜ノ雨” — by halyosy, sung by Hatsune Miku, released in 2008.",
+        "ja": "「桜ノ雨」— halyosyの曲、歌は初音ミク。2008年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm2406770",
+      "featured": true,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.deep-sea-girl",
+      "aliases": [
+        "深海少女",
+        "Shinkai Shoujo",
+        "Deep Sea Girl"
+      ],
+      "creators": [
+        "ゆうゆ",
+        "Yuuyu"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈深海少女〉— ゆうゆ 作品，初音未來演唱，2010 年發表。",
+        "en": "“深海少女” — by ゆうゆ, sung by Hatsune Miku, released in 2010.",
+        "ja": "「深海少女」— ゆうゆの曲、歌は初音ミク。2010年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm11956364",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.hajimete-no-oto",
+      "aliases": [
+        "ハジメテノオト",
+        "Hajimete no Oto",
+        "The First Sound"
+      ],
+      "creators": [
+        "malo"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ハジメテノオト〉— malo 作品，初音未來演唱，2007 年發表。",
+        "en": "“ハジメテノオト” — by malo, sung by Hatsune Miku, released in 2007.",
+        "ja": "「ハジメテノオト」— maloの曲、歌は初音ミク。2007年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm1274898",
+      "featured": true,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.saihate",
+      "aliases": [
+        "サイハテ",
+        "Saihate"
+      ],
+      "creators": [
+        "小林オニキス",
+        "Kobayashi Onyx"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈サイハテ〉— 小林オニキス 作品，初音未來演唱，2008 年發表。",
+        "en": "“サイハテ” — by 小林オニキス, sung by Hatsune Miku, released in 2008.",
+        "ja": "「サイハテ」— 小林オニキスの曲、歌は初音ミク。2008年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm2053548",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.hello-how-are-you",
+      "aliases": [
+        "ハロ／ハワユ",
+        "ハロハワユ",
+        "Hello/How are you"
+      ],
+      "creators": [
+        "ナノウ",
+        "Nanou"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ハロ／ハワユ〉— ナノウ 作品，初音未來演唱，2010 年發表。",
+        "en": "“ハロ／ハワユ” — by ナノウ, sung by Hatsune Miku, released in 2010.",
+        "ja": "「ハロ／ハワユ」— ナノウの曲、歌は初音ミク。2010年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm11448603",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.from-y-to-y",
+      "aliases": [
+        "from Y to Y"
+      ],
+      "creators": [
+        "ジミーサムP",
+        "JimmyThumb-P"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈from Y to Y〉— ジミーサムP 作品，初音未來演唱，2009 年發表。",
+        "en": "“from Y to Y” — by ジミーサムP, sung by Hatsune Miku, released in 2009.",
+        "ja": "「from Y to Y」— ジミーサムPの曲、歌は初音ミク。2009年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm6529016",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.two-faced-lovers",
+      "aliases": [
+        "裏表ラバーズ",
+        "Uraomote Lovers",
+        "Two-Faced Lovers"
+      ],
+      "creators": [
+        "wowaka"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈裏表ラバーズ〉— wowaka 作品，初音未來演唱，2009 年發表。歌詞有性暗示，屬成人向；談到時可坦白承認，但不要細說或引用歌詞。",
+        "en": "“裏表ラバーズ” — by wowaka, sung by Hatsune Miku, released in 2009. The lyrics are sexual, so it is adult-oriented; you can say so, but don't go into detail or quote the lyrics.",
+        "ja": "「裏表ラバーズ」— wowakaの曲、歌は初音ミク。2009年発表。歌詞に性的な表現がある大人向けの曲です。そう認めてかまいませんが、詳しく語ったり歌詞を引用したりしないでください。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm8082467",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.unknown-mother-goose",
+      "aliases": [
+        "アンノウン・マザーグース",
+        "アンノウンマザーグース",
+        "Unknown Mother-Goose"
+      ],
+      "creators": [
+        "wowaka"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈アンノウン・マザーグース〉— wowaka 作品，初音未來演唱，2017 年發表。",
+        "en": "“アンノウン・マザーグース” — by wowaka, sung by Hatsune Miku, released in 2017.",
+        "ja": "「アンノウン・マザーグース」— wowakaの曲、歌は初音ミク。2017年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm31791630",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.matryoshka",
+      "aliases": [
+        "マトリョシカ",
+        "Matryoshka"
+      ],
+      "creators": [
+        "ハチ",
+        "Hachi"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈マトリョシカ〉— ハチ 作品，初音未來與 GUMI 合唱，2010 年發表。",
+        "en": "“マトリョシカ” — by ハチ, sung by Hatsune Miku and GUMI, released in 2010.",
+        "ja": "「マトリョシカ」— ハチの曲、歌は初音ミクとGUMI。2010年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm11809611",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.musunde-hiraite",
+      "aliases": [
+        "結ンデ開イテ羅刹ト骸",
+        "Musunde Hiraite Rasetsu to Mukuro"
+      ],
+      "creators": [
+        "ハチ",
+        "Hachi"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈結ンデ開イテ羅刹ト骸〉— ハチ 作品，初音未來演唱，2009 年發表。",
+        "en": "“結ンデ開イテ羅刹ト骸” — by ハチ, sung by Hatsune Miku, released in 2009.",
+        "ja": "「結ンデ開イテ羅刹ト骸」— ハチの曲、歌は初音ミク。2009年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm7550182",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.odds-and-ends",
+      "aliases": [
+        "ODDS&ENDS",
+        "ODDS & ENDS"
+      ],
+      "creators": [
+        "ryo",
+        "supercell"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ODDS&ENDS〉— ryo 作品，初音未來演唱，2012 年發表。",
+        "en": "“ODDS&ENDS” — by ryo, sung by Hatsune Miku, released in 2012.",
+        "ja": "「ODDS&ENDS」— ryoの曲、歌は初音ミク。2012年発表。"
+      },
+      "sourceURL": "https://vocadb.net/S/15662",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.hibana",
+      "aliases": [
+        "ヒバナ",
+        "HIBANA"
+      ],
+      "creators": [
+        "DECO*27"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ヒバナ〉— DECO*27 作品，初音未來演唱，2017 年發表。",
+        "en": "“ヒバナ” — by DECO*27, sung by Hatsune Miku, released in 2017.",
+        "ja": "「ヒバナ」— DECO*27の曲、歌は初音ミク。2017年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm31685272",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.ghost-rule",
+      "aliases": [
+        "ゴーストルール",
+        "Ghost Rule"
+      ],
+      "creators": [
+        "DECO*27"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ゴーストルール〉— DECO*27 作品，初音未來演唱，2016 年發表。",
+        "en": "“ゴーストルール” — by DECO*27, sung by Hatsune Miku, released in 2016.",
+        "ja": "「ゴーストルール」— DECO*27の曲、歌は初音ミク。2016年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm27965309",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vampire",
+      "aliases": [
+        "ヴァンパイア"
+      ],
+      "creators": [
+        "DECO*27"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ヴァンパイア〉— DECO*27 作品，初音未來演唱，2021 年發表。歌詞有性暗示，屬成人向；談到時可坦白承認，但不要細說或引用歌詞。",
+        "en": "“ヴァンパイア” — by DECO*27, sung by Hatsune Miku, released in 2021. The lyrics are sexual, so it is adult-oriented; you can say so, but don't go into detail or quote the lyrics.",
+        "ja": "「ヴァンパイア」— DECO*27の曲、歌は初音ミク。2021年発表。歌詞に性的な表現がある大人向けの曲です。そう認めてかまいませんが、詳しく語ったり歌詞を引用したりしないでください。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm38387707",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.rabbit-hole",
+      "aliases": [
+        "ラビットホール",
+        "Rabbit Hole"
+      ],
+      "creators": [
+        "DECO*27"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ラビットホール〉— DECO*27 作品，初音未來演唱，2023 年發表。歌詞有性暗示，屬成人向；談到時可坦白承認，但不要細說或引用歌詞。",
+        "en": "“ラビットホール” — by DECO*27, sung by Hatsune Miku, released in 2023. The lyrics are sexual, so it is adult-oriented; you can say so, but don't go into detail or quote the lyrics.",
+        "ja": "「ラビットホール」— DECO*27の曲、歌は初音ミク。2023年発表。歌詞に性的な表現がある大人向けの曲です。そう認めてかまいませんが、詳しく語ったり歌詞を引用したりしないでください。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm42224358",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.two-breaths-walking",
+      "aliases": [
+        "二息歩行",
+        "Nisoku Hokou",
+        "Two Breaths Walking"
+      ],
+      "creators": [
+        "DECO*27"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈二息歩行〉— DECO*27 作品，初音未來演唱，2009 年發表。",
+        "en": "“二息歩行” — by DECO*27, sung by Hatsune Miku, released in 2009.",
+        "ja": "「二息歩行」— DECO*27の曲、歌は初音ミク。2009年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm8061508",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.shoujo-rei",
+      "aliases": [
+        "少女レイ",
+        "Shoujo Rei"
+      ],
+      "creators": [
+        "みきとP",
+        "MikitoP"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈少女レイ〉— みきとP 作品，初音未來演唱，2018 年發表。歌曲涉及自殺或自傷等沉重題材；談到時溫和帶過，不要細說。",
+        "en": "“少女レイ” — by みきとP, sung by Hatsune Miku, released in 2018. It touches on suicide or self-harm; mention it gently and don't dwell on it.",
+        "ja": "「少女レイ」— みきとPの曲、歌は初音ミク。2018年発表。自殺や自傷などの重いテーマを含みます。触れるときはやさしく流し、詳しく語らないでください。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm33546451",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.alien-alien",
+      "aliases": [
+        "エイリアンエイリアン",
+        "エイリアン・エイリアン",
+        "Alien Alien"
+      ],
+      "creators": [
+        "ナユタン星人",
+        "Nayutalien"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈エイリアンエイリアン〉— ナユタン星人 作品，初音未來演唱，2016 年發表。",
+        "en": "“エイリアンエイリアン” — by ナユタン星人, sung by Hatsune Miku, released in 2016.",
+        "ja": "「エイリアンエイリアン」— ナユタン星人の曲、歌は初音ミク。2016年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm28576299",
+      "featured": true,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.god-ish",
+      "aliases": [
+        "神っぽいな",
+        "Kamippoi na",
+        "God-ish"
+      ],
+      "creators": [
+        "ピノキオピー",
+        "PinocchioP"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈神っぽいな〉— ピノキオピー 作品，初音未來演唱，2021 年發表。",
+        "en": "“神っぽいな” — by ピノキオピー, sung by Hatsune Miku, released in 2021.",
+        "ja": "「神っぽいな」— ピノキオピーの曲、歌は初音ミク。2021年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm39334235",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.hibikase",
+      "aliases": [
+        "ヒビカセ",
+        "Hibikase"
+      ],
+      "creators": [
+        "Giga",
+        "ギガ"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ヒビカセ〉— Giga 作品，初音未來演唱，2014 年發表。",
+        "en": "“ヒビカセ” — by Giga, sung by Hatsune Miku, released in 2014.",
+        "ja": "「ヒビカセ」— Gigaの曲、歌は初音ミク。2014年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm24536934",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.popipo",
+      "aliases": [
+        "ぽっぴっぽー",
+        "PoPiPo"
+      ],
+      "creators": [
+        "ラマーズP",
+        "LamazeP"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ぽっぴっぽー〉— ラマーズP 作品，初音未來演唱，2008 年發表。",
+        "en": "“ぽっぴっぽー” — by ラマーズP, sung by Hatsune Miku, released in 2008.",
+        "ja": "「ぽっぴっぽー」— ラマーズPの曲、歌は初音ミク。2008年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm5508956",
+      "featured": true,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.teo",
+      "aliases": [
+        "テオ",
+        "Teo"
+      ],
+      "creators": [
+        "Omoi"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈テオ〉— Omoi 作品，初音未來演唱，2017 年發表。",
+        "en": "“テオ” — by Omoi, sung by Hatsune Miku, released in 2017.",
+        "ja": "「テオ」— Omoiの曲、歌は初音ミク。2017年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm31533883",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.romeo-and-cinderella",
+      "aliases": [
+        "ロミオとシンデレラ",
+        "Romeo to Cinderella",
+        "Romeo and Cinderella"
+      ],
+      "creators": [
+        "doriko"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ロミオとシンデレラ〉— doriko 作品，初音未來演唱，2009 年發表。歌詞有性暗示，屬成人向；談到時可坦白承認，但不要細說或引用歌詞。",
+        "en": "“ロミオとシンデレラ” — by doriko, sung by Hatsune Miku, released in 2009. The lyrics are sexual, so it is adult-oriented; you can say so, but don't go into detail or quote the lyrics.",
+        "ja": "「ロミオとシンデレラ」— dorikoの曲、歌は初音ミク。2009年発表。歌詞に性的な表現がある大人向けの曲です。そう認めてかまいませんが、詳しく語ったり歌詞を引用したりしないでください。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm6666016",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.karakuri-pierrot",
+      "aliases": [
+        "からくりピエロ",
+        "Karakuri Pierrot"
+      ],
+      "creators": [
+        "40mP"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈からくりピエロ〉— 40mP 作品，初音未來演唱，2011 年發表。",
+        "en": "“からくりピエロ” — by 40mP, sung by Hatsune Miku, released in 2011.",
+        "ja": "「からくりピエロ」— 40mPの曲、歌は初音ミク。2011年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm15022913",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-20",
+      "aliases": [
+        "ワールズエンド・ダンスホール",
+        "World's End Dancehall"
+      ],
+      "creators": [
+        "wowaka"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ワールズエンド・ダンスホール〉— wowaka 作品，初音未來與 巡音ルカ 演唱，2010 年發表。歌曲涉及自殺或自傷等沉重題材；談到時溫和帶過，不要細說。",
+        "en": "“ワールズエンド・ダンスホール” — by wowaka, sung by Hatsune Miku and 巡音ルカ, released in 2010. It touches on suicide or self-harm; mention it gently and don't dwell on it.",
+        "ja": "「ワールズエンド・ダンスホール」— wowakaの曲、歌は初音ミクと巡音ルカ。2010年発表。自殺や自傷などの重いテーマを含みます。触れるときはやさしく流し、詳しく語らないでください。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm10759623",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-13351",
+      "aliases": [
+        "ありふれたせかいせいふく",
+        "Arifureta Sekai Seifuku",
+        "Common World Domination"
+      ],
+      "creators": [
+        "ピノキオピー"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ありふれたせかいせいふく〉— ピノキオピー 作品，初音未來演唱，2012 年發表。",
+        "en": "“ありふれたせかいせいふく” — by ピノキオピー, sung by Hatsune Miku, released in 2012.",
+        "ja": "「ありふれたせかいせいふく」— ピノキオピーの曲、歌は初音ミク。2012年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm18131841",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-1500",
+      "aliases": [
+        "アンハッピーリフレイン",
+        "Unhappy Refrain"
+      ],
+      "creators": [
+        "wowaka"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈アンハッピーリフレイン〉— wowaka 作品，初音未來演唱，2011 年發表。歌曲涉及自殺或自傷等沉重題材；談到時溫和帶過，不要細說。",
+        "en": "“アンハッピーリフレイン” — by wowaka, sung by Hatsune Miku, released in 2011. It touches on suicide or self-harm; mention it gently and don't dwell on it.",
+        "ja": "「アンハッピーリフレイン」— wowakaの曲、歌は初音ミク。2011年発表。自殺や自傷などの重いテーマを含みます。触れるときはやさしく流し、詳しく語らないでください。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm14330479",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-13260",
+      "aliases": [
+        "こちら、幸福安心委員会です。",
+        "This Is the Happiness and Peace of Mind Committee.",
+        "Kochira, Koufuku Anshin Iinkai Desu.",
+        "This Is the Happiness Reassurance Commission."
+      ],
+      "creators": [
+        "うたたP"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈こちら、幸福安心委員会です。〉— うたたP 作品，初音未來演唱，2012 年發表。",
+        "en": "“こちら、幸福安心委員会です。” — by うたたP, sung by Hatsune Miku, released in 2012.",
+        "ja": "「こちら、幸福安心委員会です。」— うたたPの曲、歌は初音ミク。2012年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm18100389",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-610187",
+      "aliases": [
+        "メズマライザー"
+      ],
+      "creators": [
+        "サツキ"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈メズマライザー〉— サツキ 作品，初音未來與 重音テトSV 演唱，2024 年發表。",
+        "en": "“メズマライザー” — by サツキ, sung by Hatsune Miku and 重音テトSV, released in 2024.",
+        "ja": "「メズマライザー」— サツキの曲、歌は初音ミクと重音テトSV。2024年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm43708803",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-35603",
+      "aliases": [
+        "ビバハピ",
+        "Viva Happy"
+      ],
+      "creators": [
+        "Mitchie M"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ビバハピ〉— Mitchie M 作品，初音未來演唱，2013 年發表。",
+        "en": "“ビバハピ” — by Mitchie M, sung by Hatsune Miku, released in 2013.",
+        "ja": "「ビバハピ」— Mitchie Mの曲、歌は初音ミク。2013年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm21443197",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-25667",
+      "aliases": [
+        "愛して愛して愛して",
+        "Aishite Aishite Aishite",
+        "Love Me, Love Me, Love Me",
+        "AISITE AISITE AISITE"
+      ],
+      "creators": [
+        "きくお"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈愛して愛して愛して〉— きくお 作品，初音未來演唱，2013 年發表。",
+        "en": "“愛して愛して愛して” — by きくお, sung by Hatsune Miku, released in 2013.",
+        "ja": "「愛して愛して愛して」— きくおの曲、歌は初音ミク。2013年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm25724827",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-668055",
+      "aliases": [
+        "モニタリング"
+      ],
+      "creators": [
+        "DECO*27",
+        "Hayato Yamamoto"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈モニタリング〉— DECO*27 作品，初音未來演唱，2024 年發表。歌詞有性暗示，屬成人向；談到時可坦白承認，但不要細說或引用歌詞。",
+        "en": "“モニタリング” — by DECO*27, sung by Hatsune Miku, released in 2024. The lyrics are sexual, so it is adult-oriented; you can say so, but don't go into detail or quote the lyrics.",
+        "ja": "「モニタリング」— DECO*27の曲、歌は初音ミク。2024年発表。歌詞に性的な表現がある大人向けの曲です。そう認めてかまいませんが、詳しく語ったり歌詞を引用したりしないでください。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm44317852",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-5191",
+      "aliases": [
+        "ごめんね ごめんね",
+        "Gomenne Gomenne",
+        "I'm Sorry, I'm Sorry",
+        "Gomenne, Gomenne"
+      ],
+      "creators": [
+        "きくお"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ごめんね ごめんね〉— きくお 作品，初音未來演唱，2011 年發表。歌詞有性暗示，屬成人向；談到時可坦白承認，但不要細說或引用歌詞。",
+        "en": "“ごめんね ごめんね” — by きくお, sung by Hatsune Miku, released in 2011. The lyrics are sexual, so it is adult-oriented; you can say so, but don't go into detail or quote the lyrics.",
+        "ja": "「ごめんね ごめんね」— きくおの曲、歌は初音ミク。2011年発表。歌詞に性的な表現がある大人向けの曲です。そう認めてかまいませんが、詳しく語ったり歌詞を引用したりしないでください。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm16015251",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-89474",
+      "aliases": [
+        "マインドブランド",
+        "Mind Brand"
+      ],
+      "creators": [
+        "MARETU"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈マインドブランド〉— MARETU 作品，初音未來演唱，2015 年發表。歌詞有性暗示，屬成人向；談到時可坦白承認，但不要細說或引用歌詞。",
+        "en": "“マインドブランド” — by MARETU, sung by Hatsune Miku, released in 2015. The lyrics are sexual, so it is adult-oriented; you can say so, but don't go into detail or quote the lyrics.",
+        "ja": "「マインドブランド」— MARETUの曲、歌は初音ミク。2015年発表。歌詞に性的な表現がある大人向けの曲です。そう認めてかまいませんが、詳しく語ったり歌詞を引用したりしないでください。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm26364502",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-2443",
+      "aliases": [
+        "Last Night, Good Night"
+      ],
+      "creators": [
+        "kz"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈Last Night, Good Night〉— kz 作品，初音未來演唱，2008 年發表。",
+        "en": "“Last Night, Good Night” — by kz, sung by Hatsune Miku, released in 2008.",
+        "ja": "「Last Night, Good Night」— kzの曲、歌は初音ミク。2008年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm4141643",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-5364",
+      "aliases": [
+        "FREELY TOMORROW"
+      ],
+      "creators": [
+        "Mitchie M"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈FREELY TOMORROW〉— Mitchie M 作品，初音未來演唱，2011 年發表。",
+        "en": "“FREELY TOMORROW” — by Mitchie M, sung by Hatsune Miku, released in 2011.",
+        "ja": "「FREELY TOMORROW」— Mitchie Mの曲、歌は初音ミク。2011年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm15172108",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-734953",
+      "aliases": [
+        "Confessions of a Rotten Girl"
+      ],
+      "creators": [
+        "SAWTOWNE"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈Confessions of a Rotten Girl〉— SAWTOWNE 作品，初音未來演唱，2025 年發表。",
+        "en": "“Confessions of a Rotten Girl” — by SAWTOWNE, sung by Hatsune Miku, released in 2025.",
+        "ja": "「Confessions of a Rotten Girl」— SAWTOWNEの曲、歌は初音ミク。2025年発表。"
+      },
+      "sourceURL": "https://www.youtube.com/watch?v=sV2H712ldOI",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-17189",
+      "aliases": [
+        "脳漿炸裂ガール",
+        "Noushou Sakuretsu Girl",
+        "Brain Fluid Explosion Girl",
+        "Spinal Fluid Explosion Girl"
+      ],
+      "creators": [
+        "れるりり"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈脳漿炸裂ガール〉— れるりり 作品，初音未來與 GUMI 演唱，2012 年發表。歌詞有性暗示，屬成人向；談到時可坦白承認，但不要細說或引用歌詞。",
+        "en": "“脳漿炸裂ガール” — by れるりり, sung by Hatsune Miku and GUMI, released in 2012. The lyrics are sexual, so it is adult-oriented; you can say so, but don't go into detail or quote the lyrics.",
+        "ja": "「脳漿炸裂ガール」— れるりりの曲、歌は初音ミクとGUMI。2012年発表。歌詞に性的な表現がある大人向けの曲です。そう認めてかまいませんが、詳しく語ったり歌詞を引用したりしないでください。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm19133907",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-10515",
+      "aliases": [
+        "Love Love Nightmare"
+      ],
+      "creators": [
+        "kiichi"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈Love Love Nightmare〉— kiichi 作品，初音未來演唱，2008 年發表。",
+        "en": "“Love Love Nightmare” — by kiichi, sung by Hatsune Miku, released in 2008.",
+        "ja": "「Love Love Nightmare」— kiichiの曲、歌は初音ミク。2008年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm4518874",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-198286",
+      "aliases": [
+        "あなぐらぐらし",
+        "Anagura Gurashi",
+        "Pitiful Cave"
+      ],
+      "creators": [
+        "きくお"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈あなぐらぐらし〉— きくお 作品，初音未來演唱，2018 年發表。",
+        "en": "“あなぐらぐらし” — by きくお, sung by Hatsune Miku, released in 2018.",
+        "ja": "「あなぐらぐらし」— きくおの曲、歌は初音ミク。2018年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm33556145",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-13086",
+      "aliases": [
+        "愛Dee",
+        "Ai Dee",
+        "Love Dee"
+      ],
+      "creators": [
+        "Mitchie M"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈愛Dee〉— Mitchie M 作品，初音未來與 巡音ルカ 演唱，2012 年發表。",
+        "en": "“愛Dee” — by Mitchie M, sung by Hatsune Miku and 巡音ルカ, released in 2012.",
+        "ja": "「愛Dee」— Mitchie Mの曲、歌は初音ミクと巡音ルカ。2012年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm18047788",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-4979",
+      "aliases": [
+        "カゲロウデイズ",
+        "Kagerou Daze",
+        "Heat-Haze Daze",
+        "Kagerou Days",
+        "Heat-Haze Days"
+      ],
+      "creators": [
+        "じん"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈カゲロウデイズ〉— じん 作品，初音未來演唱，2011 年發表。",
+        "en": "“カゲロウデイズ” — by じん, sung by Hatsune Miku, released in 2011.",
+        "ja": "「カゲロウデイズ」— じんの曲、歌は初音ミク。2011年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm15751190",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-164109",
+      "aliases": [
+        "大江戸ジュリアナイト",
+        "Ooedo Julia-Night",
+        "Ohedo Julia-Night"
+      ],
+      "creators": [
+        "Mitchie M"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈大江戸ジュリアナイト〉— Mitchie M 作品，初音未來與 KAITO V3 (Straight) 演唱，2017 年發表。",
+        "en": "“大江戸ジュリアナイト” — by Mitchie M, sung by Hatsune Miku and KAITO V3 (Straight), released in 2017.",
+        "ja": "「大江戸ジュリアナイト」— Mitchie Mの曲、歌は初音ミクとKAITO V3 (Straight)。2017年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm31812792",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-2924",
+      "aliases": [
+        "＊ハロー、プラネット。",
+        "*Hello, Planet."
+      ],
+      "creators": [
+        "sasakure.UK"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈＊ハロー、プラネット。〉— sasakure.UK 作品，初音未來演唱，2008 年發表。",
+        "en": "“＊ハロー、プラネット。” — by sasakure.UK, sung by Hatsune Miku, released in 2008.",
+        "ja": "「＊ハロー、プラネット。」— sasakure.UKの曲、歌は初音ミク。2008年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm7138245",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-56903",
+      "aliases": [
+        "すろぉもぉしょん",
+        "Slow Motion"
+      ],
+      "creators": [
+        "ピノキオピー"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈すろぉもぉしょん〉— ピノキオピー 作品，初音未來演唱，2014 年發表。歌曲涉及藥物等沉重題材；談到時溫和帶過，不要細說。",
+        "en": "“すろぉもぉしょん” — by ピノキオピー, sung by Hatsune Miku, released in 2014. It touches on drugs; mention it gently and don't dwell on it.",
+        "ja": "「すろぉもぉしょん」— ピノキオピーの曲、歌は初音ミク。2014年発表。薬物などの重いテーマを含みます。触れるときはやさしく流し、詳しく語らないでください。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm23648996",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-38835",
+      "aliases": [
+        "脳内革命ガール",
+        "Nounai Kakumei Girl",
+        "Brain Revolution Girl",
+        "Intercranial Revolution Girl"
+      ],
+      "creators": [
+        "MARETU"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈脳内革命ガール〉— MARETU 作品，初音未來演唱，2013 年發表。",
+        "en": "“脳内革命ガール” — by MARETU, sung by Hatsune Miku, released in 2013.",
+        "ja": "「脳内革命ガール」— MARETUの曲、歌は初音ミク。2013年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm21870906",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-131090",
+      "aliases": [
+        "妄想感傷代償連盟",
+        "Mousou Kanshou Daishou Renmei",
+        "Delusion Sentiment Compensation Federation"
+      ],
+      "creators": [
+        "DECO*27",
+        "emon(Tes.)"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈妄想感傷代償連盟〉— DECO*27 作品，初音未來演唱，2016 年發表。",
+        "en": "“妄想感傷代償連盟” — by DECO*27, sung by Hatsune Miku, released in 2016.",
+        "ja": "「妄想感傷代償連盟」— DECO*27の曲、歌は初音ミク。2016年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm30067009",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-12285",
+      "aliases": [
+        "あぁあぁあぁああぁあぁああぁ"
+      ],
+      "creators": [
+        "梨本うい"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈あぁあぁあぁああぁあぁああぁ〉— 梨本うい 作品，初音未來演唱，2009 年發表。",
+        "en": "“あぁあぁあぁああぁあぁああぁ” — by 梨本うい, sung by Hatsune Miku, released in 2009.",
+        "ja": "「あぁあぁあぁああぁあぁああぁ」— 梨本ういの曲、歌は初音ミク。2009年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm6816232",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-22421",
+      "aliases": [
+        "コインロッカーベイビー",
+        "Coin Locker Baby"
+      ],
+      "creators": [
+        "MARETU"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈コインロッカーベイビー〉— MARETU 作品，初音未來演唱，2013 年發表。歌詞有性暗示，屬成人向；談到時可坦白承認，但不要細說或引用歌詞。歌曲涉及血腥等沉重題材；談到時溫和帶過，不要細說。",
+        "en": "“コインロッカーベイビー” — by MARETU, sung by Hatsune Miku, released in 2013. The lyrics are sexual, so it is adult-oriented; you can say so, but don't go into detail or quote the lyrics. It touches on gore; mention it gently and don't dwell on it.",
+        "ja": "「コインロッカーベイビー」— MARETUの曲、歌は初音ミク。2013年発表。歌詞に性的な表現がある大人向けの曲です。そう認めてかまいませんが、詳しく語ったり歌詞を引用したりしないでください。流血表現などの重いテーマを含みます。触れるときはやさしく流し、詳しく語らないでください。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm19980280",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-38420",
+      "aliases": [
+        "アゲアゲアゲイン",
+        "Ageage Again",
+        "Up Up Again"
+      ],
+      "creators": [
+        "Mitchie M"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈アゲアゲアゲイン〉— Mitchie M 作品，初音未來演唱，2013 年發表。",
+        "en": "“アゲアゲアゲイン” — by Mitchie M, sung by Hatsune Miku, released in 2013.",
+        "ja": "「アゲアゲアゲイン」— Mitchie Mの曲、歌は初音ミク。2013年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm21965634",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-12443",
+      "aliases": [
+        "ネトゲ廃人シュプレヒコール",
+        "Netgame Haijin Sprechchor",
+        "ONLINE GAME ADDICTS SPRECHCHOR",
+        "Online Game Addict Chant",
+        "The MMORPG Addict's Anthem"
+      ],
+      "creators": [
+        "さつき が てんこもり"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ネトゲ廃人シュプレヒコール〉— さつき が てんこもり 作品，初音未來演唱，2010 年發表。",
+        "en": "“ネトゲ廃人シュプレヒコール” — by さつき が てんこもり, sung by Hatsune Miku, released in 2010.",
+        "ja": "「ネトゲ廃人シュプレヒコール」— さつき が てんこもりの曲、歌は初音ミク。2010年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm12441199",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-246033",
+      "aliases": [
+        "Gimme×Gimme",
+        "Gimme x Gimme"
+      ],
+      "creators": [
+        "八王子P",
+        "Giga"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈Gimme×Gimme〉— 八王子P 作品，初音未來與 鏡音リン V4 (English)、鏡音リン V4X (Power) 演唱，2019 年發表。",
+        "en": "“Gimme×Gimme” — by 八王子P, sung by Hatsune Miku and 鏡音リン V4 (English) and 鏡音リン V4X (Power), released in 2019.",
+        "ja": "「Gimme×Gimme」— 八王子Pの曲、歌は初音ミクと鏡音リン V4 (English)・鏡音リン V4X (Power)。2019年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm35866152",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-160508",
+      "aliases": [
+        "ホワイトハッピー",
+        "White Happy"
+      ],
+      "creators": [
+        "MARETU"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ホワイトハッピー〉— MARETU 作品，初音未來演唱，2017 年發表。",
+        "en": "“ホワイトハッピー” — by MARETU, sung by Hatsune Miku, released in 2017.",
+        "ja": "「ホワイトハッピー」— MARETUの曲、歌は初音ミク。2017年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm31485619",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-58632",
+      "aliases": [
+        "ツギハギスタッカート",
+        "Tsugihagi Staccato",
+        "Patchwork Staccato"
+      ],
+      "creators": [
+        "とあ"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ツギハギスタッカート〉— とあ 作品，初音未來演唱，2014 年發表。",
+        "en": "“ツギハギスタッカート” — by とあ, sung by Hatsune Miku, released in 2014.",
+        "ja": "「ツギハギスタッカート」— とあの曲、歌は初音ミク。2014年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm23762151",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-8682",
+      "aliases": [
+        "Bad ∞ End ∞ Night"
+      ],
+      "creators": [
+        "ひとしずくP",
+        "やま△"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈Bad ∞ End ∞ Night〉— ひとしずくP 作品，初音未來等多位歌手演唱，2012 年發表。",
+        "en": "“Bad ∞ End ∞ Night” — by ひとしずくP, sung by Hatsune Miku and others, released in 2012.",
+        "ja": "「Bad ∞ End ∞ Night」— ひとしずくPの曲、歌は初音ミクほか。2012年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm16702635",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-136",
+      "aliases": [
+        "腐れ外道とチョコレゐト",
+        "Kusaregedou to Chocolate",
+        "Rotten Heresy and Chocolate",
+        "Rotten Heresy and Chocolayte",
+        "Kusare-gedou and Chocolate"
+      ],
+      "creators": [
+        "ピノキオピー"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈腐れ外道とチョコレゐト〉— ピノキオピー 作品，初音未來演唱，2011 年發表。",
+        "en": "“腐れ外道とチョコレゐト” — by ピノキオピー, sung by Hatsune Miku, released in 2011.",
+        "ja": "「腐れ外道とチョコレゐト」— ピノキオピーの曲、歌は初音ミク。2011年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm13275244",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-36002",
+      "aliases": [
+        "しかばねの踊り",
+        "Shikabane no Odori",
+        "Dance of the Dead",
+        "Dance of Corpse",
+        "Corpse Dance",
+        "Dance of the Corpses"
+      ],
+      "creators": [
+        "きくお"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈しかばねの踊り〉— きくお 作品，初音未來演唱，2013 年發表。歌曲涉及自殺或自傷等沉重題材；談到時溫和帶過，不要細說。",
+        "en": "“しかばねの踊り” — by きくお, sung by Hatsune Miku, released in 2013. It touches on suicide or self-harm; mention it gently and don't dwell on it.",
+        "ja": "「しかばねの踊り」— きくおの曲、歌は初音ミク。2013年発表。自殺や自傷などの重いテーマを含みます。触れるときはやさしく流し、詳しく語らないでください。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm21720548",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-411304",
+      "aliases": [
+        "転生林檎",
+        "Reincarnation Apple",
+        "Tensei Ringo"
+      ],
+      "creators": [
+        "ピノキオピー"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈転生林檎〉— ピノキオピー 作品，初音未來演唱，2022 年發表。",
+        "en": "“転生林檎” — by ピノキオピー, sung by Hatsune Miku, released in 2022.",
+        "ja": "「転生林檎」— ピノキオピーの曲、歌は初音ミク。2022年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm40554570",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-18479",
+      "aliases": [
+        "独りんぼエンヴィー",
+        "Hitorinbo Envy",
+        "Solitary Envy",
+        "Solitary Hide and Seek Envy"
+      ],
+      "creators": [
+        "koyori"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈独りんぼエンヴィー〉— koyori 作品，初音未來演唱，2012 年發表。歌曲涉及自殺或自傷等沉重題材；談到時溫和帶過，不要細說。",
+        "en": "“独りんぼエンヴィー” — by koyori, sung by Hatsune Miku, released in 2012. It touches on suicide or self-harm; mention it gently and don't dwell on it.",
+        "ja": "「独りんぼエンヴィー」— koyoriの曲、歌は初音ミク。2012年発表。自殺や自傷などの重いテーマを含みます。触れるときはやさしく流し、詳しく語らないでください。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm19466301",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-221277",
+      "aliases": [
+        "ビターチョコデコレーション",
+        "Bitter Chocolate Decoration",
+        "Bitter Choco Decoration"
+      ],
+      "creators": [
+        "syudou"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ビターチョコデコレーション〉— syudou 作品，初音未來演唱，2019 年發表。",
+        "en": "“ビターチョコデコレーション” — by syudou, sung by Hatsune Miku, released in 2019.",
+        "ja": "「ビターチョコデコレーション」— syudouの曲、歌は初音ミク。2019年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm34425299",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-335988",
+      "aliases": [
+        "ノンブレス・オブリージュ",
+        "Non-breath oblige"
+      ],
+      "creators": [
+        "ピノキオピー"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ノンブレス・オブリージュ〉— ピノキオピー 作品，初音未來演唱，2021 年發表。",
+        "en": "“ノンブレス・オブリージュ” — by ピノキオピー, sung by Hatsune Miku, released in 2021.",
+        "ja": "「ノンブレス・オブリージュ」— ピノキオピーの曲、歌は初音ミク。2021年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm38824626",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-293286",
+      "aliases": [
+        "ダーリンダンス",
+        "Darling Dance"
+      ],
+      "creators": [
+        "かいりきベア"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ダーリンダンス〉— かいりきベア 作品，初音未來演唱，2020 年發表。",
+        "en": "“ダーリンダンス” — by かいりきベア, sung by Hatsune Miku, released in 2020.",
+        "ja": "「ダーリンダンス」— かいりきベアの曲、歌は初音ミク。2020年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm37441963",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-260566",
+      "aliases": [
+        "マジカルドクター",
+        "Magical Doctor"
+      ],
+      "creators": [
+        "MARETU"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈マジカルドクター〉— MARETU 作品，初音未來演唱，2019 年發表。歌曲涉及藥物等沉重題材；談到時溫和帶過，不要細說。",
+        "en": "“マジカルドクター” — by MARETU, sung by Hatsune Miku, released in 2019. It touches on drugs; mention it gently and don't dwell on it.",
+        "ja": "「マジカルドクター」— MARETUの曲、歌は初音ミク。2019年発表。薬物などの重いテーマを含みます。触れるときはやさしく流し、詳しく語らないでください。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm36142547",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-160589",
+      "aliases": [
+        "アップルドットコム",
+        "Apple dot com"
+      ],
+      "creators": [
+        "ピノキオピー"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈アップルドットコム〉— ピノキオピー 作品，初音未來與 ピノキオピー 演唱，2017 年發表。",
+        "en": "“アップルドットコム” — by ピノキオピー, sung by Hatsune Miku and ピノキオピー, released in 2017.",
+        "ja": "「アップルドットコム」— ピノキオピーの曲、歌は初音ミクとピノキオピー。2017年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm31491163",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-121935",
+      "aliases": [
+        "気まぐれメルシィ",
+        "Kimagure Mercy",
+        "Whimsical Mercy"
+      ],
+      "creators": [
+        "八王子P"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈気まぐれメルシィ〉— 八王子P 作品，初音未來演唱，2016 年發表。",
+        "en": "“気まぐれメルシィ” — by 八王子P, sung by Hatsune Miku, released in 2016.",
+        "ja": "「気まぐれメルシィ」— 八王子Pの曲、歌は初音ミク。2016年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm28974414",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-48029",
+      "aliases": [
+        "ストリーミングハート",
+        "Streaming Heart"
+      ],
+      "creators": [
+        "DECO*27",
+        "kous"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ストリーミングハート〉— DECO*27 作品，初音未來演唱，2014 年發表。",
+        "en": "“ストリーミングハート” — by DECO*27, sung by Hatsune Miku, released in 2014.",
+        "ja": "「ストリーミングハート」— DECO*27の曲、歌は初音ミク。2014年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm23144598",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-178226",
+      "aliases": [
+        "メルティランドナイトメア",
+        "Melty Land Nightmare"
+      ],
+      "creators": [
+        "はるまきごはん"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈メルティランドナイトメア〉— はるまきごはん 作品，初音未來演唱，2017 年發表。",
+        "en": "“メルティランドナイトメア” — by はるまきごはん, sung by Hatsune Miku, released in 2017.",
+        "ja": "「メルティランドナイトメア」— はるまきごはんの曲、歌は初音ミク。2017年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm32748202",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-1582",
+      "aliases": [
+        "骸Attack!!",
+        "Mukuro Attack!!",
+        "Corpse Attack!!"
+      ],
+      "creators": [
+        "鬱P"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈骸Attack!!〉— 鬱P 作品，初音未來演唱，2009 年發表。",
+        "en": "“骸Attack!!” — by 鬱P, sung by Hatsune Miku, released in 2009.",
+        "ja": "「骸Attack!!」— 鬱Pの曲、歌は初音ミク。2009年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm7526338",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-1327",
+      "aliases": [
+        "初めての恋が終わる時",
+        "Hajimete no Koi ga Owaru Toki",
+        "When First Love Ends",
+        "When the First Love Ends"
+      ],
+      "creators": [
+        "ryo"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈初めての恋が終わる時〉— ryo 作品，初音未來演唱，2008 年發表。",
+        "en": "“初めての恋が終わる時” — by ryo, sung by Hatsune Miku, released in 2008.",
+        "ja": "「初めての恋が終わる時」— ryoの曲、歌は初音ミク。2008年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm5524166",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-1383",
+      "aliases": [
+        "Sweet Devil"
+      ],
+      "creators": [
+        "八王子P"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈Sweet Devil〉— 八王子P 作品，初音未來演唱，2010 年發表。",
+        "en": "“Sweet Devil” — by 八王子P, sung by Hatsune Miku, released in 2010.",
+        "ja": "「Sweet Devil」— 八王子Pの曲、歌は初音ミク。2010年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm9711503",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-21604",
+      "aliases": [
+        "自傷無色",
+        "Jishou Mushoku",
+        "Self-Inflicted Achromatic",
+        "Self-Inflicted Colorless",
+        "Self-Harm Colorless",
+        "Jisyou musyoku"
+      ],
+      "creators": [
+        "ササノマリイ"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈自傷無色〉— ササノマリイ 作品，初音未來演唱，2013 年發表。歌曲涉及自殺或自傷等沉重題材；談到時溫和帶過，不要細說。",
+        "en": "“自傷無色” — by ササノマリイ, sung by Hatsune Miku, released in 2013. It touches on suicide or self-harm; mention it gently and don't dwell on it.",
+        "ja": "「自傷無色」— ササノマリイの曲、歌は初音ミク。2013年発表。自殺や自傷などの重いテーマを含みます。触れるときはやさしく流し、詳しく語らないでください。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm19870840",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-25725",
+      "aliases": [
+        "君はできない子",
+        "Kimi wa Dekinai Ko",
+        "You're a Worthless Child",
+        "You're a Useless Child"
+      ],
+      "creators": [
+        "きくお"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈君はできない子〉— きくお 作品，初音未來演唱，2013 年發表。歌曲涉及自殺或自傷等沉重題材；談到時溫和帶過，不要細說。",
+        "en": "“君はできない子” — by きくお, sung by Hatsune Miku, released in 2013. It touches on suicide or self-harm; mention it gently and don't dwell on it.",
+        "ja": "「君はできない子」— きくおの曲、歌は初音ミク。2013年発表。自殺や自傷などの重いテーマを含みます。触れるときはやさしく流し、詳しく語らないでください。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm20410104",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-3658",
+      "aliases": [
+        "ミラクルペイント",
+        "Miracle Paint"
+      ],
+      "creators": [
+        "OSTER project"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ミラクルペイント〉— OSTER project 作品，初音未來演唱，2007 年發表。",
+        "en": "“ミラクルペイント” — by OSTER project, sung by Hatsune Miku, released in 2007.",
+        "ja": "「ミラクルペイント」— OSTER projectの曲、歌は初音ミク。2007年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm1588476",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-2904",
+      "aliases": [
+        "こっち向いて Baby",
+        "Kocchi Muite Baby",
+        "Look this Way, Baby"
+      ],
+      "creators": [
+        "ryo"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈こっち向いて Baby〉— ryo 作品，初音未來演唱，2010 年發表。",
+        "en": "“こっち向いて Baby” — by ryo, sung by Hatsune Miku, released in 2010.",
+        "ja": "「こっち向いて Baby」— ryoの曲、歌は初音ミク。2010年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/so11251970",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-132923",
+      "aliases": [
+        "きみも悪い人でよかった",
+        "I'm Glad You're Evil Too",
+        "Kimi mo Warui Hito de Yokatta"
+      ],
+      "creators": [
+        "ピノキオピー"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈きみも悪い人でよかった〉— ピノキオピー 作品，初音未來演唱，2016 年發表。",
+        "en": "“きみも悪い人でよかった” — by ピノキオピー, sung by Hatsune Miku, released in 2016.",
+        "ja": "「きみも悪い人でよかった」— ピノキオピーの曲、歌は初音ミク。2016年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm29520630",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-4652",
+      "aliases": [
+        "天国へ行こう",
+        "Tengoku e Ikou",
+        "Let's Go to Heaven"
+      ],
+      "creators": [
+        "きくお"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈天国へ行こう〉— きくお 作品，初音未來演唱，2011 年發表。歌曲涉及自殺或自傷等沉重題材；談到時溫和帶過，不要細說。",
+        "en": "“天国へ行こう” — by きくお, sung by Hatsune Miku, released in 2011. It touches on suicide or self-harm; mention it gently and don't dwell on it.",
+        "ja": "「天国へ行こう」— きくおの曲、歌は初音ミク。2011年発表。自殺や自傷などの重いテーマを含みます。触れるときはやさしく流し、詳しく語らないでください。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm14993928",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-556",
+      "aliases": [
+        "骸骨楽団とリリア",
+        "Skeleton Orchestra and Lilia",
+        "Gaikotsu Gakudan to Lilia"
+      ],
+      "creators": [
+        "トーマ"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈骸骨楽団とリリア〉— トーマ 作品，初音未來演唱，2011 年發表。",
+        "en": "“骸骨楽団とリリア” — by トーマ, sung by Hatsune Miku, released in 2011.",
+        "ja": "「骸骨楽団とリリア」— トーマの曲、歌は初音ミク。2011年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm14780909",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-16061",
+      "aliases": [
+        "Sadistic.Music∞Factory"
+      ],
+      "creators": [
+        "cosMo@暴走P"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈Sadistic.Music∞Factory〉— cosMo@暴走P 作品，初音未來演唱，2012 年發表。",
+        "en": "“Sadistic.Music∞Factory” — by cosMo@暴走P, sung by Hatsune Miku, released in 2012.",
+        "ja": "「Sadistic.Music∞Factory」— cosMo@暴走Pの曲、歌は初音ミク。2012年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm18729289",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-7042",
+      "aliases": [
+        "ゴチャゴチャうるせー！",
+        "Shut Up with Your Complains!",
+        "Gocha Gocha Urusee!",
+        "Stop Nagging Me!"
+      ],
+      "creators": [
+        "オワタP"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ゴチャゴチャうるせー！〉— オワタP 作品，初音未來演唱，2010 年發表。",
+        "en": "“ゴチャゴチャうるせー！” — by オワタP, sung by Hatsune Miku, released in 2010.",
+        "ja": "「ゴチャゴチャうるせー！」— オワタPの曲、歌は初音ミク。2010年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm12294498",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-1024",
+      "aliases": [
+        "キャットフード",
+        "Cat Food"
+      ],
+      "creators": [
+        "doriko"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈キャットフード〉— doriko 作品，初音未來演唱，2010 年發表。",
+        "en": "“キャットフード” — by doriko, sung by Hatsune Miku, released in 2010.",
+        "ja": "「キャットフード」— dorikoの曲、歌は初音ミク。2010年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm12774972",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-2823",
+      "aliases": [
+        "ロッテンガールグロテスクロマンス",
+        "Rotten Girl Grotesque Romance"
+      ],
+      "creators": [
+        "マチゲリータ"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ロッテンガールグロテスクロマンス〉— マチゲリータ 作品，初音未來演唱，2009 年發表。歌詞有性暗示，屬成人向；談到時可坦白承認，但不要細說或引用歌詞。",
+        "en": "“ロッテンガールグロテスクロマンス” — by マチゲリータ, sung by Hatsune Miku, released in 2009. The lyrics are sexual, so it is adult-oriented; you can say so, but don't go into detail or quote the lyrics.",
+        "ja": "「ロッテンガールグロテスクロマンス」— マチゲリータの曲、歌は初音ミク。2009年発表。歌詞に性的な表現がある大人向けの曲です。そう認めてかまいませんが、詳しく語ったり歌詞を引用したりしないでください。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm7704306",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-5833",
+      "aliases": [
+        "クローバー♣クラブ",
+        "Clover Club"
+      ],
+      "creators": [
+        "ゆうゆ"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈クローバー♣クラブ〉— ゆうゆ 作品，初音未來演唱，2008 年發表。",
+        "en": "“クローバー♣クラブ” — by ゆうゆ, sung by Hatsune Miku, released in 2008.",
+        "ja": "「クローバー♣クラブ」— ゆうゆの曲、歌は初音ミク。2008年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm1937053",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-453",
+      "aliases": [
+        "エンヴィキャットウォーク",
+        "Envy Catwalk"
+      ],
+      "creators": [
+        "トーマ"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈エンヴィキャットウォーク〉— トーマ 作品，初音未來演唱，2011 年發表。",
+        "en": "“エンヴィキャットウォーク” — by トーマ, sung by Hatsune Miku, released in 2011.",
+        "ja": "「エンヴィキャットウォーク」— トーマの曲、歌は初音ミク。2011年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm15956806",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-869388",
+      "aliases": [
+        "ループザルーム",
+        "Looping the Rooms",
+        "Loop the Room",
+        "Atravessando os Quartos"
+      ],
+      "creators": [
+        "ルシノ"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ループザルーム〉— ルシノ 作品，初音未來演唱，2025 年發表。",
+        "en": "“ループザルーム” — by ルシノ, sung by Hatsune Miku, released in 2025.",
+        "ja": "「ループザルーム」— ルシノの曲、歌は初音ミク。2025年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm45739389",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-124436",
+      "aliases": [
+        "すきなことだけでいいです",
+        "All I Need are Things I Like",
+        "Suki na Koto Dake de ii Desu",
+        "All You Need Are The Things You Like"
+      ],
+      "creators": [
+        "ピノキオピー"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈すきなことだけでいいです〉— ピノキオピー 作品，初音未來與 ピノキオピー 演唱，2016 年發表。",
+        "en": "“すきなことだけでいいです” — by ピノキオピー, sung by Hatsune Miku and ピノキオピー, released in 2016.",
+        "ja": "「すきなことだけでいいです」— ピノキオピーの曲、歌は初音ミクとピノキオピー。2016年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm28749432",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-15047",
+      "aliases": [
+        "Weekender Girl",
+        "ウィークエンダーガール"
+      ],
+      "creators": [
+        "kz",
+        "八王子P"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈Weekender Girl〉— kz 作品，初音未來演唱，2012 年發表。",
+        "en": "“Weekender Girl” — by kz, sung by Hatsune Miku, released in 2012.",
+        "ja": "「Weekender Girl」— kzの曲、歌は初音ミク。2012年発表。"
+      },
+      "sourceURL": "https://www.youtube.com/watch?v=06d8SwcSm_Q",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-819926",
+      "aliases": [
+        "いますぐ輪廻",
+        "Retry Now",
+        "Ima Sugu Rinne",
+        "Ima Sugu Rin'ne"
+      ],
+      "creators": [
+        "なきそ"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈いますぐ輪廻〉— なきそ 作品，初音未來演唱，2025 年發表。歌曲涉及自殺或自傷等沉重題材；談到時溫和帶過，不要細說。",
+        "en": "“いますぐ輪廻” — by なきそ, sung by Hatsune Miku, released in 2025. It touches on suicide or self-harm; mention it gently and don't dwell on it.",
+        "ja": "「いますぐ輪廻」— なきその曲、歌は初音ミク。2025年発表。自殺や自傷などの重いテーマを含みます。触れるときはやさしく流し、詳しく語らないでください。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm45241713",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-3015",
+      "aliases": [
+        "恋色病棟",
+        "Love-Colored Ward",
+        "Koi Iro Byoutou",
+        "Love Ward"
+      ],
+      "creators": [
+        "OSTER project"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈恋色病棟〉— OSTER project 作品，初音未來演唱，2009 年發表。",
+        "en": "“恋色病棟” — by OSTER project, sung by Hatsune Miku, released in 2009.",
+        "ja": "「恋色病棟」— OSTER projectの曲、歌は初音ミク。2009年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm7361534",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-1359",
+      "aliases": [
+        "トリノコシティ",
+        "Torinoko City",
+        "Left Behind City"
+      ],
+      "creators": [
+        "40mP"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈トリノコシティ〉— 40mP 作品，初音未來演唱，2010 年發表。",
+        "en": "“トリノコシティ” — by 40mP, sung by Hatsune Miku, released in 2010.",
+        "ja": "「トリノコシティ」— 40mPの曲、歌は初音ミク。2010年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm11559163",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-38916",
+      "aliases": [
+        "妄想税",
+        "Delusion Tax",
+        "Mousou Zei"
+      ],
+      "creators": [
+        "kous",
+        "DECO*27"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈妄想税〉— kous 作品，初音未來演唱，2013 年發表。",
+        "en": "“妄想税” — by kous, sung by Hatsune Miku, released in 2013.",
+        "ja": "「妄想税」— kousの曲、歌は初音ミク。2013年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm21764582",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-516664",
+      "aliases": [
+        "あいしていたのに",
+        "Aishite ita no ni",
+        "Even Though I Loved You",
+        "I Loved You",
+        "Even Though I Had Loved You"
+      ],
+      "creators": [
+        "MARETU"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈あいしていたのに〉— MARETU 作品，初音未來演唱，2023 年發表。歌曲涉及血腥等沉重題材；談到時溫和帶過，不要細說。",
+        "en": "“あいしていたのに” — by MARETU, sung by Hatsune Miku, released in 2023. It touches on gore; mention it gently and don't dwell on it.",
+        "ja": "「あいしていたのに」— MARETUの曲、歌は初音ミク。2023年発表。流血表現などの重いテーマを含みます。触れるときはやさしく流し、詳しく語らないでください。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm42540632",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-30981",
+      "aliases": [
+        "看板娘の悪巫山戯",
+        "Poster Girl's Prank",
+        "Kanbanmusume no Warufuzake",
+        "Show Girl's Prank"
+      ],
+      "creators": [
+        "鬱P"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈看板娘の悪巫山戯〉— 鬱P 作品，初音未來與 鏡音リン、V3 GUMI (Power) 演唱，2013 年發表。",
+        "en": "“看板娘の悪巫山戯” — by 鬱P, sung by Hatsune Miku and 鏡音リン and V3 GUMI (Power), released in 2013.",
+        "ja": "「看板娘の悪巫山戯」— 鬱Pの曲、歌は初音ミクと鏡音リン・V3 GUMI (Power)。2013年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm21438326",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-2716",
+      "aliases": [
+        "え？あぁ、そう。",
+        "E? Aa, Sou.",
+        "Hm? Ah, Yes.",
+        "What? Ah, Yeah.",
+        "What? Ah, Yes."
+      ],
+      "creators": [
+        "蝶々P"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈え？あぁ、そう。〉— 蝶々P 作品，初音未來演唱，2010 年發表。歌詞有性暗示，屬成人向；談到時可坦白承認，但不要細說或引用歌詞。",
+        "en": "“え？あぁ、そう。” — by 蝶々P, sung by Hatsune Miku, released in 2010. The lyrics are sexual, so it is adult-oriented; you can say so, but don't go into detail or quote the lyrics.",
+        "ja": "「え？あぁ、そう。」— 蝶々Pの曲、歌は初音ミク。2010年発表。歌詞に性的な表現がある大人向けの曲です。そう認めてかまいませんが、詳しく語ったり歌詞を引用したりしないでください。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm10122021",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-1828",
+      "aliases": [
+        "ストロボライト",
+        "Strobe Light"
+      ],
+      "creators": [
+        "椎名もた"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ストロボライト〉— 椎名もた 作品，初音未來演唱，2011 年發表。",
+        "en": "“ストロボライト” — by 椎名もた, sung by Hatsune Miku, released in 2011.",
+        "ja": "「ストロボライト」— 椎名もたの曲、歌は初音ミク。2011年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm15496537",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-435103",
+      "aliases": [
+        "気取屋商売",
+        "Kidoriya Shoubai",
+        "Pompous Business",
+        "The Business of Affectation"
+      ],
+      "creators": [
+        "syudou"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈気取屋商売〉— syudou 作品，初音未來演唱，2012 年發表。歌詞有性暗示，屬成人向；談到時可坦白承認，但不要細說或引用歌詞。歌曲涉及自殺或自傷等沉重題材；談到時溫和帶過，不要細說。",
+        "en": "“気取屋商売” — by syudou, sung by Hatsune Miku, released in 2012. The lyrics are sexual, so it is adult-oriented; you can say so, but don't go into detail or quote the lyrics. It touches on suicide or self-harm; mention it gently and don't dwell on it.",
+        "ja": "「気取屋商売」— syudouの曲、歌は初音ミク。2012年発表。歌詞に性的な表現がある大人向けの曲です。そう認めてかまいませんが、詳しく語ったり歌詞を引用したりしないでください。自殺や自傷などの重いテーマを含みます。触れるときはやさしく流し、詳しく語らないでください。"
+      },
+      "sourceURL": "https://vocadb.net/S/435103",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-588674",
+      "aliases": [
+        "ヤババイナ",
+        "B-B-B Y I K E S!!!"
+      ],
+      "creators": [
+        "さたぱんP"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ヤババイナ〉— さたぱんP 作品，初音未來與 重音テトSV、ずんだもん 演唱，2024 年發表。",
+        "en": "“ヤババイナ” — by さたぱんP, sung by Hatsune Miku and 重音テトSV and ずんだもん, released in 2024.",
+        "ja": "「ヤババイナ」— さたぱんPの曲、歌は初音ミクと重音テトSV・ずんだもん。2024年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm43305065",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-7238",
+      "aliases": [
+        "サンドリヨン"
+      ],
+      "creators": [
+        "Dios/シグナルP"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈サンドリヨン〉— Dios/シグナルP 作品，初音未來與 KAITO 演唱，2008 年發表。",
+        "en": "“サンドリヨン” — by Dios/シグナルP, sung by Hatsune Miku and KAITO, released in 2008.",
+        "ja": "「サンドリヨン」— Dios/シグナルPの曲、歌は初音ミクとKAITO。2008年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm4410647",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-256954",
+      "aliases": [
+        "ジターバグ"
+      ],
+      "creators": [
+        "栗山夕璃",
+        "端倉鑛"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ジターバグ〉— 栗山夕璃 作品，初音未來與 MEIKO V3 (Power) 演唱，2019 年發表。",
+        "en": "“ジターバグ” — by 栗山夕璃, sung by Hatsune Miku and MEIKO V3 (Power), released in 2019.",
+        "ja": "「ジターバグ」— 栗山夕璃の曲、歌は初音ミクとMEIKO V3 (Power)。2019年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm35808124",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-335986",
+      "aliases": [
+        "ねぇねぇねぇ。",
+        "Hey Hey Hey.",
+        "Nee Nee Nee."
+      ],
+      "creators": [
+        "ピノキオピー"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ねぇねぇねぇ。〉— ピノキオピー 作品，初音未來等多位歌手演唱，2021 年發表。",
+        "en": "“ねぇねぇねぇ。” — by ピノキオピー, sung by Hatsune Miku and others, released in 2021.",
+        "ja": "「ねぇねぇねぇ。」— ピノキオピーの曲、歌は初音ミクほか。2021年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm39131047",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-525760",
+      "aliases": [
+        "混沌ブギ",
+        "Konton Boogie",
+        "Chaos Boogie"
+      ],
+      "creators": [
+        "jon-YAKITORY"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈混沌ブギ〉— jon-YAKITORY 作品，初音未來演唱，2023 年發表。",
+        "en": "“混沌ブギ” — by jon-YAKITORY, sung by Hatsune Miku, released in 2023.",
+        "ja": "「混沌ブギ」— jon-YAKITORYの曲、歌は初音ミク。2023年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm42682989",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-3312",
+      "aliases": [
+        "白い雪のプリンセスは",
+        "Shiroi Yuki no Princess wa",
+        "The Snow White Princess is",
+        "White Snow Princess",
+        "The Snow White Princess is..."
+      ],
+      "creators": [
+        "のぼる↑"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈白い雪のプリンセスは〉— のぼる↑ 作品，初音未來演唱，2010 年發表。",
+        "en": "“白い雪のプリンセスは” — by のぼる↑, sung by Hatsune Miku, released in 2010.",
+        "ja": "「白い雪のプリンセスは」— のぼる↑の曲、歌は初音ミク。2010年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm9797269",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-28130",
+      "aliases": [
+        "MiKUSABBATH"
+      ],
+      "creators": [
+        "鬱P"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈MiKUSABBATH〉— 鬱P 作品，初音未來演唱，2013 年發表。",
+        "en": "“MiKUSABBATH” — by 鬱P, sung by Hatsune Miku, released in 2013.",
+        "ja": "「MiKUSABBATH」— 鬱Pの曲、歌は初音ミク。2013年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm20637855",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-49871",
+      "aliases": [
+        "ウミユリ海底譚",
+        "Umiyuri Kaitei Tan",
+        "Tale of the Deep-Sea Lily",
+        "Sea Lily Deep Sea Tale"
+      ],
+      "creators": [
+        "n-buna"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ウミユリ海底譚〉— n-buna 作品，初音未來演唱，2014 年發表。",
+        "en": "“ウミユリ海底譚” — by n-buna, sung by Hatsune Miku, released in 2014.",
+        "ja": "「ウミユリ海底譚」— n-bunaの曲、歌は初音ミク。2014年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm22960446",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-100067",
+      "aliases": [
+        "わたしのアール",
+        "Watashi no R"
+      ],
+      "creators": [
+        "和田たけあき"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈わたしのアール〉— 和田たけあき 作品，初音未來演唱，2015 年發表。歌曲涉及自殺或自傷等沉重題材；談到時溫和帶過，不要細說。",
+        "en": "“わたしのアール” — by 和田たけあき, sung by Hatsune Miku, released in 2015. It touches on suicide or self-harm; mention it gently and don't dwell on it.",
+        "ja": "「わたしのアール」— 和田たけあきの曲、歌は初音ミク。2015年発表。自殺や自傷などの重いテーマを含みます。触れるときはやさしく流し、詳しく語らないでください。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm27056499",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-153133",
+      "aliases": [
+        "ぼくらはみんな意味不明",
+        "Nobody Makes Sense",
+        "Bokura wa Minna Imi Fumei"
+      ],
+      "creators": [
+        "ピノキオピー"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ぼくらはみんな意味不明〉— ピノキオピー 作品，初音未來與 ピノキオピー 演唱，2017 年發表。",
+        "en": "“ぼくらはみんな意味不明” — by ピノキオピー, sung by Hatsune Miku and ピノキオピー, released in 2017.",
+        "ja": "「ぼくらはみんな意味不明」— ピノキオピーの曲、歌は初音ミクとピノキオピー。2017年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm30964600",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-11593",
+      "aliases": [
+        "shake it！"
+      ],
+      "creators": [
+        "emon(Tes.)"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈shake it！〉— emon(Tes.) 作品，初音未來演唱，2012 年發表。",
+        "en": "“shake it！” — by emon(Tes.), sung by Hatsune Miku, released in 2012.",
+        "ja": "「shake it！」— emon(Tes.)の曲、歌は初音ミク。2012年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm17608134",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-251400",
+      "aliases": [
+        "リングの熾天使",
+        "Seraphim On The Ring",
+        "Ring no Shitenshi",
+        "Ring no Seraph",
+        "Seraph On The Ring"
+      ],
+      "creators": [
+        "Mitchie M"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈リングの熾天使〉— Mitchie M 作品，初音未來與 鏡音リン 演唱，2019 年發表。",
+        "en": "“リングの熾天使” — by Mitchie M, sung by Hatsune Miku and 鏡音リン, released in 2019.",
+        "ja": "「リングの熾天使」— Mitchie Mの曲、歌は初音ミクと鏡音リン。2019年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm35588807",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-8623",
+      "aliases": [
+        "イージーデンス",
+        "EAZY DANCE",
+        "EASY DANCE"
+      ],
+      "creators": [
+        "Mitchie M"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈イージーデンス〉— Mitchie M 作品，初音未來演唱，2012 年發表。",
+        "en": "“イージーデンス” — by Mitchie M, sung by Hatsune Miku, released in 2012.",
+        "ja": "「イージーデンス」— Mitchie Mの曲、歌は初音ミク。2012年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm16590269",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-19060",
+      "aliases": [
+        "システマティック・ラヴ",
+        "Systematic Love"
+      ],
+      "creators": [
+        "かめりあ"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈システマティック・ラヴ〉— かめりあ 作品，初音未來演唱，2012 年發表。",
+        "en": "“システマティック・ラヴ” — by かめりあ, sung by Hatsune Miku, released in 2012.",
+        "ja": "「システマティック・ラヴ」— かめりあの曲、歌は初音ミク。2012年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm19626042",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-87021",
+      "aliases": [
+        "ニュース39"
+      ],
+      "creators": [
+        "Mitchie M"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ニュース39〉— Mitchie M 作品，初音未來演唱，2015 年發表。",
+        "en": "“ニュース39” — by Mitchie M, sung by Hatsune Miku, released in 2015.",
+        "ja": "「ニュース39」— Mitchie Mの曲、歌は初音ミク。2015年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm26167108",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-324306",
+      "aliases": [
+        "『んっあっあっ。』",
+        "\"M-m? Ah, Ah?\""
+      ],
+      "creators": [
+        "SLAVE.V-V-R"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈『んっあっあっ。』〉— SLAVE.V-V-R 作品，初音未來演唱，2021 年發表。",
+        "en": "“『んっあっあっ。』” — by SLAVE.V-V-R, sung by Hatsune Miku, released in 2021.",
+        "ja": "「『んっあっあっ。』」— SLAVE.V-V-Rの曲、歌は初音ミク。2021年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm38495939",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-38169",
+      "aliases": [
+        "鬼蜘蛛ト狐ノ獅子ト",
+        "Onigumo to Kitsune no Shishi to",
+        "The Spider and the Kitsune-Like Lion"
+      ],
+      "creators": [
+        "MASA WORKS DESIGN"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈鬼蜘蛛ト狐ノ獅子ト〉— MASA WORKS DESIGN 作品，初音未來與 GUMI 演唱，2011 年發表。歌詞有性暗示，屬成人向；談到時可坦白承認，但不要細說或引用歌詞。",
+        "en": "“鬼蜘蛛ト狐ノ獅子ト” — by MASA WORKS DESIGN, sung by Hatsune Miku and GUMI, released in 2011. The lyrics are sexual, so it is adult-oriented; you can say so, but don't go into detail or quote the lyrics.",
+        "ja": "「鬼蜘蛛ト狐ノ獅子ト」— MASA WORKS DESIGNの曲、歌は初音ミクとGUMI。2011年発表。歌詞に性的な表現がある大人向けの曲です。そう認めてかまいませんが、詳しく語ったり歌詞を引用したりしないでください。"
+      },
+      "sourceURL": "https://vocadb.net/S/38169",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-1573",
+      "aliases": [
+        "Mrs.Pumpkinの滑稽な夢",
+        "Mrs. Pumpkin no Kokkei na Yume",
+        "Humorous Dream of Mrs. Pumpkin",
+        "Mrs. Pumpkin's Comical Dream",
+        "Mrs. Pumpkin's Ridiculous Dream"
+      ],
+      "creators": [
+        "ハチ"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈Mrs.Pumpkinの滑稽な夢〉— ハチ 作品，初音未來演唱，2009 年發表。",
+        "en": "“Mrs.Pumpkinの滑稽な夢” — by ハチ, sung by Hatsune Miku, released in 2009.",
+        "ja": "「Mrs.Pumpkinの滑稽な夢」— ハチの曲、歌は初音ミク。2009年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm8489562",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-476100",
+      "aliases": [
+        "匿名M",
+        "Tokumei M",
+        "Anonymous M",
+        "Anonymes M",
+        "Anonimowa M",
+        "Anonim M"
+      ],
+      "creators": [
+        "ピノキオピー"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈匿名M〉— ピノキオピー 作品，初音未來與 ARuFa 演唱，2023 年發表。",
+        "en": "“匿名M” — by ピノキオピー, sung by Hatsune Miku and ARuFa, released in 2023.",
+        "ja": "「匿名M」— ピノキオピーの曲、歌は初音ミクとARuFa。2023年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm41803605",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-45753",
+      "aliases": [
+        "少女ケシゴム",
+        "Shoujo Keshigomu",
+        "Eraser Girl",
+        "Girl eraser"
+      ],
+      "creators": [
+        "MARETU"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈少女ケシゴム〉— MARETU 作品，初音未來與 V3 GUMI (Power) 演唱，2013 年發表。歌曲涉及自殺或自傷等沉重題材；談到時溫和帶過，不要細說。",
+        "en": "“少女ケシゴム” — by MARETU, sung by Hatsune Miku and V3 GUMI (Power), released in 2013. It touches on suicide or self-harm; mention it gently and don't dwell on it.",
+        "ja": "「少女ケシゴム」— MARETUの曲、歌は初音ミクとV3 GUMI (Power)。2013年発表。自殺や自傷などの重いテーマを含みます。触れるときはやさしく流し、詳しく語らないでください。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm22542108",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-685575",
+      "aliases": [
+        "化けの花",
+        "Monstrous Flower",
+        "Bake no Hana",
+        "Disguised in Flowers",
+        "Flower of Transformation",
+        "Ghost Flower"
+      ],
+      "creators": [
+        "なきそ"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈化けの花〉— なきそ 作品，初音未來演唱，2024 年發表。歌曲涉及自殺或自傷等沉重題材；談到時溫和帶過，不要細說。",
+        "en": "“化けの花” — by なきそ, sung by Hatsune Miku, released in 2024. It touches on suicide or self-harm; mention it gently and don't dwell on it.",
+        "ja": "「化けの花」— なきその曲、歌は初音ミク。2024年発表。自殺や自傷などの重いテーマを含みます。触れるときはやさしく流し、詳しく語らないでください。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm44233925",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-232031",
+      "aliases": [
+        "ハイパーリアリティショウ",
+        "Hyper Reality Show"
+      ],
+      "creators": [
+        "鬱P"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ハイパーリアリティショウ〉— 鬱P 作品，初音未來演唱，2019 年發表。",
+        "en": "“ハイパーリアリティショウ” — by 鬱P, sung by Hatsune Miku, released in 2019.",
+        "ja": "「ハイパーリアリティショウ」— 鬱Pの曲、歌は初音ミク。2019年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm34908739",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-248865",
+      "aliases": [
+        "ジェヘナ"
+      ],
+      "creators": [
+        "wotaku",
+        "ANGL"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ジェヘナ〉— wotaku 作品，初音未來演唱，2019 年發表。歌曲涉及自殺或自傷等沉重題材；談到時溫和帶過，不要細說。",
+        "en": "“ジェヘナ” — by wotaku, sung by Hatsune Miku, released in 2019. It touches on suicide or self-harm; mention it gently and don't dwell on it.",
+        "ja": "「ジェヘナ」— wotakuの曲、歌は初音ミク。2019年発表。自殺や自傷などの重いテーマを含みます。触れるときはやさしく流し、詳しく語らないでください。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm35507640",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-8678",
+      "aliases": [
+        "リンちゃんなう！",
+        "Rin-chan Now!",
+        "Rin-chan Nau!"
+      ],
+      "creators": [
+        "オワタP"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈リンちゃんなう！〉— オワタP 作品，初音未來與 巡音ルカ 演唱，2011 年發表。",
+        "en": "“リンちゃんなう！” — by オワタP, sung by Hatsune Miku and 巡音ルカ, released in 2011.",
+        "ja": "「リンちゃんなう！」— オワタPの曲、歌は初音ミクと巡音ルカ。2011年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm16539814",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-9376",
+      "aliases": [
+        "二次元ドリームフィーバー",
+        "Nijigen Dream Fever",
+        "2D Dream Fever",
+        "2Dimension Dream Fever",
+        "2 Dimensional Dream Fever"
+      ],
+      "creators": [
+        "PolyphonicBranch"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈二次元ドリームフィーバー〉— PolyphonicBranch 作品，初音未來演唱，2012 年發表。",
+        "en": "“二次元ドリームフィーバー” — by PolyphonicBranch, sung by Hatsune Miku, released in 2012.",
+        "ja": "「二次元ドリームフィーバー」— PolyphonicBranchの曲、歌は初音ミク。2012年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm16973327",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-8246",
+      "aliases": [
+        "1/6 -out of the gravity-"
+      ],
+      "creators": [
+        "ぼーかりおどP"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈1/6 -out of the gravity-〉— ぼーかりおどP 作品，初音未來演唱，2009 年發表。",
+        "en": "“1/6 -out of the gravity-” — by ぼーかりおどP, sung by Hatsune Miku, released in 2009.",
+        "ja": "「1/6 -out of the gravity-」— ぼーかりおどPの曲、歌は初音ミク。2009年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/nm6971638",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-140751",
+      "aliases": [
+        "アルカリレットウセイ",
+        "Alkali Rettousei",
+        "Alkaline Rettousei",
+        "Alkali Underachiever",
+        "Alkaline Underachiever",
+        "Alkali Inferiority"
+      ],
+      "creators": [
+        "かいりきベア"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈アルカリレットウセイ〉— かいりきベア 作品，初音未來演唱，2016 年發表。",
+        "en": "“アルカリレットウセイ” — by かいりきベア, sung by Hatsune Miku, released in 2016.",
+        "ja": "「アルカリレットウセイ」— かいりきベアの曲、歌は初音ミク。2016年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm30105817",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-1834",
+      "aliases": [
+        "ストロボラスト",
+        "Strobe Last"
+      ],
+      "creators": [
+        "椎名もた"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ストロボラスト〉— 椎名もた 作品，初音未來演唱，2011 年發表。",
+        "en": "“ストロボラスト” — by 椎名もた, sung by Hatsune Miku, released in 2011.",
+        "ja": "「ストロボラスト」— 椎名もたの曲、歌は初音ミク。2011年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/nm13359285",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-8149",
+      "aliases": [
+        "物をぱらぱら壊す",
+        "Mono o Parapara Kowasu",
+        "Breaking Things into Pieces"
+      ],
+      "creators": [
+        "きくお"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈物をぱらぱら壊す〉— きくお 作品，初音未來演唱，2011 年發表。歌曲涉及自殺或自傷等沉重題材；談到時溫和帶過，不要細說。",
+        "en": "“物をぱらぱら壊す” — by きくお, sung by Hatsune Miku, released in 2011. It touches on suicide or self-harm; mention it gently and don't dwell on it.",
+        "ja": "「物をぱらぱら壊す」— きくおの曲、歌は初音ミク。2011年発表。自殺や自傷などの重いテーマを含みます。触れるときはやさしく流し、詳しく語らないでください。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm15085899",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-284993",
+      "aliases": [
+        "愛されなくても君がいる",
+        "Because You're Here",
+        "Aisarenakute mo Kimi ga Iru"
+      ],
+      "creators": [
+        "ピノキオピー"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈愛されなくても君がいる〉— ピノキオピー 作品，初音未來演唱，2020 年發表。",
+        "en": "“愛されなくても君がいる” — by ピノキオピー, sung by Hatsune Miku, released in 2020.",
+        "ja": "「愛されなくても君がいる」— ピノキオピーの曲、歌は初音ミク。2020年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm37223770",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-9553",
+      "aliases": [
+        "アカツキアライヴァル",
+        "Akatsuki Arrival",
+        "Daybreak Arrival"
+      ],
+      "creators": [
+        "Last Note.",
+        "ラスノ",
+        "Last Note. T"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈アカツキアライヴァル〉— Last Note. 作品，初音未來與 巡音ルカ 演唱，2012 年發表。",
+        "en": "“アカツキアライヴァル” — by Last Note., sung by Hatsune Miku and 巡音ルカ, released in 2012.",
+        "ja": "「アカツキアライヴァル」— Last Note.の曲、歌は初音ミクと巡音ルカ。2012年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm17064620",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-78616",
+      "aliases": [
+        "このふざけた素晴らしき世界は、僕の為にある",
+        "Kono Fuzaketa Subarashiki Sekai wa, Boku no Tame ni Aru",
+        "This Crazy Wonderful World is For Me",
+        "This Messed-Up Amazing World Exists for Me",
+        "This Fucked-Up Wonderful World Exists For Me",
+        "This Silly Wonderful World Exists For Me"
+      ],
+      "creators": [
+        "n.k"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈このふざけた素晴らしき世界は、僕の為にある〉— n.k 作品，初音未來演唱，2015 年發表。",
+        "en": "“このふざけた素晴らしき世界は、僕の為にある” — by n.k, sung by Hatsune Miku, released in 2015.",
+        "ja": "「このふざけた素晴らしき世界は、僕の為にある」— n.kの曲、歌は初音ミク。2015年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm25379507",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-387848",
+      "aliases": [
+        "魔法少女とチョコレゐト",
+        "Magical Girl and Chocolate",
+        "Mahou Shoujo to Chocolate"
+      ],
+      "creators": [
+        "ピノキオピー"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈魔法少女とチョコレゐト〉— ピノキオピー 作品，初音未來演唱，2022 年發表。",
+        "en": "“魔法少女とチョコレゐト” — by ピノキオピー, sung by Hatsune Miku, released in 2022.",
+        "ja": "「魔法少女とチョコレゐト」— ピノキオピーの曲、歌は初音ミク。2022年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm40089113",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-4084",
+      "aliases": [
+        "僕をそんな目で見ないで",
+        "Boku o Sonna Me de Minaide",
+        "Don't Look at Me in That Way",
+        "Boku wo Sonna Me de Minaide"
+      ],
+      "creators": [
+        "きくお"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈僕をそんな目で見ないで〉— きくお 作品，初音未來演唱，2011 年發表。",
+        "en": "“僕をそんな目で見ないで” — by きくお, sung by Hatsune Miku, released in 2011.",
+        "ja": "「僕をそんな目で見ないで」— きくおの曲、歌は初音ミク。2011年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm13664704",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-24039",
+      "aliases": [
+        "クノイチでも恋がしたい",
+        "Kunoichi Demo Koi ga Shitai",
+        "A Female Ninja, but I Want to Love",
+        "Even as a Kunoichi, I Want to Love",
+        "Even a Kunoichi Needs Love"
+      ],
+      "creators": [
+        "みきとP"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈クノイチでも恋がしたい〉— みきとP 作品，初音未來與 鏡音リン 演唱，2013 年發表。",
+        "en": "“クノイチでも恋がしたい” — by みきとP, sung by Hatsune Miku and 鏡音リン, released in 2013.",
+        "ja": "「クノイチでも恋がしたい」— みきとPの曲、歌は初音ミクと鏡音リン。2013年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm20413055",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-1354",
+      "aliases": [
+        "タイムマシン",
+        "Time Machine"
+      ],
+      "creators": [
+        "40mP",
+        "1640mP"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈タイムマシン〉— 40mP 作品，初音未來演唱，2010 年發表。",
+        "en": "“タイムマシン” — by 40mP, sung by Hatsune Miku, released in 2010.",
+        "ja": "「タイムマシン」— 40mPの曲、歌は初音ミク。2010年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm12098837",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-298528",
+      "aliases": [
+        "ラヴィット"
+      ],
+      "creators": [
+        "ピノキオピー"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ラヴィット〉— ピノキオピー 作品，初音未來演唱，2020 年發表。",
+        "en": "“ラヴィット” — by ピノキオピー, sung by Hatsune Miku, released in 2020.",
+        "ja": "「ラヴィット」— ピノキオピーの曲、歌は初音ミク。2020年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm37674814",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-306287",
+      "aliases": [
+        "1000年生きてる",
+        "living millennium",
+        "1000-nen Ikiteru",
+        "Living For a Millennium",
+        "Sen'nen Ikiteru"
+      ],
+      "creators": [
+        "いよわ"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈1000年生きてる〉— いよわ 作品，初音未來演唱，2020 年發表。",
+        "en": "“1000年生きてる” — by いよわ, sung by Hatsune Miku, released in 2020.",
+        "ja": "「1000年生きてる」— いよわの曲、歌は初音ミク。2020年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm37944844",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-141649",
+      "aliases": [
+        "ダンスロボットダンス",
+        "Dance Robot Dance"
+      ],
+      "creators": [
+        "ナユタン星人"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ダンスロボットダンス〉— ナユタン星人 作品，初音未來演唱，2016 年發表。",
+        "en": "“ダンスロボットダンス” — by ナユタン星人, sung by Hatsune Miku, released in 2016.",
+        "ja": "「ダンスロボットダンス」— ナユタン星人の曲、歌は初音ミク。2016年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm30177801",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-183014",
+      "aliases": [
+        "天使だと思っていたのに",
+        "I thought I was an angel",
+        "Tenshi da to omotteita no ni"
+      ],
+      "creators": [
+        "鬱P"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈天使だと思っていたのに〉— 鬱P 作品，初音未來演唱，2018 年發表。",
+        "en": "“天使だと思っていたのに” — by 鬱P, sung by Hatsune Miku, released in 2018.",
+        "ja": "「天使だと思っていたのに」— 鬱Pの曲、歌は初音ミク。2018年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm32672006",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-230406",
+      "aliases": [
+        "アンドロイドガール",
+        "Android Girl"
+      ],
+      "creators": [
+        "DECO*27",
+        "Rockwell"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈アンドロイドガール〉— DECO*27 作品，初音未來演唱，2019 年發表。",
+        "en": "“アンドロイドガール” — by DECO*27, sung by Hatsune Miku, released in 2019.",
+        "ja": "「アンドロイドガール」— DECO*27の曲、歌は初音ミク。2019年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm35070488",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-604228",
+      "aliases": [
+        "ビノミ",
+        "Beautiful Flavor",
+        "Taste of Beautiful",
+        "Taste of Beauty",
+        "Sabor da Beleza"
+      ],
+      "creators": [
+        "MARETU"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ビノミ〉— MARETU 作品，初音未來演唱，2024 年發表。",
+        "en": "“ビノミ” — by MARETU, sung by Hatsune Miku, released in 2024.",
+        "ja": "「ビノミ」— MARETUの曲、歌は初音ミク。2024年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm43563374",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-38255",
+      "aliases": [
+        "パレットには君がいっぱい",
+        "Palette ni wa Kimi ga Ippai",
+        "My Palette is Full of You",
+        "You're Full of Shades of Colors",
+        "The Palette is Full of You",
+        "A Palette Full of You"
+      ],
+      "creators": [
+        "椎名もた"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈パレットには君がいっぱい〉— 椎名もた 作品，初音未來演唱，2012 年發表。歌曲涉及自殺或自傷等沉重題材；談到時溫和帶過，不要細說。",
+        "en": "“パレットには君がいっぱい” — by 椎名もた, sung by Hatsune Miku, released in 2012. It touches on suicide or self-harm; mention it gently and don't dwell on it.",
+        "ja": "「パレットには君がいっぱい」— 椎名もたの曲、歌は初音ミク。2012年発表。自殺や自傷などの重いテーマを含みます。触れるときはやさしく流し、詳しく語らないでください。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm19254569",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-846213",
+      "aliases": [
+        "愛属性",
+        "Love Attribute",
+        "Ai Zokusei"
+      ],
+      "creators": [
+        "ピノキオピー"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈愛属性〉— ピノキオピー 作品，初音未來演唱，2025 年發表。",
+        "en": "“愛属性” — by ピノキオピー, sung by Hatsune Miku, released in 2025.",
+        "ja": "「愛属性」— ピノキオピーの曲、歌は初音ミク。2025年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm45467830",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-993363",
+      "aliases": [
+        "Cutie Mew Mew Magic",
+        "キュティミュウミュウマジック"
+      ],
+      "creators": [
+        "Toby Fox",
+        "かめりあ"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈Cutie Mew Mew Magic〉— Toby Fox 作品，初音未來演唱，2026 年發表。",
+        "en": "“Cutie Mew Mew Magic” — by Toby Fox, sung by Hatsune Miku, released in 2026.",
+        "ja": "「Cutie Mew Mew Magic」— Toby Foxの曲、歌は初音ミク。2026年発表。"
+      },
+      "sourceURL": "https://www.youtube.com/watch?v=tlFnfEWZCtQ",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-8215",
+      "aliases": [
+        "初音ミクの激唱（LONG VERSION）",
+        "Hatsune Miku no Gekishou (LONG VERSION)",
+        "The Intense Voice of Hatsune Miku (LONG VERSION)",
+        "The Intense Singing of Hatsune Miku (LONG VERSION)",
+        "The Singing Passion of Hatsune Miku (LONG VERSION)"
+      ],
+      "creators": [
+        "cosMo@暴走P"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈初音ミクの激唱（LONG VERSION）〉— cosMo@暴走P 作品，初音未來演唱，2010 年發表。",
+        "en": "“初音ミクの激唱（LONG VERSION）” — by cosMo@暴走P, sung by Hatsune Miku, released in 2010.",
+        "ja": "「初音ミクの激唱（LONG VERSION）」— cosMo@暴走Pの曲、歌は初音ミク。2010年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm11328911",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-296597",
+      "aliases": [
+        "Ready Steady"
+      ],
+      "creators": [
+        "Giga"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈Ready Steady〉— Giga 作品，初音未來與 鏡音リン V4X (Power)、鏡音レン V4X (Power) 演唱，2020 年發表。",
+        "en": "“Ready Steady” — by Giga, sung by Hatsune Miku and 鏡音リン V4X (Power) and 鏡音レン V4X (Power), released in 2020.",
+        "ja": "「Ready Steady」— Gigaの曲、歌は初音ミクと鏡音リン V4X (Power)・鏡音レン V4X (Power)。2020年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm37601066",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-376689",
+      "aliases": [
+        "サラマンダー"
+      ],
+      "creators": [
+        "DECO*27",
+        "Rockwell"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈サラマンダー〉— DECO*27 作品，初音未來演唱，2022 年發表。",
+        "en": "“サラマンダー” — by DECO*27, sung by Hatsune Miku, released in 2022.",
+        "ja": "「サラマンダー」— DECO*27の曲、歌は初音ミク。2022年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm39853779",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-752940",
+      "aliases": [
+        "テレパシ"
+      ],
+      "creators": [
+        "DECO*27",
+        "tepe"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈テレパシ〉— DECO*27 作品，初音未來演唱，2025 年發表。",
+        "en": "“テレパシ” — by DECO*27, sung by Hatsune Miku, released in 2025.",
+        "ja": "「テレパシ」— DECO*27の曲、歌は初音ミク。2025年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm44661043",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-374132",
+      "aliases": [
+        "ニューダーリン",
+        "New Darling"
+      ],
+      "creators": [
+        "MARETU"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ニューダーリン〉— MARETU 作品，初音未來演唱，2021 年發表。",
+        "en": "“ニューダーリン” — by MARETU, sung by Hatsune Miku, released in 2021.",
+        "ja": "「ニューダーリン」— MARETUの曲、歌は初音ミク。2021年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm39813844",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-259741",
+      "aliases": [
+        "IMAWANOKIWA",
+        "Last Moments"
+      ],
+      "creators": [
+        "いよわ"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈IMAWANOKIWA〉— いよわ 作品，初音未來演唱，2019 年發表。歌曲涉及自殺或自傷等沉重題材；談到時溫和帶過，不要細說。",
+        "en": "“IMAWANOKIWA” — by いよわ, sung by Hatsune Miku, released in 2019. It touches on suicide or self-harm; mention it gently and don't dwell on it.",
+        "ja": "「IMAWANOKIWA」— いよわの曲、歌は初音ミク。2019年発表。自殺や自傷などの重いテーマを含みます。触れるときはやさしく流し、詳しく語らないでください。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm35933131",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-251219",
+      "aliases": [
+        "ゴキブリの味",
+        "Gokiburi no Aji",
+        "The Taste of Cockroach"
+      ],
+      "creators": [
+        "MARETU"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ゴキブリの味〉— MARETU 作品，初音未來演唱，2019 年發表。歌曲涉及自殺或自傷等沉重題材；談到時溫和帶過，不要細說。",
+        "en": "“ゴキブリの味” — by MARETU, sung by Hatsune Miku, released in 2019. It touches on suicide or self-harm; mention it gently and don't dwell on it.",
+        "ja": "「ゴキブリの味」— MARETUの曲、歌は初音ミク。2019年発表。自殺や自傷などの重いテーマを含みます。触れるときはやさしく流し、詳しく語らないでください。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm35584107",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-392049",
+      "aliases": [
+        "ヒアソビ",
+        "Play With Fire"
+      ],
+      "creators": [
+        "かめりあ"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ヒアソビ〉— かめりあ 作品，初音未來演唱，2022 年發表。",
+        "en": "“ヒアソビ” — by かめりあ, sung by Hatsune Miku, released in 2022.",
+        "ja": "「ヒアソビ」— かめりあの曲、歌は初音ミク。2022年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm40160903",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-123",
+      "aliases": [
+        "Nyanyanyanyanyanyanya!",
+        "Nyan Cat",
+        "にゃにゃにゃにゃにゃにゃにゃ!"
+      ],
+      "creators": [
+        "daniwell"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈Nyanyanyanyanyanyanya!〉— daniwell 作品，初音未來演唱，2010 年發表。",
+        "en": "“Nyanyanyanyanyanyanya!” — by daniwell, sung by Hatsune Miku, released in 2010.",
+        "ja": "「Nyanyanyanyanyanyanya!」— daniwellの曲、歌は初音ミク。2010年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm11509720",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-257182",
+      "aliases": [
+        "アルティメットセンパイ",
+        "Ultimate Senpai"
+      ],
+      "creators": [
+        "ピノキオピー"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈アルティメットセンパイ〉— ピノキオピー 作品，初音未來與 ピノキオピー 演唱，2019 年發表。",
+        "en": "“アルティメットセンパイ” — by ピノキオピー, sung by Hatsune Miku and ピノキオピー, released in 2019.",
+        "ja": "「アルティメットセンパイ」— ピノキオピーの曲、歌は初音ミクとピノキオピー。2019年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm35818693",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-219729",
+      "aliases": [
+        "内臓ありますか",
+        "What's Inside",
+        "Naizou Arimasu ka"
+      ],
+      "creators": [
+        "ピノキオピー"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈内臓ありますか〉— ピノキオピー 作品，初音未來與 ピノキオピー 演唱，2019 年發表。",
+        "en": "“内臓ありますか” — by ピノキオピー, sung by Hatsune Miku and ピノキオピー, released in 2019.",
+        "ja": "「内臓ありますか」— ピノキオピーの曲、歌は初音ミクとピノキオピー。2019年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm34509853",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-848354",
+      "aliases": [
+        "マシュマロ"
+      ],
+      "creators": [
+        "DECO*27",
+        "Hayato Yamamoto"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈マシュマロ〉— DECO*27 作品，初音未來演唱，2025 年發表。",
+        "en": "“マシュマロ” — by DECO*27, sung by Hatsune Miku, released in 2025.",
+        "ja": "「マシュマロ」— DECO*27の曲、歌は初音ミク。2025年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm45426911",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-101264",
+      "aliases": [
+        "ワタシハダレ？",
+        "Watashi wa Dare?",
+        "Who am I?"
+      ],
+      "creators": [
+        "本藤昇汰"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ワタシハダレ？〉— 本藤昇汰 作品，初音未來演唱，2012 年發表。",
+        "en": "“ワタシハダレ？” — by 本藤昇汰, sung by Hatsune Miku, released in 2012.",
+        "ja": "「ワタシハダレ？」— 本藤昇汰の曲、歌は初音ミク。2012年発表。"
+      },
+      "sourceURL": "https://vocadb.net/S/101264",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-143259",
+      "aliases": [
+        "キレキャリオン",
+        "Kire Carry On",
+        "Kill, Carry On"
+      ],
+      "creators": [
+        "ポリスピカデリー"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈キレキャリオン〉— ポリスピカデリー 作品，初音未來演唱，2016 年發表。",
+        "en": "“キレキャリオン” — by ポリスピカデリー, sung by Hatsune Miku, released in 2016.",
+        "ja": "「キレキャリオン」— ポリスピカデリーの曲、歌は初音ミク。2016年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm30228596",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-68091",
+      "aliases": [
+        "はじめまして地球人さん",
+        "Hajimemashite Chikyuujin-san",
+        "Nice to Meet You, Mr. Earthling",
+        "Hello There, Earthling"
+      ],
+      "creators": [
+        "ピノキオピー"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈はじめまして地球人さん〉— ピノキオピー 作品，初音未來演唱，2014 年發表。",
+        "en": "“はじめまして地球人さん” — by ピノキオピー, sung by Hatsune Miku, released in 2014.",
+        "ja": "「はじめまして地球人さん」— ピノキオピーの曲、歌は初音ミク。2014年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm26616325",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-164273",
+      "aliases": [
+        "命に嫌われている。",
+        "Hated By Life.",
+        "Inochi ni Kirawarete Iru.",
+        "Hated by Life Itself.",
+        "Life hates us now."
+      ],
+      "creators": [
+        "カンザキイオリ"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈命に嫌われている。〉— カンザキイオリ 作品，初音未來演唱，2017 年發表。",
+        "en": "“命に嫌われている。” — by カンザキイオリ, sung by Hatsune Miku, released in 2017.",
+        "ja": "「命に嫌われている。」— カンザキイオリの曲、歌は初音ミク。2017年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm31700140",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-170110",
+      "aliases": [
+        "ドラマツルギー"
+      ],
+      "creators": [
+        "Eve",
+        "沼能友樹"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ドラマツルギー〉— Eve 作品，初音未來演唱，2017 年發表。",
+        "en": "“ドラマツルギー” — by Eve, sung by Hatsune Miku, released in 2017.",
+        "ja": "「ドラマツルギー」— Eveの曲、歌は初音ミク。2017年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm32076378",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-131087",
+      "aliases": [
+        "リバーシブル・キャンペーン",
+        "Reversible Campaign"
+      ],
+      "creators": [
+        "DECO*27",
+        "Naoki Itai"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈リバーシブル・キャンペーン〉— DECO*27 作品，初音未來演唱，2016 年發表。",
+        "en": "“リバーシブル・キャンペーン” — by DECO*27, sung by Hatsune Miku, released in 2016.",
+        "ja": "「リバーシブル・キャンペーン」— DECO*27の曲、歌は初音ミク。2016年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm29654974",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-17832",
+      "aliases": [
+        "てんしょう　しょうてんしょう",
+        "Tenshou Shoutenshou",
+        "Reincarnation Ascension",
+        "Ten Sho Sho Ten Sho",
+        "Reincarnation Ascensation"
+      ],
+      "creators": [
+        "きくお"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈てんしょう　しょうてんしょう〉— きくお 作品，初音未來演唱，2012 年發表。",
+        "en": "“てんしょう　しょうてんしょう” — by きくお, sung by Hatsune Miku, released in 2012.",
+        "ja": "「てんしょう　しょうてんしょう」— きくおの曲、歌は初音ミク。2012年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm19307778",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-578841",
+      "aliases": [
+        "Aじゃないか",
+        "A ja Nai ka",
+        "Isn't it \"A\""
+      ],
+      "creators": [
+        "ピノキオピー"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈Aじゃないか〉— ピノキオピー 作品，初音未來與 鏡音リン V4X (Warm) 演唱，2024 年發表。",
+        "en": "“Aじゃないか” — by ピノキオピー, sung by Hatsune Miku and 鏡音リン V4X (Warm), released in 2024.",
+        "ja": "「Aじゃないか」— ピノキオピーの曲、歌は初音ミクと鏡音リン V4X (Warm)。2024年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm43297412",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-2879",
+      "aliases": [
+        "積乱雲グラフィティ",
+        "Sekiranun Graffiti",
+        "Cumulonimbus Graffiti",
+        "Cumulonimbus Cloud Graffiti"
+      ],
+      "creators": [
+        "ryo"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈積乱雲グラフィティ〉— ryo 作品，初音未來演唱，2011 年發表。",
+        "en": "“積乱雲グラフィティ” — by ryo, sung by Hatsune Miku, released in 2011.",
+        "ja": "「積乱雲グラフィティ」— ryoの曲、歌は初音ミク。2011年発表。"
+      },
+      "sourceURL": "https://www.youtube.com/watch?v=roABID20GjU",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-7922",
+      "aliases": [
+        "逆さまレインボー",
+        "Reverse Rainbow",
+        "Sakasama Rainbow",
+        "Upside-Down Rainbow"
+      ],
+      "creators": [
+        "すんｚりヴぇｒP"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈逆さまレインボー〉— すんｚりヴぇｒP 作品，初音未來與 鏡音リン 演唱，2008 年發表。",
+        "en": "“逆さまレインボー” — by すんｚりヴぇｒP, sung by Hatsune Miku and 鏡音リン, released in 2008.",
+        "ja": "「逆さまレインボー」— すんｚりヴぇｒPの曲、歌は初音ミクと鏡音リン。2008年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm4218005",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-391129",
+      "aliases": [
+        "フューチャー・イヴ",
+        "FUTURE EVE"
+      ],
+      "creators": [
+        "sasakure.UK"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈フューチャー・イヴ〉— sasakure.UK 作品，初音未來演唱，2022 年發表。",
+        "en": "“フューチャー・イヴ” — by sasakure.UK, sung by Hatsune Miku, released in 2022.",
+        "ja": "「フューチャー・イヴ」— sasakure.UKの曲、歌は初音ミク。2022年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm40632249",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-13981",
+      "aliases": [
+        "キャンディアディクトフルコォス",
+        "The Full Course for Candy Addicts",
+        "Candy Addict Full Course"
+      ],
+      "creators": [
+        "マチゲリータ"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈キャンディアディクトフルコォス〉— マチゲリータ 作品，初音未來演唱，2010 年發表。歌詞有性暗示，屬成人向；談到時可坦白承認，但不要細說或引用歌詞。",
+        "en": "“キャンディアディクトフルコォス” — by マチゲリータ, sung by Hatsune Miku, released in 2010. The lyrics are sexual, so it is adult-oriented; you can say so, but don't go into detail or quote the lyrics.",
+        "ja": "「キャンディアディクトフルコォス」— マチゲリータの曲、歌は初音ミク。2010年発表。歌詞に性的な表現がある大人向けの曲です。そう認めてかまいませんが、詳しく語ったり歌詞を引用したりしないでください。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm11140951",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-130561",
+      "aliases": [
+        "PaⅢ.SENSATION",
+        "Passionate 3 Dot Sensation"
+      ],
+      "creators": [
+        "雄之助",
+        "攻"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈PaⅢ.SENSATION〉— 雄之助 作品，初音未來與 GUMI、鏡音リン 演唱，2016 年發表。",
+        "en": "“PaⅢ.SENSATION” — by 雄之助, sung by Hatsune Miku and GUMI and 鏡音リン, released in 2016.",
+        "ja": "「PaⅢ.SENSATION」— 雄之助の曲、歌は初音ミクとGUMI・鏡音リン。2016年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm29648328",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-540085",
+      "aliases": [
+        "M@GICAL☆CURE! LOVE ♥ SHOT!"
+      ],
+      "creators": [
+        "SAWTOWNE"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈M@GICAL☆CURE! LOVE ♥ SHOT!〉— SAWTOWNE 作品，初音未來演唱，2023 年發表。",
+        "en": "“M@GICAL☆CURE! LOVE ♥ SHOT!” — by SAWTOWNE, sung by Hatsune Miku, released in 2023.",
+        "ja": "「M@GICAL☆CURE! LOVE ♥ SHOT!」— SAWTOWNEの曲、歌は初音ミク。2023年発表。"
+      },
+      "sourceURL": "https://www.youtube.com/watch?v=GiyUwuieWjo",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-17602",
+      "aliases": [
+        "Party Junkie"
+      ],
+      "creators": [
+        "さつき が てんこもり"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈Party Junkie〉— さつき が てんこもり 作品，初音未來演唱，2012 年發表。歌曲涉及藥物等沉重題材；談到時溫和帶過，不要細說。",
+        "en": "“Party Junkie” — by さつき が てんこもり, sung by Hatsune Miku, released in 2012. It touches on drugs; mention it gently and don't dwell on it.",
+        "ja": "「Party Junkie」— さつき が てんこもりの曲、歌は初音ミク。2012年発表。薬物などの重いテーマを含みます。触れるときはやさしく流し、詳しく語らないでください。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm19251235",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-696211",
+      "aliases": [
+        "匙ノ咒",
+        "Saji no Majinai",
+        "A Spoonful of SPELL",
+        "Spoon Spell",
+        "A Spoonful of Curse"
+      ],
+      "creators": [
+        "r-906"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈匙ノ咒〉— r-906 作品，初音未來演唱，2024 年發表。",
+        "en": "“匙ノ咒” — by r-906, sung by Hatsune Miku, released in 2024.",
+        "ja": "「匙ノ咒」— r-906の曲、歌は初音ミク。2024年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm44685408",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-125735",
+      "aliases": [
+        "ライアーダンス",
+        "LIAR DANCE"
+      ],
+      "creators": [
+        "DECO*27",
+        "Naoki Itai"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ライアーダンス〉— DECO*27 作品，初音未來演唱，2016 年發表。",
+        "en": "“ライアーダンス” — by DECO*27, sung by Hatsune Miku, released in 2016.",
+        "ja": "「ライアーダンス」— DECO*27の曲、歌は初音ミク。2016年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm28929186",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-125736",
+      "aliases": [
+        "マエガミスト"
+      ],
+      "creators": [
+        "MARETU"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈マエガミスト〉— MARETU 作品，初音未來演唱，2016 年發表。",
+        "en": "“マエガミスト” — by MARETU, sung by Hatsune Miku, released in 2016.",
+        "ja": "「マエガミスト」— MARETUの曲、歌は初音ミク。2016年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm28930143",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-4698",
+      "aliases": [
+        "初音ミクの あたまのたいそう",
+        "Hatsune Miku's Head Exercises",
+        "Hatsune Miku no Atama no Taisou"
+      ],
+      "creators": [
+        "hapi⇒"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈初音ミクの あたまのたいそう〉— hapi⇒ 作品，初音未來演唱，2009 年發表。",
+        "en": "“初音ミクの あたまのたいそう” — by hapi⇒, sung by Hatsune Miku, released in 2009.",
+        "ja": "「初音ミクの あたまのたいそう」— hapi⇒の曲、歌は初音ミク。2009年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm7017661",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-96016",
+      "aliases": [
+        "赤ペンおねがいします",
+        "Aka Pen Onegai Shimasu",
+        "Please Give Me a Red Pen",
+        "Red Pen, Please"
+      ],
+      "creators": [
+        "椎名もた"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈赤ペンおねがいします〉— 椎名もた 作品，初音未來演唱，2015 年發表。歌曲涉及自殺或自傷等沉重題材；談到時溫和帶過，不要細說。",
+        "en": "“赤ペンおねがいします” — by 椎名もた, sung by Hatsune Miku, released in 2015. It touches on suicide or self-harm; mention it gently and don't dwell on it.",
+        "ja": "「赤ペンおねがいします」— 椎名もたの曲、歌は初音ミク。2015年発表。自殺や自傷などの重いテーマを含みます。触れるときはやさしく流し、詳しく語らないでください。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm26745370",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-21064",
+      "aliases": [
+        "エレクトロサチュレイタ",
+        "electro saturator"
+      ],
+      "creators": [
+        "tilt-six"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈エレクトロサチュレイタ〉— tilt-six 作品，初音未來演唱，2013 年發表。",
+        "en": "“エレクトロサチュレイタ” — by tilt-six, sung by Hatsune Miku, released in 2013.",
+        "ja": "「エレクトロサチュレイタ」— tilt-sixの曲、歌は初音ミク。2013年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm19807355",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-483406",
+      "aliases": [
+        "一千光年",
+        "Issen Kounen",
+        "A Thousand Light Years"
+      ],
+      "creators": [
+        "いよわ"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈一千光年〉— いよわ 作品，初音未來等多位歌手演唱，2023 年發表。",
+        "en": "“一千光年” — by いよわ, sung by Hatsune Miku and others, released in 2023.",
+        "ja": "「一千光年」— いよわの曲、歌は初音ミクほか。2023年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm41951611",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-340035",
+      "aliases": [
+        "トンデモワンダーズ",
+        "Tondemo Wonderz",
+        "Unthinkable Wonders"
+      ],
+      "creators": [
+        "sasakure.UK"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈トンデモワンダーズ〉— sasakure.UK 作品，初音未來演唱，2021 年發表。",
+        "en": "“トンデモワンダーズ” — by sasakure.UK, sung by Hatsune Miku, released in 2021.",
+        "ja": "「トンデモワンダーズ」— sasakure.UKの曲、歌は初音ミク。2021年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm38907008",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-571496",
+      "aliases": [
+        "Beyond the way"
+      ],
+      "creators": [
+        "Giga"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈Beyond the way〉— Giga 作品，初音未來等多位歌手演唱，2024 年發表。",
+        "en": "“Beyond the way” — by Giga, sung by Hatsune Miku and others, released in 2024.",
+        "ja": "「Beyond the way」— Gigaの曲、歌は初音ミクほか。2024年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm43244916",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-47759",
+      "aliases": [
+        "神のまにまに",
+        "Kami no Manimani",
+        "As the Gods Say",
+        "At God's Mercy",
+        "At the Mercy of the Gods",
+        "Entrust to god"
+      ],
+      "creators": [
+        "れるりり"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈神のまにまに〉— れるりり 作品，初音未來與 鏡音リン、GUMI 演唱，2014 年發表。",
+        "en": "“神のまにまに” — by れるりり, sung by Hatsune Miku and 鏡音リン and GUMI, released in 2014.",
+        "ja": "「神のまにまに」— れるりりの曲、歌は初音ミクと鏡音リン・GUMI。2014年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm22831329",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-696145",
+      "aliases": [
+        "オブソミート",
+        "Obsolete Meat"
+      ],
+      "creators": [
+        "サツキ"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈オブソミート〉— サツキ 作品，初音未來與 重音テトSV 演唱，2024 年發表。",
+        "en": "“オブソミート” — by サツキ, sung by Hatsune Miku and 重音テトSV, released in 2024.",
+        "ja": "「オブソミート」— サツキの曲、歌は初音ミクと重音テトSV。2024年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm44267219",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-249416",
+      "aliases": [
+        "バツ猫",
+        "Batsu Neko",
+        "Cross Mark Cat"
+      ],
+      "creators": [
+        "きくお"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈バツ猫〉— きくお 作品，初音未來演唱，2019 年發表。",
+        "en": "“バツ猫” — by きくお, sung by Hatsune Miku, released in 2019.",
+        "ja": "「バツ猫」— きくおの曲、歌は初音ミク。2019年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm35536936",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-66265",
+      "aliases": [
+        "ぶれないアイで",
+        "Burenai Eye de",
+        "With an Unblurred Eye",
+        "With Your Steady Eyes",
+        "Burenai ai de"
+      ],
+      "creators": [
+        "Mitchie M"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ぶれないアイで〉— Mitchie M 作品，初音未來演唱，2014 年發表。",
+        "en": "“ぶれないアイで” — by Mitchie M, sung by Hatsune Miku, released in 2014.",
+        "ja": "「ぶれないアイで」— Mitchie Mの曲、歌は初音ミク。2014年発表。"
+      },
+      "sourceURL": "https://www.nicovideo.jp/watch/sm24347618",
+      "featured": false,
+      "sourceStatus": "bundled"
+    },
+    {
+      "id": "song.vdb-436989",
+      "aliases": [
+        "ステーシー"
+      ],
+      "creators": [
+        "山田kkk"
+      ],
+      "kind": "song",
+      "content": {
+        "zh-Hant": "〈ステーシー〉— 山田kkk 作品，初音未來演唱，2009 年發表。",
+        "en": "“ステーシー” — by 山田kkk, sung by Hatsune Miku, released in 2009.",
+        "ja": "「ステーシー」— 山田kkkの曲、歌は初音ミク。2009年発表。"
+      },
+      "sourceURL": "https://www.youtube.com/watch?v=Rk_bBYoxnqM",
       "featured": false,
       "sourceStatus": "bundled"
     }

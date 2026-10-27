@@ -37,6 +37,7 @@ final class SongKnowledgeWindowController: NSWindowController, NSTableViewDataSo
     private let favoriteButton = NSButton(checkboxWithTitle: "", target: nil, action: nil)
     private let sourceButton = MikuPillButton(frame: .zero)
     private let updateButton = MikuPillButton(frame: .zero)
+    private let aimcpButton = MikuPillButton(frame: .zero)
     private let importButton = MikuPillButton(frame: .zero)
     private let exportButton = MikuPillButton(frame: .zero)
     private var entries: [SongKnowledgeEntry] = []
@@ -80,6 +81,7 @@ final class SongKnowledgeWindowController: NSWindowController, NSTableViewDataSo
         favoriteButton.title = string("喜歡的歌", "Favorite song", "お気に入り")
         sourceButton.title = string("查看來源", "View Source", "出典を見る")
         updateButton.title = string("檢查更新", "Check for Updates", "更新を確認")
+        aimcpButton.title = string("AIMCP 設定…", "AIMCP Settings…", "AIMCP設定…")
         importButton.title = string("匯入 JSON", "Import JSON", "JSONを読み込む")
         exportButton.title = string("匯出 JSON", "Export JSON", "JSONを書き出す")
         refresh(select: selectedEntry()?.id)
@@ -130,6 +132,7 @@ final class SongKnowledgeWindowController: NSWindowController, NSTableViewDataSo
 
         configure(sourceButton, string("查看來源", "View Source", "出典を見る"), "safari", .soft, #selector(openSource))
         configure(updateButton, string("檢查更新", "Check for Updates", "更新を確認"), "arrow.clockwise", .primary, #selector(checkForUpdates))
+        configure(aimcpButton, string("AIMCP 設定…", "AIMCP Settings…", "AIMCP設定…"), "key", .soft, #selector(configureAIMCP))
         configure(importButton, string("匯入 JSON", "Import JSON", "JSONを読み込む"), "square.and.arrow.down", .soft, #selector(importJSON))
         configure(exportButton, string("匯出 JSON", "Export JSON", "JSONを書き出す"), "square.and.arrow.up", .soft, #selector(exportJSON))
 
@@ -155,7 +158,7 @@ final class SongKnowledgeWindowController: NSWindowController, NSTableViewDataSo
         split.translatesAutoresizingMaskIntoConstraints = false
         split.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        let actions = NSStackView(views: [updateButton, importButton, exportButton])
+        let actions = NSStackView(views: [updateButton, aimcpButton, importButton, exportButton])
         actions.orientation = .horizontal
         actions.spacing = 8
         actions.translatesAutoresizingMaskIntoConstraints = false
@@ -214,14 +217,14 @@ final class SongKnowledgeWindowController: NSWindowController, NSTableViewDataSo
         button.action = action
     }
 
-    private func refresh(select id: String? = nil) {
+    private func refresh(select id: String? = nil, status: String? = nil) {
         Task { [weak self] in
             guard let self else { return }
             let loaded = await store.allEntries()
             let version = await store.activeVersion()
             entries = loaded
             applySearch(select: id)
-            statusLabel.stringValue = string(
+            statusLabel.stringValue = status ?? string(
                 "版本 \(version) · \(loaded.count) 個條目",
                 "Version \(version) · \(loaded.count) entries",
                 "バージョン \(version)・\(loaded.count)件"
@@ -338,15 +341,97 @@ final class SongKnowledgeWindowController: NSWindowController, NSTableViewDataSo
             defer { setBusy(false) }
             do {
                 let result = try await store.checkForUpdates()
-                statusLabel.stringValue = string(
-                    "已更新至 \(result.version)",
-                    "Updated to \(result.version)",
-                    "\(result.version)に更新しました"
-                )
-                refresh(select: selectedEntry()?.id)
+                refresh(select: selectedEntry()?.id, status: updateStatus(result))
             } catch {
-                show(error)
+                if error is AIMCPKnowledgeConfiguration.ConfigurationError {
+                    showConfigurationError(error)
+                } else {
+                    show(error)
+                }
             }
+        }
+    }
+
+    @objc private func configureAIMCP() {
+        let hasKey: Bool
+        do {
+            hasKey = try AIMCPKnowledgeConfiguration.hasAPIKey()
+        } catch {
+            showConfigurationError(error)
+            return
+        }
+
+        let endpointField = NSTextField(labelWithString: AIMCPKnowledgeConfiguration.defaultEndpoint)
+        endpointField.isSelectable = true
+        endpointField.lineBreakMode = .byTruncatingMiddle
+        let keyField = NSSecureTextField()
+        keyField.placeholderString = hasKey
+            ? string("留空以保留已儲存的 key", "Leave blank to keep the saved key", "空欄のままなら保存済みキーを維持")
+            : "aimcp_…"
+
+        let endpointLabel = NSTextField.mikuLabel(
+            string("AIMCP 端點", "AIMCP endpoint", "AIMCPエンドポイント"),
+            size: 11,
+            color: MikuTheme.secondaryText
+        )
+        let keyLabel = NSTextField.mikuLabel(
+            hasKey
+                ? string("API key（已儲存）", "API key (saved)", "APIキー（保存済み）")
+                : string("API key", "API key", "APIキー"),
+            size: 11,
+            color: MikuTheme.secondaryText
+        )
+        let fields = NSStackView(views: [endpointLabel, endpointField, keyLabel, keyField])
+        fields.orientation = .vertical
+        fields.alignment = .leading
+        fields.spacing = 6
+        endpointField.widthAnchor.constraint(equalToConstant: 480).isActive = true
+        keyField.widthAnchor.constraint(equalToConstant: 480).isActive = true
+        fields.frame.size = fields.fittingSize
+
+        let alert = NSAlert()
+        alert.messageText = string("AIMCP 歌曲知識", "AIMCP Song Knowledge", "AIMCP楽曲ナレッジ")
+        alert.informativeText = string(
+            "key 只會儲存在這部 Mac 的鑰匙圈，並透過 Authorization 標頭傳送至上方的 MikuWiki 端點。",
+            "The key stays in this Mac's Keychain and is sent only to the MikuWiki endpoint shown above.",
+            "キーはこのMacのキーチェーンにのみ保存し、上記のMikuWikiエンドポイントにだけ送信します。"
+        )
+        alert.accessoryView = fields
+        alert.addButton(withTitle: string("儲存", "Save", "保存"))
+        alert.addButton(withTitle: string("取消", "Cancel", "キャンセル"))
+        let clearButton = alert.addButton(withTitle: string("清除 key", "Remove Key", "キーを削除"))
+        clearButton.isEnabled = hasKey
+
+        let response = alert.runModal()
+        let candidate = keyField.stringValue
+        keyField.stringValue = ""
+        switch response {
+        case .alertFirstButtonReturn:
+            do {
+                try AIMCPKnowledgeConfiguration.save(
+                    apiKey: candidate.isEmpty ? nil : candidate
+                )
+                statusLabel.stringValue = string(
+                    "AIMCP 設定已儲存。",
+                    "AIMCP settings saved.",
+                    "AIMCP設定を保存しました。"
+                )
+            } catch {
+                showConfigurationError(error)
+            }
+        case .alertThirdButtonReturn:
+            do {
+                try AIMCPKnowledgeConfiguration.clearAPIKey()
+                statusLabel.stringValue = string(
+                    "已清除 AIMCP key；更新會使用 GitHub。",
+                    "AIMCP key removed; updates will use GitHub.",
+                    "AIMCPキーを削除しました。更新にはGitHubを使用します。"
+                )
+            } catch {
+                showConfigurationError(error)
+            }
+        default:
+            break
         }
     }
 
@@ -397,6 +482,7 @@ final class SongKnowledgeWindowController: NSWindowController, NSTableViewDataSo
 
     private func setBusy(_ busy: Bool) {
         updateButton.isEnabled = !busy
+        aimcpButton.isEnabled = !busy
         importButton.isEnabled = !busy
         exportButton.isEnabled = !busy
         if busy {
@@ -414,12 +500,64 @@ final class SongKnowledgeWindowController: NSWindowController, NSTableViewDataSo
              SongKnowledgeError.duplicateID,
              SongKnowledgeError.invalidSourceURL:
             message = string("JSON 格式或內容不符合知識庫規格，原有資料未變更。", "The JSON does not match the knowledge format. Existing data was kept.", "JSONがナレッジ形式に合わないため、既存データを保持しました。")
+        case SongKnowledgeError.httpStatus(401):
+            message = string("AIMCP API key 無效，請更新設定。", "The AIMCP API key is invalid. Update it in settings.", "AIMCP APIキーが無効です。設定を更新してください。")
+        case SongKnowledgeError.httpStatus(403):
+            message = string("此 AIMCP key 無法使用，請重新產生。", "This AIMCP key cannot be used. Create a new one.", "このAIMCPキーは使用できません。新しいキーを作成してください。")
+        case SongKnowledgeError.httpStatus(429):
+            message = string("AIMCP 請求過於頻繁，請稍後再試。", "Too many AIMCP requests. Please try again later.", "AIMCPへのリクエストが多すぎます。しばらくしてから再試行してください。")
         case SongKnowledgeError.httpStatus, SongKnowledgeError.invalidResponse:
             message = string("更新伺服器未能提供有效資料，原有資料未變更。", "The update server did not provide valid data. Existing data was kept.", "更新サーバーから有効なデータを取得できなかったため、既存データを保持しました。")
         case is URLError:
             message = string("暫時無法連線檢查更新，請稍後再試。", "Could not connect to check for updates. Please try again later.", "更新を確認できませんでした。時間をおいて再度お試しください。")
         default:
             message = string("操作失敗，原有資料未變更。", "The operation failed. Existing data was kept.", "操作に失敗したため、既存データを保持しました。")
+        }
+        statusLabel.stringValue = message
+    }
+
+    private func updateStatus(_ result: SongKnowledgeStore.UpdateResult) -> String {
+        switch result.source {
+        case .aimcp:
+            return string(
+                "已透過 AIMCP 更新至 \(result.version)",
+                "Updated to \(result.version) via AIMCP",
+                "AIMCPから\(result.version)に更新しました"
+            )
+        case .github:
+            return string(
+                "已從 GitHub 更新至 \(result.version)",
+                "Updated to \(result.version) from GitHub",
+                "GitHubから\(result.version)に更新しました"
+            )
+        case .githubFallback:
+            return string(
+                "AIMCP 暫時不可用；已從 GitHub 更新至 \(result.version)",
+                "AIMCP was unavailable; updated to \(result.version) from GitHub",
+                "AIMCPに接続できないため、GitHubから\(result.version)に更新しました"
+            )
+        }
+    }
+
+    private func showConfigurationError(_ error: Error) {
+        let message: String
+        switch error {
+        case AIMCPKnowledgeConfiguration.ConfigurationError.invalidAPIKey:
+            message = string("AIMCP API key 格式無效。", "The AIMCP API key format is invalid.", "AIMCP APIキーの形式が無効です。")
+        case AIMCPKnowledgeConfiguration.ConfigurationError.missingAPIKey:
+            message = string("請輸入 AIMCP API key。", "Enter an AIMCP API key.", "AIMCP APIキーを入力してください。")
+        case AIMCPKnowledgeConfiguration.ConfigurationError.keychainFailure(let status):
+            message = string(
+                "無法存取 Mac 鑰匙圈；如 macOS 顯示授權提示，請允許後重試（錯誤碼 \(status)）。",
+                "Could not access the Mac Keychain. If macOS asks for access, allow it and try again (error \(status)).",
+                "Macのキーチェーンにアクセスできません。macOSの確認が表示された場合は許可して再試行してください（エラー \(status)）。"
+            )
+        default:
+            message = string(
+                "未能儲存 AIMCP 設定，請再試一次。",
+                "Could not save the AIMCP settings. Please try again.",
+                "AIMCP設定を保存できませんでした。もう一度お試しください。"
+            )
         }
         statusLabel.stringValue = message
     }

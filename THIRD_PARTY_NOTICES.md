@@ -30,6 +30,10 @@ The other Tokyo and school backgrounds are generated recreations inspired by rea
 
 The scene backgrounds were converted with [AnimeGANv2](https://github.com/TachibanaYoshino/AnimeGANv2) (Shinkai style, by Xin Chen), followed by this project's finishing pass in `scripts/anime-backgrounds.py`. AnimeGANv2 is available for non-commercial use only; the model itself is not included in this repository. Do not use the converted backgrounds commercially without the AnimeGANv2 author's permission.
 
+## Song data from VocaDB
+
+Creators, release years, original upload links, titles and content notes for the 200 bundled songs come from or were checked against [VocaDB](https://vocadb.net/), whose database contents are available under the [Creative Commons Attribution license](https://wiki.vocadb.net/docs/license). The optional “Look up songs on VocaDB” setting (off by default) queries the [VocaDB public API](https://wiki.vocadb.net/docs/public-api) for songs not in the knowledge base and credits VocaDB with a link to the entry. Lyrics are not covered by that license and are never requested.
+
 ## Weather data
 
 Live weather and sunrise / sunset times come from [Open-Meteo](https://open-meteo.com/) (CC BY 4.0). Only the chosen city's coordinates are sent; no other data leaves the Mac.

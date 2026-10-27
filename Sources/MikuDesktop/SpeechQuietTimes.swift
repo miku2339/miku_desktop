@@ -1,6 +1,7 @@
 import AppKit
 import CoreAudio
 import CoreGraphics
+import Darwin
 
 /// Moments when Miku shouldn't start talking on her own, even with reading aloud on and
 /// not muted: you're on a call or recording (another app is using the microphone), or
@@ -72,13 +73,31 @@ enum SpeechQuietTimes {
                 mScope: kAudioObjectPropertyScopeGlobal,
                 mElement: kAudioObjectPropertyElementMain
             )
-            if AudioObjectGetPropertyData(process, &pidAddress, 0, nil, &valueSize, &processID) == noErr,
-               processID == ProcessInfo.processInfo.processIdentifier {
-                continue
+            if AudioObjectGetPropertyData(process, &pidAddress, 0, nil, &valueSize, &processID) == noErr {
+                if processID == ProcessInfo.processInfo.processIdentifier { continue }
+                if let path = executablePath(of: processID), isBackgroundInputService(path: path) { continue }
             }
             return true
         }
         return readRunningState ? false : nil
+    }
+
+    /// macOS services that keep the microphone open in the background all the time: Siri and
+    /// dictation listening (corespeechd) and the system capture service (replayd). They are
+    /// not a call or a recording you are making, so they must not keep her quiet for good.
+    /// Call apps (FaceTime, Zoom, Teams, Discord…) are not on this list.
+    static let backgroundInputServices: Set<String> = ["corespeechd", "replayd"]
+
+    static func isBackgroundInputService(path: String) -> Bool {
+        guard path.hasPrefix("/System/") || path.hasPrefix("/usr/") else { return false }
+        return backgroundInputServices.contains((path as NSString).lastPathComponent)
+    }
+
+    private static func executablePath(of processID: pid_t) -> String? {
+        var buffer = [CChar](repeating: 0, count: Int(MAXPATHLEN) * 4)
+        let length = proc_pidpath(processID, &buffer, UInt32(buffer.count))
+        guard length > 0 else { return nil }
+        return String(cString: buffer)
     }
 
     private static func defaultInputDevice() -> AudioDeviceID? {

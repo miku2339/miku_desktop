@@ -55,10 +55,14 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
     private let testButton = MikuPillButton(frame: .zero)
     private let connectionDot = StatusDotView()
     private let connectionLabel = NSTextField.mikuLabel("", size: 12, color: MikuTheme.secondaryText)
+    private let vocadbSwitch = NSSwitch()
+    private let vocadbHint = NSTextField.mikuLabel("", size: 11.5, color: MikuTheme.secondaryText)
     private let speechSwitch = NSSwitch()
     private let speechLanguagePopup = NSPopUpButton()
     private let speechPreviewButton = MikuPillButton(frame: .zero)
     private let speechStopButton = MikuPillButton(frame: .zero)
+    private let humFolderButton = MikuPillButton(frame: .zero)
+    private let humHint = NSTextField.mikuLabel("", size: 11.5, color: MikuTheme.secondaryText)
     private let speechTestButton = MikuPillButton(frame: .zero)
     private let speechStatusLabel = NSTextField.mikuLabel("", size: 12, color: MikuTheme.secondaryText)
     private let speechEndpointField = NSTextField()
@@ -160,6 +164,8 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         testButton.title = L10n.text("testConnection")
         speechPreviewButton.title = L10n.text("speechPreview")
         speechStopButton.title = L10n.text("speechStop")
+        humFolderButton.title = L10n.text("humOpenFolder")
+        refreshHumHint()
         speechTestButton.title = L10n.text("testConnection")
         speechEndpointField.placeholderString = MikuSpeechAuthorization.defaultEndpoint
         speechModelCombo.placeholderString = L10n.text("speechModelPlaceholder")
@@ -174,6 +180,8 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         refreshPosition()
         refreshLoginState()
         memoryHint.stringValue = L10n.text("memoryHint")
+        vocadbHint.stringValue = L10n.text("vocadbHint")
+        vocadbSwitch.state = UserDefaults.standard.bool(forKey: VocaDBLookup.enabledKey) ? .on : .off
         eraseMemoryButton.title = L10n.text("memoryErase")
         restoreMemoryButton.title = L10n.text("memoryRestore")
         deleteBackupButton.title = L10n.text("memoryBackupDelete")
@@ -263,6 +271,25 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
             row.spacing = 8
             factsStack.addArrangedSubview(row)
         }
+    }
+
+    /// Off by default: song titles you ask about go to vocadb.net only while this is on.
+    @objc private func vocadbToggled() {
+        let enabled = vocadbSwitch.state == .on
+        UserDefaults.standard.set(enabled, forKey: VocaDBLookup.enabledKey)
+        if !enabled { Task { await VocaDBLookup.shared.clearCache() } }
+    }
+
+    @objc private func openHumFolder() {
+        HumPlayer.shared.revealFolder()
+        refreshHumHint()
+    }
+
+    private func refreshHumHint() {
+        let count = HumPlayer.shared.clips().count
+        humHint.stringValue = count == 0
+            ? L10n.text("humHintEmpty")
+            : L10n.format("humHintCount", String(count))
     }
 
     @objc private func memoryToggled() {
@@ -440,7 +467,8 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         for (button, symbol, action) in [
             (speechPreviewButton, "speaker.wave.2.fill", #selector(previewSpeech)),
             (speechStopButton, "stop.fill", #selector(stopSpeech)),
-            (speechTestButton, "network", #selector(testSpeechConnection))
+            (speechTestButton, "network", #selector(testSpeechConnection)),
+            (humFolderButton, "folder", #selector(openHumFolder))
         ] {
             button.style = .soft
             button.symbolName = symbol
@@ -529,10 +557,20 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         connectionRow.orientation = .horizontal
         connectionRow.alignment = .centerY
         connectionRow.spacing = 8
+        vocadbSwitch.target = self
+        vocadbSwitch.action = #selector(vocadbToggled)
+        vocadbHint.lineBreakMode = .byWordWrapping
+        vocadbHint.maximumNumberOfLines = 4
+        vocadbHint.preferredMaxLayoutWidth = 260
+        let vocadbStack = NSStackView(views: [vocadbSwitch, vocadbHint])
+        vocadbStack.orientation = .horizontal
+        vocadbStack.alignment = .centerY
+        vocadbStack.spacing = 10
         let aiCard = card("sectionAI", symbol: "cpu", rows: [
             row("aiEndpoint", endpointField),
             row("aiModel", modelField),
-            [NSGridCell.emptyContentView, connectionRow]
+            [NSGridCell.emptyContentView, connectionRow],
+            row("vocadbLookup", vocadbStack)
         ])
 
         let speechButtons = NSStackView(views: [speechPreviewButton, speechStopButton])
@@ -543,13 +581,21 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         speechConnection.orientation = .horizontal
         speechConnection.alignment = .centerY
         speechConnection.spacing = 8
+        humHint.lineBreakMode = .byWordWrapping
+        humHint.maximumNumberOfLines = 4
+        humHint.preferredMaxLayoutWidth = 300
+        let humStack = NSStackView(views: [humFolderButton, humHint])
+        humStack.orientation = .vertical
+        humStack.alignment = .leading
+        humStack.spacing = 6
         let speechCard = card("sectionSpeech", symbol: "waveform", rows: [
             row("speechEnabled", speechSwitch),
             row("speechLanguage", speechLanguagePopup),
             row("speechEndpoint", speechEndpointField),
             row("speechModel", speechModelCombo),
             row("speechPlayback", speechButtons),
-            row("speechConnection", speechConnection)
+            row("speechConnection", speechConnection),
+            row("humClips", humStack)
         ])
 
         let interactionStack = NSStackView(views: [interactionSwitch, interactionHint])

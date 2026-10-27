@@ -10,6 +10,8 @@ import { createDailyActivities } from './daily-activities.js';
 import { characterEnvironment, defaultWeather, normalizeWeather, timeAnchors, useShibuyaScramble } from './environment.js';
 import { createAmbient } from './ambient.js';
 import { createRelationship, RELATIONSHIP_TOUCH_KINDS } from './relationship.js';
+import { shouldFallBack, talkFrame, textTalk, voiceTalk } from './talking.js';
+import { checkLoop, shouldReportError } from './loop-health.js';
 import { canUseRoomBed, DEFAULT_ROOM_LAYOUT, loadRoomLayout, roomViewportGeometry } from './room-layout.js';
 import { createSleepCycle, isAsleep, normalizeOverride, scheduledAsleep } from './sleep.js';
 import { OutlineEffect } from './vendor/effects/OutlineEffect.js';
@@ -198,6 +200,9 @@ const state = {
   pointer: null,
   lastLookPointerTime: 0,
   bubbleTimer: null,
+  bubbleHideAt: 0,
+  // A reply that will be read aloud: its mouth waits for the audio (see startVoice).
+  pendingVoice: null,
   activeElapsed: 0,
   previewHour: null,
   previewElapsed: null,
@@ -229,6 +234,7 @@ const state = {
   yawWatch: { recoverUntil: -Infinity },
   lastFrameAt: null,
   loopRestarts: 0,
+  lastStallReportAt: null,
   micro: null,
   nextMicro: 0,
   lastFlash: 0,
@@ -625,22 +631,15 @@ speechBubble.replaceChildren(bubbleName, bubbleText);
 
 // ---- Talking ------------------------------------------------------------------
 //
-// While a line is in the speech bubble her mouth moves through it: about seven syllables
-// a second, a different vowel shape for each, closed at commas and full stops.
-
-const MOUTH_VOWELS = ['あ', 'い', 'う', 'え', 'お'];
-const PAUSE = /[\s、。，．,.!?！？…〜～ー・「」『』（）()♪☆★♥~\-]/;
+// While a line is in the speech bubble her mouth moves through it (see talking.js). A reply
+// that is read aloud waits: the mouth starts when the audio starts and lasts as long as it.
 
 function startTalking(text) {
   if (!showsCharacter || reducedMotion.matches) {
     state.talk = null;
     return;
   }
-  const chars = [...text];
-  const latin = /[A-Za-z]/.test(text) && !/[\u3040-\u30ff\u4e00-\u9fff]/.test(text);
-  const rate = latin ? 14 : 7.5;
-  const start = currentElapsed();
-  state.talk = { chars, rate, start, end: start + Math.min(8, chars.length / rate) };
+  state.talk = textTalk(text, currentElapsed());
 }
 
 function applyTalking(elapsed) {
@@ -650,22 +649,61 @@ function applyTalking(elapsed) {
   }
   const talk = state.talk;
   if (!talk || state.thinking) return;
-  if (elapsed < talk.start || elapsed > talk.end + 0.15) {
+  const frame = talkFrame(talk, elapsed);
+  if (!frame) {
     state.talk = null;
     return;
   }
-  const char = talk.chars[Math.floor((elapsed - talk.start) * talk.rate)] ?? '';
-  if (!char || PAUSE.test(char)) return;
-  const syllable = (elapsed - talk.start) * 7;
-  const open = Math.sin((syllable % 1) * Math.PI);
-  const vowel = MOUTH_VOWELS[(char.codePointAt(0) + Math.floor(syllable)) % MOUTH_VOWELS.length];
-  const index = state.morphs[vowel];
+  if (!frame.vowel) return;
+  const index = state.morphs[frame.vowel];
   const influences = state.model?.morphTargetInfluences;
   if (index === undefined || !influences) return;
-  influences[index] = Math.max(influences[index], open * (vowel === 'あ' ? 0.5 : 0.38));
+  influences[index] = Math.max(influences[index], frame.open * (frame.vowel === 'あ' ? 0.5 : 0.38));
 }
 
-function showBubble(text, emotion = 'calm', duration = null) {
+function hideBubbleAfter(ms) {
+  clearTimeout(state.bubbleTimer);
+  state.bubbleHideAt = performance.now() + ms;
+  state.bubbleTimer = window.setTimeout(() => speechBubble.classList.remove('visible'), ms);
+}
+
+/** The audio for a reply has started playing: move her mouth for exactly that long. */
+function startVoice(payload = {}) {
+  if (!showsCharacter || !payload || typeof payload !== 'object') return false;
+  const text = typeof payload.text === 'string' ? payload.text.trim() : '';
+  const duration = Number(payload.duration);
+  state.pendingVoice = null;
+  if (reducedMotion.matches) {
+    state.talk = null;
+  } else {
+    const talk = voiceTalk(text, currentElapsed(), duration);
+    if (!talk) return false;
+    state.talk = talk;
+  }
+  // Keep the words up until she has finished saying them.
+  if (speechBubble.classList.contains('visible') && !speechBubble.classList.contains('thinking')
+      && Number.isFinite(duration) && duration > 0) {
+    const needed = Math.min(120, duration) * 1000 + 1500;
+    hideBubbleAfter(Math.max(needed, (state.bubbleHideAt || 0) - performance.now()));
+  }
+  return true;
+}
+
+/** The audio stopped (finished, interrupted or muted): close her mouth. */
+function stopVoice() {
+  if (state.talk?.voiced) state.talk = null;
+  return true;
+}
+
+/** The audio for a reply never came: if that was quick, talk from the text instead. */
+function voiceFailed() {
+  const pending = state.pendingVoice;
+  state.pendingVoice = null;
+  if (shouldFallBack(pending, currentElapsed())) startTalking(pending.text);
+  return true;
+}
+
+function showBubble(text, emotion = 'calm', duration = null, { talk = true } = {}) {
   if (!showsCharacter) return;
   const safeText = typeof text === 'string' ? text.trim().slice(0, 240) : '';
   if (!safeText) return;
@@ -674,18 +712,25 @@ function showBubble(text, emotion = 'calm', duration = null) {
   speechBubble.classList.remove('thinking');
   bubbleText.textContent = safeText;
   speechBubble.dataset.emotion = safeEmotion;
-  startTalking(safeText);
+  if (talk) {
+    startTalking(safeText);
+  } else {
+    // Read aloud: the mouth waits for the audio instead of moving now. If the audio is
+    // already playing (the bubble was held while she walked over), leave the mouth going.
+    if (!state.talk?.voiced) state.talk = null;
+    state.pendingVoice = { text: safeText, at: currentElapsed() };
+  }
   speechBubble.classList.add('visible');
-  clearTimeout(state.bubbleTimer);
   // Longer replies stay up longer so they can actually be read.
   const visibleFor = duration ?? THREE.MathUtils.clamp(3800 + [...safeText].length * 110, 4200, 14000);
-  state.bubbleTimer = window.setTimeout(() => speechBubble.classList.remove('visible'), visibleFor);
+  hideBubbleAfter(visibleFor);
 }
 
 function setThinking(thinking) {
   if (!showsCharacter) return;
   state.thinking = Boolean(thinking);
   state.talk = null;
+  if (state.thinking) state.pendingVoice = null;
   clearTimeout(state.bubbleTimer);
   if (state.thinking) {
     bubbleText.textContent = '♪ ♫ ♪';
@@ -3726,7 +3771,12 @@ function frameInterval() {
   return 1000 / FPS_CAP;
 }
 
+// Errors while rendering, reported once per message per ten minutes.
+const frameErrorReports = new Map();
+
 function frame(timestamp) {
+  // Ask for the next frame first, so an error while rendering can't stop the loop for good.
+  state.raf = requestAnimationFrame(frame);
   const interval = frameInterval();
   if (state.lastTimestamp === null) state.lastTimestamp = timestamp;
   const delta = Math.min((timestamp - state.lastTimestamp) / 1000, 0.1);
@@ -3734,8 +3784,16 @@ function frame(timestamp) {
   state.lastFrameAt = performance.now();
   if (state.previewElapsed === null) state.activeElapsed += delta;
 
-  if (timestamp - state.renderedAt >= interval) renderState(timestamp);
-  state.raf = requestAnimationFrame(frame);
+  if (timestamp - state.renderedAt >= interval) {
+    try {
+      renderState(timestamp);
+    } catch (error) {
+      const message = String(error?.message ?? error).slice(0, 200);
+      if (shouldReportError(frameErrorReports, message, performance.now())) {
+        postNative({ type: 'diag', what: 'frameError', message });
+      }
+    }
+  }
 }
 
 function startLoop() {
@@ -4170,7 +4228,7 @@ function applyReply(payload = {}, { render = true } = {}) {
   const action = ALLOWED_REPLY_ACTIONS.has(payload.action) ? payload.action : 'idle';
   state.emotion = emotion;
   state.emotionAt = currentElapsed();
-  showBubble(typeof payload.text === 'string' ? payload.text : '', emotion);
+  showBubble(typeof payload.text === 'string' ? payload.text : '', emotion, null, { talk: payload.voiced !== true });
   const moody = relationship.offended && CHEERFUL_ACTIONS.has(action);
   if (moody || reducedMotion.matches) {
     if (!state.reaction?.touch) state.reaction = null;
@@ -4214,6 +4272,15 @@ window.mikuCompanion = Object.freeze({
     const started = startReaction(payload.type, payload);
     renderState(performance.now());
     return started ? status() : false;
+  },
+  startVoice(payload = {}) {
+    return startVoice(payload);
+  },
+  stopVoice() {
+    return stopVoice();
+  },
+  voiceFailed() {
+    return voiceFailed();
   },
   receiveReply(payload = {}) {
     if (!showsCharacter || !payload || typeof payload !== 'object') return false;
@@ -4298,6 +4365,7 @@ window.mikuCompanion = Object.freeze({
       state.emotion = 'calm';
       state.emotionAt = currentElapsed();
       state.talk = null;
+      state.pendingVoice = null;
       state.thinking = false;
       state.micro = null;
       state.motionTransition = null;
@@ -4384,10 +4452,21 @@ let facingAwayChecks = 0;
 window.setInterval(() => {
   if (!showsCharacter || !state.ready || document.hidden || state.previewElapsed !== null) return;
   const now = performance.now();
-  const stalled = state.raf === null || now - (state.lastFrameAt ?? now) > 4000;
-  if (stalled) {
+  const health = checkLoop({
+    rafPending: state.raf !== null,
+    lastFrameAt: state.lastFrameAt ?? null,
+    now,
+    lastReportAt: state.lastStallReportAt
+  });
+  // Frames requested but not delivered (window covered, display asleep) is the system's doing:
+  // nothing to restart or report. Only a loop that really stopped is restarted.
+  const stalled = health.restart || health.framesMissing;
+  if (health.restart) {
     state.loopRestarts += 1;
-    postNative({ type: 'diag', what: 'loopStalled', raf: state.raf !== null, sinceFrame: Math.round(now - (state.lastFrameAt ?? now)), restarts: state.loopRestarts });
+    if (health.report) {
+      state.lastStallReportAt = now;
+      postNative({ type: 'diag', what: 'loopStalled', sinceFrame: Math.round(now - (state.lastFrameAt ?? now)), restarts: state.loopRestarts });
+    }
     stopLoop();
     startLoop();
   }

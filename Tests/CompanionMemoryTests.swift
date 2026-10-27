@@ -463,6 +463,17 @@ struct CompanionMemoryTests {
                 try check(reply.action == (positive ? "nod" : "idle"), "Action agrees with the decision")
             }
         }
+        // diagnostics.log: a flood of one kind of line can't push out the speech lines.
+        let speechLines = (0..<5).map { #"2026-10-26T00:0\#($0):00Z {"type":"speech","what":"failed"}"# }
+        let flood = (0..<500).map { #"2026-10-26T01:00:00Z {"type":"diag","what":"loopStalled","n":\#($0)}"# }
+        let trimmed = CompanionMemory.trimmedDiagnosticLines(speechLines + flood)
+        try check(trimmed.filter { $0.contains(#""type":"speech""#) } == speechLines, "Speech lines survive a flood of other diagnostics")
+        try check(trimmed.count == speechLines.count + CompanionMemory.diagnosticLinesPerKind, "Each kind keeps its own share of lines")
+        try check(trimmed.last == flood.last, "The newest lines are kept")
+        let manySpeech = (0..<300).map { #"{"type":"speech","n":\#($0)}"# }
+        try check(CompanionMemory.trimmedDiagnosticLines(manySpeech).count == CompanionMemory.diagnosticLinesPerKind, "Speech lines are capped too")
+        let interleaved = [#"{"type":"diag","n":1}"#, #"{"type":"speech","n":2}"#, #"{"type":"diag","n":3}"#]
+        try check(CompanionMemory.trimmedDiagnosticLines(interleaved) == interleaved, "The original order is kept")
         print("PASS: \(checks) memory and dialogue checks")
     }
 }

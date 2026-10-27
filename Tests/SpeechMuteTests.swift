@@ -99,6 +99,11 @@ struct SpeechMuteTests {
         expect(SpeechQuietTimes.coversScreen(screens[1], screens: screens), "外接螢幕全螢幕也算")
         expect(!SpeechQuietTimes.coversScreen(CGRect(x: 0, y: 0, width: 1512, height: 945), screens: screens), "放大但留著選單列的視窗不算全螢幕")
         expect(!SpeechQuietTimes.coversScreen(CGRect(x: 0, y: 0, width: 800, height: 600), screens: screens), "普通視窗不算全螢幕")
+        expect(SpeechQuietTimes.isBackgroundInputService(path: "/System/Library/PrivateFrameworks/CoreSpeech.framework/corespeechd"), "Siri／聽寫的背景收音不算通話")
+        expect(SpeechQuietTimes.isBackgroundInputService(path: "/usr/libexec/replayd"), "系統擷取服務的背景收音不算通話")
+        expect(!SpeechQuietTimes.isBackgroundInputService(path: "/Applications/zoom.us.app/Contents/MacOS/zoom.us"), "Zoom 收音仍算通話")
+        expect(!SpeechQuietTimes.isBackgroundInputService(path: "/System/Applications/FaceTime.app/Contents/MacOS/FaceTime"), "FaceTime 收音仍算通話")
+        expect(!SpeechQuietTimes.isBackgroundInputService(path: "/Users/someone/bin/corespeechd"), "系統以外同名程式不會被略過")
 
         if failures.isEmpty {
             print("SpeechMute：\(checks) 項檢查通過")

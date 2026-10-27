@@ -23,6 +23,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.button?.toolTip = "Miku Desktop"
         rebuildMenu()
 
+        MikuSpeech.shared.onPlayback = { [weak self] event in
+            self?.wallpaperController?.speechPlayback(event)
+            self?.afterSpeech(event)
+        }
+        // Retries and failures of reading aloud, so an occasional silent reply can be traced.
+        MikuSpeech.shared.onDiagnostic = { payload in CompanionMemory.shared.logDiagnostic(payload) }
+        HumPlayer.shared.onEvent = { [weak self] event in
+            switch event {
+            case let .started(duration):
+                self?.wallpaperController?.speechPlayback(.started(text: HumText.mouthText, duration: duration))
+            case .ended:
+                self?.wallpaperController?.speechPlayback(.ended)
+                self?.flushPendingMusic()
+            }
+        }
+
         let awareness = AwarenessService.shared
         awareness.onSpeak = { [weak self] reply in self?.deliverProactive(reply) }
         awareness.isChatting = { [weak self] in self?.chatController?.isChatting ?? false }
@@ -37,7 +53,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.rebuildMenu() }
+            Task { @MainActor in
+                self?.rebuildMenu()
+                // Muted: the hum stops too, like her voice.
+                if MikuSpeech.shared.isMuted || !MikuSpeech.shared.enabled {
+                    self?.pendingHum = nil
+                    HumPlayer.shared.stop()
+                }
+            }
         }
 
         settingsObserver = NotificationCenter.default.addObserver(
@@ -277,9 +300,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Something she noticed and wanted to say: speech bubble on the desktop, and in the chat.
     private func deliverProactive(_ reply: CompanionReply) {
-        wallpaperController?.receiveReply(reply)
         // Something she says on her own stays silent while she's meant to be asleep.
-        if !SleepSchedule.shared.isAsleep() { MikuSpeech.shared.speak(reply.text) }
+        voice(reply, awake: !SleepSchedule.shared.isAsleep(), speakEvenIfSilent: false)
         if let chatController {
             chatController.receiveProactive(reply)
         } else {
@@ -287,15 +309,112 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    // MARK: - Her voice, a hum, then the song you asked for
+
+    /// Shows her reply and plays what goes with it, one after another: her voice (reading aloud),
+    /// then a hum clip if she hummed, then a song you asked her to play.
+    /// `speakEvenIfSilent`: chat replies still go through speech so its status updates.
+    private func voice(_ reply: CompanionReply, awake: Bool, speakEvenIfSilent: Bool) {
+        let speech = MikuSpeech.shared
+        let speaks = awake && speech.willSpeakAutomatically
+        let hums = awake && HumText.containsHum(reply.text) && humAllowed && HumText.hasClips()
+        wallpaperController?.receiveReply(reply, voiced: speaks || hums)
+        // A new reply: whatever the previous one was waiting for no longer applies to it.
+        pendingHum = nil
+        musicArmed = false
+
+        guard speaks else {
+            // Reading aloud is off or blocked; chat replies still update the speech status.
+            if speakEvenIfSilent { speech.speak(reply.text) }
+            if !(hums && HumPlayer.shared.play()) { flushPendingMusic() }
+            return
+        }
+        // The hum waits for her voice; set before speaking, as speech can fail at once.
+        if hums { pendingHum = false }
+        speech.speak(hums ? HumText.removingHum(reply.text) : reply.text)
+        if pendingHum != nil { pendingHum = true }
+        musicArmed = true
+        // Speech gave up straight away and no hum is playing: the song needn't wait.
+        if !speech.isBusy, !HumPlayer.shared.isPlaying, pendingHum == nil { flushPendingMusic() }
+    }
+
+    /// Muted, a call or full screen: no hum either.
+    private var humAllowed: Bool {
+        !MikuSpeech.shared.isMuted && !SpeechQuietTimes.isQuietNow()
+    }
+
+    /// A hum waiting for her voice to finish; true once that speech has started.
+    private var pendingHum: Bool?
+
+    private func afterSpeech(_ event: MikuSpeech.PlaybackEvent) {
+        switch event {
+        case .started:
+            return
+        case .interrupted:
+            // Cut off (muted, stopped): the hum is dropped. A newer line cutting in arrives
+            // before that reply is armed, so it is ignored here.
+            guard musicArmed else { return }
+            pendingHum = nil
+            flushPendingMusic()
+        case .ended, .failed:
+            if pendingHum != nil {
+                // .failed can come at once, before the speech counts as started.
+                if case .ended = event, pendingHum == false { return }
+                pendingHum = nil
+                if humAllowed, HumPlayer.shared.play() { return }
+                flushPendingMusic()
+                return
+            }
+            guard musicArmed else { return }
+            flushPendingMusic()
+        }
+    }
+
+    /// Waiting for her to finish (voice and hum), so the song doesn't play over her.
+    private var pendingMusic: MusicPlan?
+    private var pendingMusicTimer: Timer?
+    /// The reply that the song waits for has been voiced; its end means "play".
+    private var musicArmed = false
+
+    private func queueMusic(_ plan: MusicPlan) {
+        pendingMusic = plan
+        musicArmed = false
+        pendingMusicTimer?.invalidate()
+        // In case the audio never reports back.
+        pendingMusicTimer = Timer.scheduledTimer(withTimeInterval: 90, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated { self?.flushPendingMusic() }
+        }
+        // Her reply is delivered right after this. If none comes (she couldn't answer), play now.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.pendingMusic == plan, !self.musicArmed,
+                  !MikuSpeech.shared.isBusy, !HumPlayer.shared.isPlaying else { return }
+            self.flushPendingMusic()
+        }
+    }
+
+    private func flushPendingMusic() {
+        pendingMusicTimer?.invalidate()
+        pendingMusicTimer = nil
+        musicArmed = false
+        guard let plan = pendingMusic else { return }
+        pendingMusic = nil
+        Task { await MusicPlayback.shared.perform(plan) }
+    }
+
     @objc private func openChat(_ sender: Any?) {
         if chatController == nil {
             let controller = ChatWindowController()
             controller.onReply = { [weak self] reply in
-                self?.wallpaperController?.receiveReply(reply)
-                MikuSpeech.shared.speak(reply.text)
+                self?.voice(reply, awake: true, speakEvenIfSilent: true)
             }
+            controller.onPlayMusic = { [weak self] plan in self?.queueMusic(plan) }
             controller.onThinking = { [weak self] thinking in
                 self?.wallpaperController?.setThinking(thinking)
+                // You've said something new: an old hum stops.
+                if thinking {
+                    self?.pendingHum = nil
+                    HumPlayer.shared.stop()
+                }
             }
             controller.onOpenSettings = { [weak self] in
                 self?.openSettings(nil)

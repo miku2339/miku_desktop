@@ -3,6 +3,8 @@ import AppKit
 @MainActor
 final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFieldDelegate {
     var onReply: ((CompanionReply) -> Void)?
+    /// A song you asked her to play; called just before her reply is delivered.
+    var onPlayMusic: ((MusicPlan) -> Void)?
     var onThinking: ((Bool) -> Void)?
     var onOpenSettings: (() -> Void)?
     var onCallOver: (() -> Void)?
@@ -539,6 +541,12 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
         }
         let sleepRevision = sleep.revision
         if appendUser, CompanionRequest.isComeOver(text) { onCallOver?() }
+        // Her last lines, for "what would you like to hear?" — "Tell Your World", and for
+        // "open it on YouTube" about a song she named a moment ago.
+        let recentAssistant = appendUser
+            ? Array(messages.dropLast().filter { $0.role == .assistant }.suffix(3).reversed().map(\.text))
+            : []
+        let previousAssistant = recentAssistant.first
         let rememberSongPreferences = memory.isEnabled
         memory.record(messages)
         setSending(true)
@@ -546,7 +554,19 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
         let generation = conversationGeneration
         chatTask = Task { [weak self] in
             guard let self else { return }
+            var musicPlan: MusicPlan?
             do {
+                if appendUser {
+                    let player = MusicPlayback.shared
+                    if let request = MusicRequestParser.parse(
+                        text,
+                        previousAssistant: previousAssistant,
+                        recentAssistant: Array(recentAssistant.dropFirst()),
+                        knownTitles: await player.knownTitles()
+                    ) {
+                        musicPlan = await player.plan(for: request)
+                    }
+                }
                 let classificationHistory = memory.recentHistory(from: completedHistory())
                 let relationshipIntent = try await ai.relationshipIntent(
                     for: text,
@@ -568,7 +588,8 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
                 var reply = try await ai.reply(
                     to: prompt, image: image, history: history, memory: context,
                     rememberSongPreferences: rememberSongPreferences,
-                    relationshipIntent: relationshipIntent
+                    relationshipIntent: relationshipIntent,
+                    music: musicPlan
                 )
                 guard !Task.isCancelled, generation == conversationGeneration else { return }
 
@@ -612,6 +633,7 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
                 appendBubble(assistantMessage)
                 memory.record(messages)
                 memory.didExchange(user: userMessage, reply: assistantMessage, ai: ai)
+                if let musicPlan { onPlayMusic?(musicPlan) }
                 onReply?(reply)
                 // After saying good night back, she goes to bed (once you've read her reply);
                 // late at night, her own "good night" means the same.
@@ -640,6 +662,8 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
                 setSending(false)
                 failedText = text
                 failedImage = image
+                // She couldn't answer, but the song you asked for still opens.
+                if let musicPlan { onPlayMusic?(musicPlan) }
                 let configuration = AIConfiguration.shared
                 showError(LocalAI.message(for: error, endpoint: configuration.endpoint, model: configuration.model))
                 refreshConnectionStatus()

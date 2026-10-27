@@ -245,6 +245,36 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
     }
     var onStateChanged: (() -> Void)?
 
+    /// What the audio is doing, so her mouth can move while (and only while) it plays.
+    enum PlaybackEvent: Equatable {
+        /// The audio for `text` has started and lasts `duration` seconds.
+        case started(text: String, duration: TimeInterval)
+        /// It played to the end.
+        case ended
+        /// It was stopped, muted or replaced by a newer line before the end.
+        case interrupted
+        /// No audio will come for the line that was just sent.
+        case failed
+    }
+
+    var onPlayback: ((PlaybackEvent) -> Void)?
+
+    /// One line per retry or failure for diagnostics.log: what went wrong, the language, how
+    /// long the line was and how long it took. Never the text itself.
+    var onDiagnostic: (([String: Any]) -> Void)?
+
+    /// Generating audio waits this long for the service: after a hiccup it restarts its
+    /// worker, which takes about half a minute to load.
+    static let generationTimeout: TimeInterval = 60
+    /// Pause before the single retry, giving a restarting worker a moment.
+    static let retryDelay: UInt64 = 1_500_000_000
+
+    /// Whether a reply sent now would be read aloud without you asking (on, a model set, not
+    /// muted, not a quiet moment). The reply can still fail later; `.failed` says so.
+    var willSpeakAutomatically: Bool {
+        enabled && hasConfiguredModel && automaticSpeechBlockStatus(userInitiated: false) == nil
+    }
+
     // 保留舊有擁有者 Keychain 項目與 CLI，相容既有私人設定。
     var hasAccessToken: Bool {
         guard let token = try? MikuSpeechKeychain.load() else { return false }
@@ -268,6 +298,7 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
 
     private let defaults: UserDefaults
     private let session: URLSession
+    private let generationSession: URLSession
     private var audioPlayer: AVAudioPlayer?
     private var operationTask: Task<Void, Never>?
     private var generation = UUID()
@@ -301,6 +332,14 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
             delegate: MikuSpeechNoRedirectDelegate(),
             delegateQueue: nil
         )
+        let generation = configuration.copy() as! URLSessionConfiguration
+        generation.timeoutIntervalForRequest = Self.generationTimeout
+        generation.timeoutIntervalForResource = Self.generationTimeout * 2 + 10
+        generationSession = URLSession(
+            configuration: generation,
+            delegate: MikuSpeechNoRedirectDelegate(),
+            delegateQueue: nil
+        )
         super.init()
         scheduleMuteExpiry()
     }
@@ -327,25 +366,30 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
     func speak(_ text: String, language override: Language? = nil, userInitiated: Bool = false) {
         guard enabled else {
             setState(busy: false, key: "speechDisabled")
+            onPlayback?(.failed)
             return
         }
         if let blockedStatus = automaticSpeechBlockStatus(userInitiated: userInitiated) {
             if !isBusy { setState(busy: false, key: blockedStatus) }
+            onPlayback?(.failed)
             return
         }
         cancelCurrentPlayback()
 
         guard text.count <= Self.maximumTextLength else {
             setState(busy: false, error: SpeechError.textTooLong)
+            onPlayback?(.failed)
             return
         }
         let cleaned = Self.sanitized(text)
         guard !cleaned.isEmpty else {
             setState(busy: false, error: SpeechError.emptyText)
+            onPlayback?(.failed)
             return
         }
         guard cleaned.count <= Self.maximumTextLength else {
             setState(busy: false, error: SpeechError.textTooLong)
+            onPlayback?(.failed)
             return
         }
 
@@ -441,29 +485,130 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
                 try Task.checkCancellation()
                 guard generation == currentGeneration else { return }
                 setState(busy: true, key: "speechGenerating")
-                let audio = try await generateAudio(
-                    text: text,
-                    language: language,
-                    model: model,
-                    endpoint: endpoint
-                )
+                let began = Date()
+                var attempt = 1
+                var audio = Data()
+                while true {
+                    do {
+                        audio = try await generateAudio(
+                            text: text,
+                            language: language,
+                            model: model,
+                            endpoint: endpoint
+                        )
+                        break
+                    } catch is CancellationError {
+                        throw CancellationError()
+                    } catch {
+                        // One retry for a service hiccup (500, or the connection dropped while
+                        // its worker restarted); anything else fails straight away.
+                        guard attempt == 1, Self.isRetryableGeneration(error), generation == currentGeneration else {
+                            throw SpeechAttemptError(underlying: error, attempts: attempt, began: began)
+                        }
+                        diagnose("retry", error: error, attempt: attempt, began: began, language: language, text: text, userInitiated: userInitiated)
+                        try await Task.sleep(nanoseconds: Self.retryDelay)
+                        try Task.checkCancellation()
+                        guard generation == currentGeneration else { return }
+                        attempt += 1
+                    }
+                }
+                if attempt > 1 {
+                    diagnose("recovered", error: nil, attempt: attempt, began: began, language: language, text: text, userInitiated: userInitiated)
+                }
                 try Task.checkCancellation()
                 guard generation == currentGeneration else { return }
                 if let blockedStatus = automaticSpeechBlockStatus(userInitiated: userInitiated) {
                     operationTask = nil
                     setState(busy: false, key: blockedStatus)
+                    onPlayback?(.failed)
                     return
                 }
-                try play(audio)
+                try play(audio, text: text)
             } catch is CancellationError {
                 return
             } catch {
                 guard generation == currentGeneration else { return }
-                let displayedError = Self.isConnectionError(error) ? SpeechError.connectionUnavailable : error
+                let attemptError = error as? SpeechAttemptError
+                let underlying = attemptError?.underlying ?? error
+                diagnose(
+                    "failed",
+                    error: underlying,
+                    attempt: attemptError?.attempts ?? 1,
+                    began: attemptError?.began,
+                    language: language,
+                    text: text,
+                    userInitiated: userInitiated
+                )
+                let displayedError = Self.isConnectionError(underlying) ? SpeechError.connectionUnavailable : underlying
                 setState(busy: false, error: displayedError)
                 operationTask = nil
+                onPlayback?(.failed)
             }
         }
+    }
+
+    /// A failed generation, with how many tries it took.
+    private struct SpeechAttemptError: Error {
+        let underlying: Error
+        let attempts: Int
+        let began: Date
+    }
+
+    /// Worth one more try: the service answered 5xx, or the local connection broke or timed out.
+    nonisolated static func isRetryableGeneration(_ error: Error) -> Bool {
+        if case let SpeechError.serverResponse(status) = error { return (500...599).contains(status) }
+        if case SpeechError.connectionUnavailable = error { return true }
+        let value = error as NSError
+        guard value.domain == NSURLErrorDomain else { return false }
+        return [
+            URLError.timedOut.rawValue,
+            URLError.networkConnectionLost.rawValue,
+            URLError.cannotConnectToHost.rawValue,
+            URLError.notConnectedToInternet.rawValue
+        ].contains(value.code)
+    }
+
+    /// A short, text-free name for an error in diagnostics.log.
+    nonisolated static func diagnosticCode(_ error: Error) -> String {
+        if let speech = error as? SpeechError {
+            switch speech {
+            case let .serverResponse(status): return "http-\(status)"
+            case .invalidEndpoint: return "invalid-endpoint"
+            case .connectionUnavailable: return "connection-unavailable"
+            case .invalidResponse: return "invalid-response"
+            case .missingModel: return "missing-model"
+            case .unverifiedConnection: return "unverified-connection"
+            case .emptyText: return "empty-text"
+            case .textTooLong: return "text-too-long"
+            case .generationFailed: return "generation-failed"
+            case .invalidAudio: return "invalid-audio"
+            }
+        }
+        let value = error as NSError
+        if value.domain == NSURLErrorDomain { return "url\(value.code)" }
+        return "other"
+    }
+
+    private func diagnose(
+        _ what: String,
+        error: Error?,
+        attempt: Int,
+        began: Date?,
+        language: Language,
+        text: String,
+        userInitiated: Bool
+    ) {
+        var payload: [String: Any] = [
+            "type": "speech",
+            "what": what,
+            "attempt": attempt,
+            "language": language.rawValue,
+            "chars": text.count,
+            "userInitiated": userInitiated
+        ]
+        if let error { payload["code"] = Self.diagnosticCode(error) }
+        if let began { payload["elapsedMs"] = Int(Date().timeIntervalSince(began) * 1000) }
+        onDiagnostic?(payload)
     }
 
     /// Automatic speech is checked both before generation and immediately before playback.
@@ -478,9 +623,11 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
         generation = UUID()
         operationTask?.cancel()
         operationTask = nil
+        let wasPlaying = audioPlayer != nil
         audioPlayer?.stop()
         audioPlayer?.delegate = nil
         audioPlayer = nil
+        if wasPlaying { onPlayback?(.interrupted) }
     }
 
     private func generateAudio(
@@ -498,7 +645,7 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
             input: text,
             language: language.rawValue
         )
-        let (audio, response) = try await self.data(for: request, accept: "audio/wav")
+        let (audio, response) = try await self.data(for: request, accept: "audio/wav", using: generationSession)
         guard let response = response as? HTTPURLResponse, response.url == url else {
             throw SpeechError.invalidResponse
         }
@@ -512,7 +659,7 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
         return audio
     }
 
-    private func play(_ data: Data) throws {
+    private func play(_ data: Data, text: String) throws {
         guard MikuSpeechWire.validWAV(data) else { throw SpeechError.invalidAudio }
         let player: AVAudioPlayer
         do {
@@ -525,11 +672,13 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
         audioPlayer = player
         operationTask = nil
         setState(busy: true, key: "speechSpeaking")
+        onPlayback?(.started(text: text, duration: player.duration))
     }
 
     func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
         guard player === audioPlayer else { return }
         audioPlayer = nil
+        onPlayback?(.ended)
         if flag {
             setState(busy: false, key: idleStatusKey)
         } else {
@@ -540,10 +689,15 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
     func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {
         guard player === audioPlayer else { return }
         audioPlayer = nil
+        onPlayback?(.ended)
         setState(busy: false, error: SpeechError.invalidAudio)
     }
 
-    private func data(for request: URLRequest, accept: String = "application/json") async throws -> (Data, URLResponse) {
+    private func data(
+        for request: URLRequest,
+        accept: String = "application/json",
+        using chosenSession: URLSession? = nil
+    ) async throws -> (Data, URLResponse) {
         guard let url = request.url, MikuSpeechAuthorization.isLoopbackServiceURL(url) else {
             throw SpeechError.invalidEndpoint
         }
@@ -554,7 +708,7 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
         for attempt in 0..<3 {
             try Task.checkCancellation()
             do {
-                return try await session.data(for: request)
+                return try await (chosenSession ?? session).data(for: request)
             } catch is CancellationError {
                 throw CancellationError()
             } catch {

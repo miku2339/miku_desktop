@@ -1,4 +1,5 @@
 .build/
+/.claude/
 /voice-training/
 /outputs/
 .DS_Store

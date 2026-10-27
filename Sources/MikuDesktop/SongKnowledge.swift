@@ -1,4 +1,163 @@
 import Foundation
+import Security
+
+struct AIMCPKeychainStore {
+    typealias CopyMatching = ([String: Any]) -> (OSStatus, Any?)
+    typealias Update = ([String: Any], [String: Any]) -> OSStatus
+    typealias Add = ([String: Any]) -> OSStatus
+    typealias Delete = ([String: Any]) -> OSStatus
+
+    private let copyMatching: CopyMatching
+    private let update: Update
+    private let add: Add
+    private let delete: Delete
+
+    init(
+        copyMatching: @escaping CopyMatching,
+        update: @escaping Update,
+        add: @escaping Add,
+        delete: @escaping Delete
+    ) {
+        self.copyMatching = copyMatching
+        self.update = update
+        self.add = add
+        self.delete = delete
+    }
+
+    #if AIMCP_TEST_KEYCHAIN_STUB
+    static let system = AIMCPKeychainStore(
+        copyMatching: { _ in (errSecItemNotFound, nil) },
+        update: { _, _ in errSecNotAvailable },
+        add: { _ in errSecNotAvailable },
+        delete: { _ in errSecItemNotFound }
+    )
+    #else
+    static let system = AIMCPKeychainStore(
+        copyMatching: { query in
+            var result: CFTypeRef?
+            let status = SecItemCopyMatching(query as CFDictionary, &result)
+            return (status, result)
+        },
+        update: { query, attributes in
+            SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+        },
+        add: { query in
+            SecItemAdd(query as CFDictionary, nil)
+        },
+        delete: { query in
+            SecItemDelete(query as CFDictionary)
+        }
+    )
+    #endif
+
+    func contains(service: String, account: String) throws -> Bool {
+        var query = baseQuery(service: service, account: account)
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        let (status, _) = copyMatching(query)
+        if status == errSecItemNotFound { return false }
+        guard status == errSecSuccess else {
+            throw AIMCPKnowledgeConfiguration.ConfigurationError.keychainFailure(status)
+        }
+        return true
+    }
+
+    func read(service: String, account: String) throws -> Data? {
+        var query = baseQuery(service: service, account: account)
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        let (status, result) = copyMatching(query)
+        if status == errSecItemNotFound { return nil }
+        guard status == errSecSuccess else {
+            throw AIMCPKnowledgeConfiguration.ConfigurationError.keychainFailure(status)
+        }
+        guard let data = result as? Data else {
+            throw AIMCPKnowledgeConfiguration.ConfigurationError.keychainFailure(errSecDecode)
+        }
+        return data
+    }
+
+    func write(_ data: Data, service: String, account: String) throws {
+        let query = baseQuery(service: service, account: account)
+        let attributes: [String: Any] = [kSecValueData as String: data]
+        let status = update(query, attributes)
+        if status == errSecSuccess { return }
+        guard status == errSecItemNotFound else {
+            throw AIMCPKnowledgeConfiguration.ConfigurationError.keychainFailure(status)
+        }
+
+        var item = query
+        item[kSecValueData as String] = data
+        let addStatus = add(item)
+        guard addStatus == errSecSuccess else {
+            throw AIMCPKnowledgeConfiguration.ConfigurationError.keychainFailure(addStatus)
+        }
+    }
+
+    func remove(service: String, account: String) throws {
+        let status = delete(baseQuery(service: service, account: account))
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw AIMCPKnowledgeConfiguration.ConfigurationError.keychainFailure(status)
+        }
+    }
+
+    private func baseQuery(service: String, account: String) -> [String: Any] {
+        [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecAttrSynchronizable as String: kCFBooleanFalse as Any,
+        ]
+    }
+}
+
+enum AIMCPKnowledgeConfiguration {
+    enum ConfigurationError: Error, Equatable {
+        case invalidAPIKey
+        case missingAPIKey
+        case persistenceFailed
+        case keychainFailure(OSStatus)
+    }
+
+    static let defaultEndpoint = "https://mikuwiki.qimake.com/api/v1/song-knowledge"
+    static let keychainService = "com.qimake.MikuDesktop.aimcp"
+    static let keychainAccount = "song-knowledge"
+
+    static let endpoint = URL(string: defaultEndpoint)!
+
+    static func hasAPIKey(keychain: AIMCPKeychainStore = .system) throws -> Bool {
+        try keychain.contains(service: keychainService, account: keychainAccount)
+    }
+
+    static func apiKey(keychain: AIMCPKeychainStore = .system) throws -> String? {
+        guard let data = try keychain.read(service: keychainService, account: keychainAccount) else { return nil }
+        guard let value = String(data: data, encoding: .utf8), validAPIKey(value) else {
+            throw ConfigurationError.invalidAPIKey
+        }
+        return value
+    }
+
+    static func save(apiKey candidate: String?, keychain: AIMCPKeychainStore = .system) throws {
+        let trimmedKey = candidate?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let trimmedKey, !trimmedKey.isEmpty, !validAPIKey(trimmedKey) {
+            throw ConfigurationError.invalidAPIKey
+        }
+
+        if let trimmedKey, !trimmedKey.isEmpty {
+            try keychain.write(Data(trimmedKey.utf8), service: keychainService, account: keychainAccount)
+        } else if try !hasAPIKey(keychain: keychain) {
+            throw ConfigurationError.missingAPIKey
+        }
+    }
+
+    static func clearAPIKey(keychain: AIMCPKeychainStore = .system) throws {
+        try keychain.remove(service: keychainService, account: keychainAccount)
+        guard try !hasAPIKey(keychain: keychain) else { throw ConfigurationError.persistenceFailed }
+    }
+
+    private static func validAPIKey(_ value: String) -> Bool {
+        value.range(of: #"^aimcp_[A-Za-z0-9_-]{43}$"#, options: .regularExpression) != nil
+    }
+}
 
 enum SongKnowledgeKind: String, Codable, CaseIterable, Sendable {
     case song
@@ -16,17 +175,27 @@ struct SongKnowledgeText: Codable, Equatable, Sendable {
     let traditionalChinese: String
     let english: String
     let japanese: String
+    let korean: String?
+
+    init(traditionalChinese: String, english: String, japanese: String, korean: String? = nil) {
+        self.traditionalChinese = traditionalChinese
+        self.english = english
+        self.japanese = japanese
+        self.korean = korean
+    }
 
     enum CodingKeys: String, CodingKey {
         case traditionalChinese = "zh-Hant"
         case english = "en"
         case japanese = "ja"
+        case korean = "ko"
     }
 
     func value(for language: String) -> String {
         switch language {
         case "en": return english
         case "ja": return japanese
+        case "ko": return korean ?? traditionalChinese
         default: return traditionalChinese
         }
     }
@@ -53,6 +222,13 @@ struct SongKnowledgeDocument: Codable, Equatable, Sendable {
     let schemaVersion: Int
     let version: String
     var entries: [SongKnowledgeEntry]
+}
+
+private struct SongKnowledgePage {
+    let document: SongKnowledgeDocument
+    let total: Int?
+    let nextCursor: String?
+    let truncated: Bool?
 }
 
 enum SongKnowledgeError: LocalizedError, Equatable {
@@ -92,11 +268,20 @@ private final class SongKnowledgeNoRedirectDelegate: NSObject, URLSessionTaskDel
 }
 
 actor SongKnowledgeStore {
-    typealias Downloader = @Sendable (URL) async throws -> (Data, URLResponse)
+    typealias Downloader = @Sendable (URLRequest) async throws -> (Data, URLResponse)
+    typealias APIKeyLoader = @Sendable () throws -> String?
+    typealias EndpointLoader = @Sendable () throws -> URL
+
+    enum UpdateSource: Equatable, Sendable {
+        case aimcp
+        case github
+        case githubFallback
+    }
 
     struct UpdateResult: Equatable, Sendable {
         let version: String
         let entryCount: Int
+        let source: UpdateSource
     }
 
     struct ImportResult: Equatable, Sendable {
@@ -108,21 +293,29 @@ actor SongKnowledgeStore {
         string: "https://raw.githubusercontent.com/miku2339/miku_desktop/main/Resources/Knowledge/miku-knowledge.json"
     )!
     static let maximumDocumentSize = 1_048_576
+    static let maximumCatalogSize = 64 * 1_048_576
+    static let maximumCatalogEntries = 50_000
     static let shared = SongKnowledgeStore()
 
     private let updateURL: URL
+    private let aimcpURL: URL
     private let customURL: URL
     private let preferencesURL: URL
     private let downloader: Downloader
+    private let apiKeyLoader: APIKeyLoader
+    private let endpointLoader: EndpointLoader
     private var bundled: SongKnowledgeDocument
     private var updated: SongKnowledgeDocument?
+    private var aimcp: SongKnowledgeDocument?
     private var custom: SongKnowledgeDocument?
     private var favorites: Set<String>
 
     init(
         applicationSupportDirectory: URL? = nil,
         bundledURL: URL? = nil,
-        downloader: Downloader? = nil
+        downloader: Downloader? = nil,
+        apiKeyLoader: APIKeyLoader? = nil,
+        endpointLoader: EndpointLoader? = nil
     ) {
         let base = applicationSupportDirectory
             ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
@@ -131,9 +324,12 @@ actor SongKnowledgeStore {
             .appendingPathComponent("MikuDesktop", isDirectory: true)
             .appendingPathComponent("Knowledge", isDirectory: true)
         updateURL = folder.appendingPathComponent("miku-knowledge-updated.json")
+        aimcpURL = folder.appendingPathComponent("miku-knowledge-aimcp.json")
         customURL = folder.appendingPathComponent("miku-knowledge-custom.json")
         preferencesURL = folder.appendingPathComponent("song-preferences.json")
         self.downloader = downloader ?? Self.defaultDownloader
+        self.apiKeyLoader = apiKeyLoader ?? { try AIMCPKnowledgeConfiguration.apiKey() }
+        self.endpointLoader = endpointLoader ?? { AIMCPKnowledgeConfiguration.endpoint }
 
         let sourceURL = bundledURL ?? Bundle.main.url(
             forResource: "miku-knowledge",
@@ -146,6 +342,12 @@ actor SongKnowledgeStore {
             entries: []
         )
         updated = Self.loadDocument(at: updateURL, sourceStatus: .remote)
+        aimcp = Self.loadDocument(
+            at: aimcpURL,
+            sourceStatus: .remote,
+            maximumSize: Self.maximumCatalogSize,
+            maximumEntries: Self.maximumCatalogEntries
+        )
         custom = Self.loadDocument(at: customURL, sourceStatus: .manual)
         favorites = Self.loadFavorites(at: preferencesURL)
     }
@@ -231,20 +433,160 @@ actor SongKnowledgeStore {
     }
 
     func checkForUpdates() async throws -> UpdateResult {
-        let (data, response) = try await downloader(Self.remoteURL)
+        if let apiKey = try apiKeyLoader() {
+            let endpoint = try endpointLoader()
+            var request = URLRequest(url: endpoint)
+            request.httpMethod = "GET"
+            request.setValue("application/json", forHTTPHeaderField: "Accept")
+            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+            do {
+                let document = try await downloadAIMCPCatalog(request)
+                return try install(document, source: .aimcp)
+            } catch {
+                if case let SongKnowledgeError.httpStatus(status) = error,
+                   status == 401 || status == 403 || status == 429 {
+                    throw error
+                }
+                guard Self.allowsGitHubFallback(error) else { throw error }
+                return try await downloadAndInstallGitHub(source: .githubFallback)
+            }
+        }
+        return try await downloadAndInstallGitHub(source: .github)
+    }
+
+    private func downloadAndInstallGitHub(source: UpdateSource) async throws -> UpdateResult {
+        var request = URLRequest(url: Self.remoteURL)
+        request.httpMethod = "GET"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        let document = try await downloadDocument(request)
+        return try install(document, source: source)
+    }
+
+    private func downloadAIMCPCatalog(_ baseRequest: URLRequest) async throws -> SongKnowledgeDocument {
+        var entries: [SongKnowledgeEntry] = []
+        var ids = Set<String>()
+        var seenCursors = Set<String>()
+        var expectedVersion: String?
+        var expectedTotal: Int?
+        var cursor: String?
+        var receivedBytes = 0
+        var pageCount = 0
+
+        repeat {
+            pageCount += 1
+            guard pageCount <= 1_000 else { throw SongKnowledgeError.invalidResponse }
+            var request = baseRequest
+            request.url = try Self.paginatedURL(baseRequest.url, cursor: cursor)
+            let (data, response) = try await downloader(request)
+            receivedBytes += data.count
+            guard receivedBytes <= Self.maximumCatalogSize else { throw SongKnowledgeError.tooLarge }
+            let page = try Self.validatedPage(data, response: response, request: request)
+
+            guard let total = page.total else {
+                guard cursor == nil else { throw SongKnowledgeError.invalidResponse }
+                return page.document
+            }
+            guard total >= 0, total <= Self.maximumCatalogEntries,
+                  page.truncated == (page.nextCursor != nil) else {
+                throw SongKnowledgeError.invalidSchema("invalid pagination metadata")
+            }
+            if let expectedVersion, expectedVersion != page.document.version {
+                throw SongKnowledgeError.invalidSchema("snapshot version changed during pagination")
+            }
+            if let expectedTotal, expectedTotal != total {
+                throw SongKnowledgeError.invalidSchema("catalog total changed during pagination")
+            }
+            expectedVersion = page.document.version
+            expectedTotal = total
+            for entry in page.document.entries {
+                guard ids.insert(entry.id).inserted else { throw SongKnowledgeError.duplicateID(entry.id) }
+                entries.append(entry)
+            }
+            guard entries.count <= total else {
+                throw SongKnowledgeError.invalidSchema("pagination returned more entries than total")
+            }
+            if let nextCursor = page.nextCursor {
+                guard !nextCursor.isEmpty, nextCursor.count <= 512,
+                      seenCursors.insert(nextCursor).inserted else {
+                    throw SongKnowledgeError.invalidSchema("pagination cursor repeated")
+                }
+                cursor = nextCursor
+            } else {
+                guard entries.count == total else {
+                    throw SongKnowledgeError.invalidSchema("pagination ended before total")
+                }
+                return SongKnowledgeDocument(
+                    schemaVersion: 1,
+                    version: page.document.version,
+                    entries: entries
+                )
+            }
+        } while true
+    }
+
+    private static func paginatedURL(_ url: URL?, cursor: String?) throws -> URL {
+        guard let url, var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            throw SongKnowledgeError.invalidResponse
+        }
+        var items = components.queryItems ?? []
+        items.removeAll { $0.name == "pageSize" || $0.name == "cursor" }
+        items.append(URLQueryItem(name: "pageSize", value: "250"))
+        if let cursor { items.append(URLQueryItem(name: "cursor", value: cursor)) }
+        components.queryItems = items
+        guard let result = components.url else { throw SongKnowledgeError.invalidResponse }
+        return result
+    }
+
+    private func downloadDocument(_ request: URLRequest) async throws -> SongKnowledgeDocument {
+        let (data, response) = try await downloader(request)
+        let page = try Self.validatedPage(data, response: response, request: request)
+        guard page.nextCursor == nil, page.truncated != true,
+              page.total == nil || page.total == page.document.entries.count else {
+            throw SongKnowledgeError.invalidSchema("incomplete paginated document")
+        }
+        return page.document
+    }
+
+    private static func validatedPage(
+        _ data: Data,
+        response: URLResponse,
+        request: URLRequest
+    ) throws -> SongKnowledgePage {
         guard data.count <= Self.maximumDocumentSize else { throw SongKnowledgeError.tooLarge }
         guard let http = response as? HTTPURLResponse else { throw SongKnowledgeError.invalidResponse }
         guard (200..<300).contains(http.statusCode) else { throw SongKnowledgeError.httpStatus(http.statusCode) }
-        guard response.url == Self.remoteURL else { throw SongKnowledgeError.invalidResponse }
-        var document = try Self.decodeAndValidate(data)
+        guard response.url == request.url else { throw SongKnowledgeError.invalidResponse }
+        var page = try Self.decodePageAndValidate(data)
+        var document = page.document
         document.entries = document.entries.map { entry in
             var copy = entry
             copy.sourceStatus = .remote
             return copy
         }
-        try save(document, to: updateURL)
-        updated = document
-        return UpdateResult(version: document.version, entryCount: document.entries.count)
+        page = SongKnowledgePage(
+            document: document,
+            total: page.total,
+            nextCursor: page.nextCursor,
+            truncated: page.truncated
+        )
+        return page
+    }
+
+    private func install(_ document: SongKnowledgeDocument, source: UpdateSource) throws -> UpdateResult {
+        switch source {
+        case .aimcp:
+            try save(
+                document,
+                to: aimcpURL,
+                maximumSize: Self.maximumCatalogSize,
+                maximumEntries: Self.maximumCatalogEntries
+            )
+            aimcp = document
+        case .github, .githubFallback:
+            try save(document, to: updateURL)
+            updated = document
+        }
+        return UpdateResult(version: document.version, entryCount: document.entries.count, source: source)
     }
 
     func importJSON(_ data: Data) throws -> ImportResult {
@@ -280,7 +622,9 @@ actor SongKnowledgeStore {
         )
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-        return try encoder.encode(document)
+        let data = try encoder.encode(document)
+        _ = try Self.decodeAndValidate(data)
+        return data
     }
 
     func activeVersion() -> String {
@@ -288,12 +632,30 @@ actor SongKnowledgeStore {
     }
 
     private func effectiveVersion() -> String {
-        updated?.version ?? bundled.version
+        aimcp?.version ?? updated?.version ?? bundled.version
     }
 
     private func effectiveEntries() -> [SongKnowledgeEntry] {
         let base = updated ?? bundled
         var byID = Dictionary(uniqueKeysWithValues: base.entries.map { ($0.id, $0) })
+        aimcp?.entries.forEach { remote in
+            guard let existing = byID[remote.id] else {
+                byID[remote.id] = remote
+                return
+            }
+            var seenAliases = Set<String>()
+            let aliases = (remote.aliases + existing.aliases).filter { seenAliases.insert($0).inserted }
+            byID[remote.id] = SongKnowledgeEntry(
+                id: remote.id,
+                aliases: aliases,
+                creators: remote.creators,
+                kind: remote.kind,
+                content: remote.content,
+                sourceURL: remote.sourceURL,
+                featured: existing.featured || remote.featured,
+                sourceStatus: remote.sourceStatus
+            )
+        }
         custom?.entries.forEach { byID[$0.id] = $0 }
         return Array(byID.values)
     }
@@ -333,11 +695,19 @@ actor SongKnowledgeStore {
         try Self.atomicWrite(data, to: preferencesURL)
     }
 
-    private func save(_ document: SongKnowledgeDocument, to url: URL) throws {
+    private func save(
+        _ document: SongKnowledgeDocument,
+        to url: URL,
+        maximumSize: Int = SongKnowledgeStore.maximumDocumentSize,
+        maximumEntries: Int = 1_000
+    ) throws {
+        guard document.entries.count <= maximumEntries else {
+            throw SongKnowledgeError.invalidSchema("too many entries")
+        }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         let data = try encoder.encode(document)
-        guard data.count <= Self.maximumDocumentSize else { throw SongKnowledgeError.tooLarge }
+        guard data.count <= maximumSize else { throw SongKnowledgeError.tooLarge }
         try Self.atomicWrite(data, to: url)
     }
 
@@ -375,16 +745,35 @@ actor SongKnowledgeStore {
     }
 
     static func decodeAndValidate(_ data: Data) throws -> SongKnowledgeDocument {
-        guard data.count <= maximumDocumentSize else { throw SongKnowledgeError.tooLarge }
+        let page = try decodePageAndValidate(data)
+        guard page.nextCursor == nil, page.truncated != true,
+              page.total == nil || page.total == page.document.entries.count else {
+            throw SongKnowledgeError.invalidSchema("incomplete paginated document")
+        }
+        return page.document
+    }
+
+    private static func decodePageAndValidate(
+        _ data: Data,
+        maximumSize: Int = maximumDocumentSize,
+        maximumEntries: Int = 1_000
+    ) throws -> SongKnowledgePage {
+        guard data.count <= maximumSize else { throw SongKnowledgeError.tooLarge }
         let json: Any
         do { json = try JSONSerialization.jsonObject(with: data) }
         catch { throw SongKnowledgeError.invalidJSON }
         guard let root = json as? [String: Any] else { throw SongKnowledgeError.invalidSchema("root must be an object") }
-        try requireExactKeys(Set(root.keys), expected: ["schemaVersion", "version", "entries"], path: "root")
+        let rootKeys = Set(root.keys)
+        let legacyKeys: Set<String> = ["schemaVersion", "version", "entries"]
+        let paginatedKeys = legacyKeys.union(["total", "nextCursor", "truncated"])
+        guard rootKeys == legacyKeys || rootKeys == paginatedKeys else {
+            try requireExactKeys(rootKeys, expected: legacyKeys, path: "root")
+            throw SongKnowledgeError.invalidSchema("invalid pagination fields")
+        }
         guard let rawEntries = root["entries"] as? [[String: Any]] else {
             throw SongKnowledgeError.invalidSchema("entries must be an array")
         }
-        guard rawEntries.count <= 1_000 else { throw SongKnowledgeError.invalidSchema("too many entries") }
+        guard rawEntries.count <= maximumEntries else { throw SongKnowledgeError.invalidSchema("too many entries") }
         for (index, entry) in rawEntries.enumerated() {
             try requireExactKeys(
                 Set(entry.keys),
@@ -394,7 +783,12 @@ actor SongKnowledgeStore {
             guard let content = entry["content"] as? [String: Any] else {
                 throw SongKnowledgeError.invalidSchema("entries[\(index)].content must be an object")
             }
-            try requireExactKeys(Set(content.keys), expected: ["zh-Hant", "en", "ja"], path: "entries[\(index)].content")
+            let contentKeys = Set(content.keys)
+            let legacyContentKeys: Set<String> = ["zh-Hant", "en", "ja"]
+            guard contentKeys == legacyContentKeys || contentKeys == legacyContentKeys.union(["ko"]) else {
+                try requireExactKeys(contentKeys, expected: legacyContentKeys, path: "entries[\(index)].content")
+                throw SongKnowledgeError.invalidSchema("invalid localized content fields")
+            }
         }
         let document: SongKnowledgeDocument
         do { document = try JSONDecoder().decode(SongKnowledgeDocument.self, from: data) }
@@ -419,21 +813,45 @@ actor SongKnowledgeStore {
             }
             guard Self.validText(entry.content.traditionalChinese, maximum: 1_000),
                   Self.validText(entry.content.english, maximum: 1_000),
-                  Self.validText(entry.content.japanese, maximum: 1_000) else {
+                  Self.validText(entry.content.japanese, maximum: 1_000),
+                  entry.content.korean.map({ Self.validText($0, maximum: 1_000) }) ?? true else {
                 throw SongKnowledgeError.invalidSchema("invalid localized content for \(entry.id)")
             }
             guard let source = URL(string: entry.sourceURL),
-                  source.scheme == "https", source.host != nil,
+                  Self.isTrustedSourceURL(source),
                   source.user == nil, source.password == nil else {
                 throw SongKnowledgeError.invalidSourceURL(entry.sourceURL)
             }
         }
-        return document
+        var total: Int?
+        var nextCursor: String?
+        var truncated: Bool?
+        if rootKeys == paginatedKeys {
+            guard let decodedTotal = root["total"] as? Int,
+                  let decodedTruncated = root["truncated"] as? Bool,
+                  root["nextCursor"] is NSNull || root["nextCursor"] is String else {
+                throw SongKnowledgeError.invalidSchema("invalid pagination metadata")
+            }
+            total = decodedTotal
+            nextCursor = root["nextCursor"] as? String
+            truncated = decodedTruncated
+        }
+        return SongKnowledgePage(
+            document: document,
+            total: total,
+            nextCursor: nextCursor,
+            truncated: truncated
+        )
     }
 
     private static func validText(_ value: String, maximum: Int) -> Bool {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return !trimmed.isEmpty && trimmed.count <= maximum && !trimmed.unicodeScalars.contains { $0.value < 0x20 && $0 != "\n" }
+    }
+
+    private static func isTrustedSourceURL(_ url: URL) -> Bool {
+        guard let scheme = url.scheme?.lowercased(), let host = url.host?.lowercased() else { return false }
+        return scheme == "https" || (scheme == "http" && host == "127.0.0.1")
     }
 
     private static func requireExactKeys(_ actual: Set<String>, expected: Set<String>, path: String) throws {
@@ -444,8 +862,21 @@ actor SongKnowledgeStore {
         }
     }
 
-    private static func loadDocument(at url: URL?, sourceStatus: SongKnowledgeSourceStatus) -> SongKnowledgeDocument? {
-        guard let url, let data = try? Data(contentsOf: url), var document = try? decodeAndValidate(data) else { return nil }
+    private static func loadDocument(
+        at url: URL?,
+        sourceStatus: SongKnowledgeSourceStatus,
+        maximumSize: Int = maximumDocumentSize,
+        maximumEntries: Int = 1_000
+    ) -> SongKnowledgeDocument? {
+        guard let url, let data = try? Data(contentsOf: url),
+              let page = try? decodePageAndValidate(
+                data,
+                maximumSize: maximumSize,
+                maximumEntries: maximumEntries
+              ),
+              page.nextCursor == nil, page.truncated != true,
+              page.total == nil || page.total == page.document.entries.count else { return nil }
+        var document = page.document
         document.entries = document.entries.map { entry in
             var copy = entry
             copy.sourceStatus = sourceStatus
@@ -470,7 +901,24 @@ actor SongKnowledgeStore {
         try data.write(to: url, options: [.atomic])
     }
 
-    private static let defaultDownloader: Downloader = { url in
+    private static func allowsGitHubFallback(_ error: Error) -> Bool {
+        if error is URLError { return true }
+        switch error {
+        case SongKnowledgeError.tooLarge,
+             SongKnowledgeError.invalidJSON,
+             SongKnowledgeError.invalidSchema,
+             SongKnowledgeError.duplicateID,
+             SongKnowledgeError.invalidSourceURL,
+             SongKnowledgeError.invalidResponse:
+            return true
+        case let SongKnowledgeError.httpStatus(status):
+            return status == 404 || status >= 500
+        default:
+            return false
+        }
+    }
+
+    private static let defaultDownloader: Downloader = { request in
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 20
         configuration.timeoutIntervalForResource = 30
@@ -480,7 +928,7 @@ actor SongKnowledgeStore {
             delegate: SongKnowledgeNoRedirectDelegate(),
             delegateQueue: nil
         )
-        let (bytes, response) = try await session.bytes(from: url)
+        let (bytes, response) = try await session.bytes(for: request)
         if response.expectedContentLength > Int64(maximumDocumentSize) {
             throw SongKnowledgeError.tooLarge
         }

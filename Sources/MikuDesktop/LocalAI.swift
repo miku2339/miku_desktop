@@ -122,14 +122,17 @@ actor LocalAI {
     private let session: URLSession
     private let loadsLocalAPIKey: Bool
     private let songKnowledge: SongKnowledgeStore
+    private let vocaDB: VocaDBLookup
 
     init(
         configuration: AIConfiguration? = nil,
         songKnowledge: SongKnowledgeStore = .shared,
+        vocaDB: VocaDBLookup = .shared,
         session: URLSession? = nil
     ) {
         self.configuration = configuration
         self.songKnowledge = songKnowledge
+        self.vocaDB = vocaDB
         if let session {
             self.session = session
             loadsLocalAPIKey = false
@@ -152,7 +155,8 @@ actor LocalAI {
         history: [ChatMessage],
         memory: MemoryContext = .empty,
         rememberSongPreferences: Bool = false,
-        relationshipIntent: RelationshipIntent? = nil
+        relationshipIntent: RelationshipIntent? = nil,
+        music: MusicPlan? = nil
     ) async throws -> CompanionReply {
         let snapshot = await configurationSnapshot()
         let language = resolvedReplyLanguage(snapshot, text: text, history: history)
@@ -192,7 +196,12 @@ actor LocalAI {
             Self.nowInstruction(language),
             SpecialDays.instruction(now: Date(), events: memory.events, firstMet: memory.firstMet, language: language.rawValue),
             Self.diaryInstruction(memory.diary, language: language),
-            Self.songHonesty(language)
+            Self.songHonesty(language),
+            HumText.hasClips() ? Self.humInstruction(language) : "",
+            music.map { Self.musicInstruction($0, language: language) }
+                ?? (MusicRequestParser.detectPlatform(in: text.lowercased()) != nil
+                    ? Self.musicNotOpenedInstruction(language)
+                    : "")
         ]
             .filter { !$0.isEmpty }
             .joined(separator: "\n")
@@ -1126,14 +1135,76 @@ actor LocalAI {
     }
 
     /// Vocaloid producers are easy to mix up: say so rather than guess, and trust a correction.
+    /// You asked her to play something: the app opens it right after her reply.
+    private static func musicInstruction(_ plan: MusicPlan, language: ReplyLanguage) -> String {
+        let service = plan.platform.displayName
+        let title = String(plan.title.prefix(100))
+        switch language {
+        case .traditionalChinese:
+            let what: String
+            switch plan.mode {
+            case .officialVideo: what = "在 \(service) 打開《\(title)》的官方影片，會直接播放"
+            case .youtubeSearch: what = "在 \(service) 搜尋《\(title)》，對方要自己揀一個影片"
+            case .spotifySearch: what = "在 \(service) 搜尋《\(title)》，對方按一下就能播放"
+            case .appleMusicLibrary: what = "用 \(service) 播放《\(title)》；資料庫裡沒有的話就打開搜尋"
+            case .openService: what = "打開 \(service)"
+            }
+            return "對方請你播音樂。你說完這句後，App 會幫他\(what)。用一兩句自然地回應，例如說你這就去播；不要說你做不到，不要假裝自己在唱，也不要寫出歌詞。"
+        case .english:
+            let what: String
+            switch plan.mode {
+            case .officialVideo: what = "open the official video of “\(title)” on \(service), which starts playing"
+            case .youtubeSearch: what = "search \(service) for “\(title)”; they pick a video themselves"
+            case .spotifySearch: what = "search \(service) for “\(title)”; they press play"
+            case .appleMusicLibrary: what = "play “\(title)” in \(service), or open the search if it isn't in their library"
+            case .openService: what = "open \(service)"
+            }
+            return "They asked you to play music. Right after your reply the app will \(what). Answer in a sentence or two, for example that you're putting it on; don't say you can't, don't pretend to sing, and never write lyrics."
+        case .japanese:
+            let what: String
+            switch plan.mode {
+            case .officialVideo: what = "\(service) で「\(title)」の公式動画を開いて再生"
+            case .youtubeSearch: what = "\(service) で「\(title)」を検索（動画は相手が選ぶ）"
+            case .spotifySearch: what = "\(service) で「\(title)」を検索（相手が再生を押す）"
+            case .appleMusicLibrary: what = "\(service) で「\(title)」を再生（ライブラリにない場合は検索を開く）"
+            case .openService: what = "\(service) を開く"
+            }
+            return "相手に音楽をかけてと頼まれました。あなたの返事のあと、アプリが\(what)します。一言二言で自然に答えてください（今かけるね、など）。できないとは言わず、歌っているふりもせず、歌詞は書かないでください。"
+        }
+    }
+
+    /// Hum clips are there: she may hum a few notes, which the app plays as audio.
+    private static func humInstruction(_ language: ReplyLanguage) -> String {
+        switch language {
+        case .traditionalChinese:
+            return "你可以哼幾個音：想哼的時候，在回覆裡寫「啦啦啦～♪」，App 會播放你的一小段原創哼唱。只是哼一小段，不是唱歌；不要說你在唱某首現有的歌，也不要寫歌詞。對方請你唱完整的歌時，說你現在只能哼幾句。"
+        case .english:
+            return "You can hum a few notes: when you want to, write “la la la~♪” in your reply and the app plays a short original hum. It's a hum, not singing; don't say you're singing an existing song and never write lyrics. If asked to sing a whole song, say you can only hum a little for now."
+        case .japanese:
+            return "少しだけハミングできます。したいときは返事に「ららら～♪」と書くと、アプリが短いオリジナルのハミングを再生します。歌ではなくハミングです。既存の曲を歌っているとは言わず、歌詞も書かないでください。1曲歌ってと頼まれたら、今は少しハミングできるだけだと伝えてください。"
+        }
+    }
+
+    /// A music service came up but nothing is being opened: she mustn't claim she opened it.
+    private static func musicNotOpenedInstruction(_ language: ReplyLanguage) -> String {
+        switch language {
+        case .traditionalChinese:
+            return "這次 App 沒有打開任何音樂服務。不要說你已經幫對方打開、搜尋或播放；如果他想聽歌，請他直接說歌名，例如「在 YouTube 播 Tell Your World」。"
+        case .english:
+            return "The app is not opening any music service this time. Don't say you opened, searched or played anything; if they want a song, ask them to name it, e.g. “play Tell Your World on YouTube”."
+        case .japanese:
+            return "今回アプリは音楽サービスを開いていません。開いた・検索した・再生したとは言わないでください。曲を聴きたいなら、「Tell Your World を YouTube で流して」のように曲名で頼むよう伝えてください。"
+        }
+    }
+
     private static func songHonesty(_ language: ReplyLanguage) -> String {
         switch language {
         case .traditionalChinese:
-            return "談到歌曲時，除非上面有已核實資料或你記得對方告訴過你，否則不要說出作者（P主）、年份或細節；不肯定就直接說不肯定，可以請對方告訴你。對方糾正作者時，坦白說謝謝、你會記住，不要編理由。"
+            return "談到歌曲時，除非上面有已核實資料或你記得對方告訴過你，否則不要說出作者（P主）、年份或細節，也不要假裝知道或形容曲風、題材；不肯定就直接說不肯定，可以請對方告訴你。對方說明或糾正歌曲的作者、題材、風格或內容（包括說它是成人向或色情的歌）時，接受並謝謝他，說你會記住；不要反駁、否認或替歌曲辯護，也不要編理由。"
         case .english:
-            return "When a song comes up, don't name its producer, year or details unless they're in the verified facts above or the user told you before; if you're not sure, say so and ask them. When the user corrects a credit, thank them and say you'll remember it, without making up excuses."
+            return "When a song comes up, don't name its producer, year or details, pretend to know it, or describe its style or theme unless that's in the verified facts above or the user told you before; if you're not sure, say so and ask them. When the user explains or corrects a song's credit, theme, style or content (including saying it's an adult or explicit song), accept it, thank them and say you'll remember; don't argue, deny it, defend the song or make up excuses."
         case .japanese:
-            return "曲の話では、上の確認済み情報か相手から以前教わったこと以外、作者（P）や年、詳細を言わないでください。自信がなければそう言って教えてもらいましょう。作者を訂正されたら、言い訳せずお礼を言って覚えると伝えてください。"
+            return "曲の話では、上の確認済み情報か相手から以前教わったこと以外、作者（P）や年、詳細を言わず、知っているふりや曲調・テーマの説明もしないでください。自信がなければそう言って教えてもらいましょう。曲の作者、テーマ、曲調、内容（大人向け・きわどい曲だという指摘も含む）を説明・訂正されたら、受け入れてお礼を言い、覚えると伝えてください。反論、否定、曲の弁護、言い訳はしないでください。"
         }
     }
 
@@ -1717,11 +1788,21 @@ actor LocalAI {
                 "This is a small recommendation catalog. Select briefly for the request instead of reciting the whole list.",
                 "これは推薦用の小さな候補です。全件を読み上げず、依頼に合わせて短く選んでください。"
             )
+        } else if isSongQuestion(query),
+                  let title = VocaDB.askedTitle(in: current),
+                  let song = await vocaDB.song(for: title) {
+            facts.append(vocaDBReference(song, language: language))
+            addKnowledgeBoundary()
+            add(
+                "以上是 VocaDB（社群整理的資料庫）的資料。回答作者、歌手或日期時說「根據 VocaDB」，只用這些資料；不要補寫歌詞、曲風、題材或故事。",
+                "The entry above is from VocaDB, a community-maintained database. When giving the creator, singer or date, say it's according to VocaDB and use only that; don't add lyrics, style, theme or story.",
+                "上は VocaDB（有志が整理するデータベース）の情報です。作者・歌手・日付を答えるときは「VocaDB によると」と伝え、この情報だけを使い、歌詞や曲調、テーマ、物語を補わないでください。"
+            )
         } else if isSongQuestion(query) {
             add(
-                "本機核實資料沒有這首歌的作者資訊。這次必須坦白未能確認，例如「我暫時未能確認這首歌的創作者，所以不想亂講。」不要從模型記憶補上名字、年份或連結。",
-                "The locally verified facts contain no creator information for this song. In this reply, clearly say it could not be verified, for example: “I can't confirm this song's creator, so I don't want to guess.” Do not fill in a name, year, or link from model memory.",
-                "ローカルの確認済み情報には、この曲の作者情報がありません。今回は「この曲の作者は確認できないから、推測では答えたくないよ」のように、確認できないと明確に答えてください。モデルの記憶から名前、年、リンクを補わないでください。"
+                "本機核實資料裡沒有這首歌。這次必須坦白說你不熟或不確定，例如「這首歌 Miku 不太確定耶，你可以跟我說說它是怎樣的歌嗎？」不要說你知道或聽過，不要形容它的曲風、節奏、題材或內容，也不要從模型記憶補上作者、年份或連結。",
+                "This song is not in the locally verified facts. In this reply, say plainly that you don't know it well or aren't sure, for example: “I'm not sure about that one. What kind of song is it?” Don't claim to know or have heard it, don't describe its style, tempo, theme or content, and don't fill in a creator, year or link from model memory.",
+                "ローカルの確認済み情報にこの曲はありません。今回は「その曲はちょっと自信ないな。どんな曲か教えてくれる？」のように、よく知らない・自信がないと正直に答えてください。知っている・聴いたことがあるとは言わず、曲調、テンポ、テーマ、内容を説明せず、作者や年、リンクをモデルの記憶から補わないでください。"
             )
         }
 
@@ -1740,6 +1821,21 @@ actor LocalAI {
         }
 
         return facts.joined(separator: "\n")
+    }
+
+    private func vocaDBReference(_ song: VocaDBSong, language: ReplyLanguage) -> String {
+        let date = song.published ?? "-"
+        let producers = song.producers.isEmpty ? "-" : song.producers.joined(separator: ", ")
+        // A remaster or remix entry's date is not the first release.
+        let kind = song.songType == "Original" ? "" : " (VocaDB type: \(song.songType))"
+        switch language {
+        case .traditionalChinese:
+            return "[VocaDB 資料] 〈\(song.name)〉— \(song.artistString)。製作：\(producers)。發表：\(date)\(kind)。\nSource: \(song.pageURL.absoluteString)"
+        case .english:
+            return "[VocaDB entry] “\(song.name)” — \(song.artistString). Producer: \(producers). Published: \(date)\(kind).\nSource: \(song.pageURL.absoluteString)"
+        case .japanese:
+            return "[VocaDB の情報] 「\(song.name)」— \(song.artistString)。制作：\(producers)。公開：\(date)\(kind)。\nSource: \(song.pageURL.absoluteString)"
+        }
     }
 
     private func knowledgeQuery(current: String, history: [ChatMessage]) -> String {
@@ -1806,7 +1902,10 @@ actor LocalAI {
             "楽曲", "この曲", "その曲", "作曲", "作詞", "作词", "作者", "creator", "p主", "ボカロp"
         ]) { return true }
         // "Do you know ポールスター?": a quoted or katakana title with a "do you know".
-        let asks = containsAny(text, ["知道", "知唔知", "聽過", "听过", "識唔識", "知ってる", "知って", "聴いた", "do you know", "heard of"])
+        let asks = containsAny(text, [
+            "知道", "知唔知", "聽過", "听过", "識唔識", "知ってる", "知って", "聴いた", "do you know", "heard of",
+            "誰寫", "谁写", "邊個寫", "誰唱", "谁唱", "邊個唱", "who wrote", "who sang", "who made", "誰の曲", "誰が作"
+        ])
         let title = text.range(of: #"[「『〈《].+[」』〉》]|[ァ-ヶー]{3,}"#, options: .regularExpression) != nil
         return asks && title
     }

@@ -3,6 +3,7 @@
 /voice-training/
 /outputs/
 .DS_Store
+__pycache__/
 *.app/
 *.zip
 .env

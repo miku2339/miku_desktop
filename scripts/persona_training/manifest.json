@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "project": "miku-persona-v1",
+  "private_root": "~/Library/Application Support/MikuTraining",
+  "persona_document": "docs/miku-persona.md",
+  "relationship_policy": "Follow the app-provided relationship state, including an established dating state. Ordinary affection is non-sexual; preserve boundaries and independent opinions.",
+  "base_model": "Qwen/Qwen3.6-35B-A3B",
+  "base_revision": "995ad96eacd98c81ed38be0c5b274b04031597b0",
+  "persona_version": "2026.10.29.1",
+  "mac_base_model": "~/.omlx/models/Qwen3.6-35B-A3B-nvfp4",
+  "architecture": "Qwen3_5MoeForConditionalGeneration",
+  "languages": ["zh-TW", "ja", "en", "yue", "ko"],
+  "modes": ["text", "voice"],
+  "split": {"train": 85, "valid": 5, "test": 10, "seed": "miku-persona-v1"},
+  "max_tokens": 4096,
+  "target_pattern": "(?:model\\.)?language_model(?:\\.model)?\\.layers\\.(\\d+)\\.(?:self_attn\\.(?:q_proj|k_proj|v_proj|o_proj)|linear_attn\\.(?:in_proj_qkv|in_proj_z|in_proj_b|in_proj_a|out_proj))",
+  "expected_language_targets": 190,
+  "meta_memory_budget": {"source": "meta_only", "base_lower_bound_gib": 65.4, "base_lower_bound_by_precision_gib": {"bf16": 65.4, "nf4": 62.1}, "verified": false, "note": "BF16 meta model is 65.3922 GiB; NF4 leaves 32212254720 expert parameters unquantized. Neither estimate measures loading or training peak."},
+  "dgx": {"precision": "bf16", "rank": 16, "alpha": 32, "learning_rate": 0.00005, "batch_size": 1, "gradient_accumulation": 16, "probe_steps": 50, "probe_smoke_steps": 1, "probe_gradient_accumulation": 1, "probe_tokens": 512, "probe_max_seconds": 1800, "max_epochs": 2, "runtime_ram_reserve_gib": 16, "max_gpu_utilization_percent": 10, "memory_budget_file": "reports/dgx-memory-budget.json", "preparation": "frozen-bf16-no-global-fp32-cast", "min_free_disk_gib": 160},
+  "mac": {"python": "/opt/homebrew/bin/python3.12", "mlx_vlm_commit": "138d7617d39653b39a5cbc379b1b5907a4481d67", "mlx": "0.32.4", "transformers": "5.14.0", "rank": 8, "alpha": 16, "learning_rate": 0.00001, "batch_size": 1, "gradient_accumulation": 4, "last_layers": 8, "probe_steps": 20, "probe_gradient_accumulation": 1, "max_steps": 300, "probe_tokens": 512, "min_idle_seconds": 600, "min_free_ram_gib": 40, "min_free_disk_gib": 30, "max_memory_gib": 60, "heartbeat_max_age_seconds": 30},
+  "acceptance": {"heldout_cases": 250, "persona_preference_min": 0.65, "json_success_min": 0.99, "language_success_min": 0.98, "vision_regression_max": 0.05, "latency_regression_max": 0.10}
+}

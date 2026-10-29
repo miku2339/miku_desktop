@@ -64,6 +64,20 @@ class PipelineTests(unittest.TestCase):
             obs = self.observations(); obs["voice_state"]["updated_at"] = stamp
             self.assertFalse(persona.mac_gate(self.cfg, obs)["allowed"])
 
+    def test_heartbeat_updated_during_sampling_is_not_misread_as_future(self):
+        with tempfile.TemporaryDirectory() as temp, patch.dict(os.environ, {"MIKU_TRAINING_ROOT": temp}):
+            heartbeat = Path(temp) / "runtime/voice-call-state.json"
+            heartbeat.parent.mkdir()
+            heartbeat.write_text(json.dumps({"version": 1, "pid": 123, "active": False, "updated_at": 1000.5}))
+            outputs = ["AC Power", '"HIDIdleTime" = 601000000000',
+                "page size of 16384 bytes\nPages free: 3000000.\nPages inactive: 1000000.\nPages speculative: 1000000.", "1"]
+            with patch("persona.time.time", side_effect=[1000, 1001]), patch("persona.sys.platform", "darwin"), \
+                    patch("persona.subprocess.check_output", side_effect=outputs), patch("persona.os.kill"), \
+                    patch("persona.shutil.disk_usage", return_value=type("Disk", (), {"free": 80 * 2**30})()):
+                observations = persona.mac_observations(self.cfg)
+            self.assertEqual(observations["now"], 1001)
+            self.assertTrue(persona.mac_gate(self.cfg, observations)["allowed"])
+
     def test_gate_rejects_active_call_including_paused(self):
         obs = self.observations(); obs["voice_state"]["active"] = True
         self.assertIn("voice_call_active_or_unknown", persona.mac_gate(self.cfg, obs)["reasons"])

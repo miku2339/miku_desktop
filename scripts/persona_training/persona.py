@@ -193,6 +193,7 @@ def mac_observations(cfg: dict) -> dict:
         observations["voice_state_live"] = True
     except (OSError, ValueError, TypeError):
         observations["voice_state_live"] = False
+    observations["now"] = time.time()
     return observations
 
 

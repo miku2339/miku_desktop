@@ -63,6 +63,23 @@ class ExportSafetyTests(unittest.TestCase):
             with patch.object(Path, "read_text", return_value=f"MemAvailable: {100*2**20} kB\n"), patch.object(export.shutil, "disk_usage", return_value=Mock(free=29*2**30)):
                 self.assertFalse(export.export_resources("merge-hf", self.cfg, destination)["allowed"])
 
+    def test_sharded_merge_preflight_uses_its_bound_and_keeps_the_runtime_reserve(self):
+        with tempfile.TemporaryDirectory() as temp:
+            destination = Path(temp) / "new"
+            for available, preflight, allowed in [(31, True, False), (32, True, True), (18, False, True), (17, False, False)]:
+                with patch.object(Path, "read_text", return_value=f"MemAvailable: {available*2**20} kB\n"), patch.object(export.shutil, "disk_usage", return_value=Mock(free=100*2**30)):
+                    result = export.export_resources("merge-hf", self.cfg, destination, preflight,
+                        required_preflight_ram_gib=32)
+                    self.assertEqual(result["allowed"], allowed)
+
+    def test_hf_adapter_naming_a_different_base_is_refused(self):
+        with tempfile.TemporaryDirectory() as temp:
+            source = Path(temp) / "source"; model(source)
+            adapter = Path(temp) / "adapter"; adapter.mkdir()
+            write_report(adapter / "adapter_config.json", {"base_model_name_or_path": str(Path(temp) / "other")})
+            with self.assertRaisesRegex(ValueError, "exact original HF base"):
+                export.hf_merge_plan(source, adapter, self.cfg)
+
     def test_production_and_nested_destinations_never_overwritten(self):
         with tempfile.TemporaryDirectory() as temp:
             source = Path(temp) / "source"; model(source)

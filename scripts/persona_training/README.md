@@ -49,6 +49,8 @@ python export_model.py convert-mlx --model /Volumes/ModelHub/miku-persona-hf --o
 
 Mac adapter 可用 `export_model.py fuse-mac` 匯出完整 VLM。正式轉換只用 `mlx_vlm`，保留 vision、processor、chat template；不把純文字 `mlx_lm` 匯出當正式候選。目的地必須全新，不能覆蓋原模型。HF BF16 原權重放 DGX／NAS，Mac 只保留現役、一個量化候選與必要 adapter。
 
+本次 rank16／alpha32 的 HF 合併採逐分片 CPU 處理，僅修改核准的 190 個語言投影，原索引、視覺權重與處理器完整保留。開始前按實際分片與 adapter 大小計算保守 RAM 上限，另留 18 GiB；兩個常駐模型可維持執行。
+
 匯出由隔離子程序執行，主管程序全程監看資源。Mac 每秒檢查接電、閒置、無通話、正常記憶體壓力，並保留至少 30 GiB 磁碟與 16 GiB RAM（低於 18 GiB 提前停止）；條件改變會取消並清除該次新建的未驗收候選。已有候選不會自動刪除或覆蓋。只有完整 VLM 與處理器驗證成功才留下完成紀錄，品質驗收仍另行進行。
 
 切換前比較：原版、只調提示版、微調版；驗證多輪人格、五語、關係／記憶、JSON、圖片理解與實際 Voice 聽感。全程本機正式推論，未驗收前保留原模型。

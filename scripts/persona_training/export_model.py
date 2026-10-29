@@ -17,7 +17,7 @@ import threading
 import time
 import uuid
 
-from persona import config, mac_gate, mac_observations, private_root, write_report
+from persona import config, mac_gate, mac_observations, private_root, targets, write_report
 from train import local_model
 
 PENDING = ".miku-export-pending.json"
@@ -58,20 +58,30 @@ def copy_sidecars(source: Path, destination: Path) -> None:
             if item.is_file() and not target.exists(): shutil.copyfile(item, target)
 
 
-def _merge_hf(source: Path, adapter: Path, destination: Path) -> dict:
-    from peft import PeftModel
-    from transformers import AutoProcessor, Qwen3_5MoeForConditionalGeneration
+def hf_merge_plan(source: Path, adapter: Path, cfg: dict) -> tuple[dict, list[str]]:
+    from sharded_merge import plan_merge
+    folder = adapter if adapter.is_dir() else adapter.parent
+    recorded_base = json.loads((folder / "adapter_config.json").read_text()).get("base_model_name_or_path")
+    if not isinstance(recorded_base, str) or Path(recorded_base).expanduser().resolve() != source.resolve():
+        raise ValueError("Adapter must name this exact original HF base")
+    index = json.loads((source / "model.safetensors.index.json").read_text())
+    names = targets([name[:-7] for name in index["weight_map"] if name.endswith(".weight")], cfg)
+    return plan_merge(source, adapter, names), names
+
+
+def _merge_hf(source: Path, adapter: Path, destination: Path, cfg: dict) -> dict:
+    from sharded_merge import merge_shards
     import torch
-    current = json.loads((source / "config.json").read_text())
-    if current.get("quantization") or current.get("quantization_config"):
-        raise ValueError("Merge requires the original floating-point HF VLM")
-    original = Qwen3_5MoeForConditionalGeneration.from_pretrained(source, local_files_only=True, dtype=torch.bfloat16, device_map="cpu", trust_remote_code=False)
-    model = PeftModel.from_pretrained(original, adapter, local_files_only=True)
-    model = model.merge_and_unload(safe_merge=True)
-    model.save_pretrained(destination, safe_serialization=True, max_shard_size="4GB")
-    AutoProcessor.from_pretrained(source, local_files_only=True, trust_remote_code=False).save_pretrained(destination)
+    torch.set_num_threads(min(4, os.cpu_count() or 1))
+    _, names = hf_merge_plan(source, adapter, cfg)
+    stat = destination.stat()
+    token = json.loads((destination / PENDING).read_text())["token"]
+    result = merge_shards(source, adapter, destination, names,
+        owner_identity=(stat.st_dev, stat.st_ino), owner_token=token)
+    for name in ["config.json", "model.safetensors.index.json"]:
+        shutil.copyfile(source / name, destination / name)
     copy_sidecars(source, destination)
-    return {"format": "hf-bf16-full-vlm"}
+    return result
 
 
 def _convert_mlx(source: Path, destination: Path) -> dict:
@@ -107,13 +117,14 @@ def _fuse_mac(source: Path, adapter: Path, destination: Path) -> dict:
     return {"fused_language_modules": len(replacements), "format": "mlx-vlm-preserved-quantization"}
 
 
-def export_resources(operation: str, cfg: dict, destination: Path, preflight: bool = False) -> dict:
+def export_resources(operation: str, cfg: dict, destination: Path, preflight: bool = False, required_preflight_ram_gib: float | None = None) -> dict:
     disk = shutil.disk_usage(destination.parent).free / 2**30
     if operation == "merge-hf":
         memory = Path("/proc/meminfo").read_text()
         available = int(re.search(r"MemAvailable:\s+(\d+)", memory).group(1)) * 1024 / 2**30
         reasons = []
-        if available < (90 if preflight else 18): reasons.append("insufficient_ram_reserve")
+        required = required_preflight_ram_gib if required_preflight_ram_gib is not None else 90
+        if available < (max(18, required) if preflight else 18): reasons.append("insufficient_ram_reserve")
         if disk < 30: reasons.append("disk_reserve_below_30_gib")
         return {"allowed": not reasons, "reasons": reasons, "available_ram_gib": available}
     observations = mac_observations(cfg)
@@ -195,7 +206,9 @@ def guarded_export(operation: str, source: Path, adapter: Path | None, destinati
     source_gib = sum((source / name).stat().st_size for name in set(index["weight_map"].values())) / 2**30
     needed = max(90, source_gib + 34) if operation == "merge-hf" else max(55, source_gib * 1.1 + 34) if operation == "fuse-mac" else 55
     check_destination(destination, source, needed)
-    first = export_resources(operation, cfg, destination, preflight=True)
+    merge_plan = hf_merge_plan(source, adapter, cfg)[0] if operation == "merge-hf" else None
+    required_ram = merge_plan["estimated_working_set_gib"] + 18 if merge_plan else None
+    first = export_resources(operation, cfg, destination, preflight=True, required_preflight_ram_gib=required_ram)
     if not first["allowed"]: raise ValueError("Export resource gate denied: " + ", ".join(first["reasons"]))
     interpreter = Path(sys.executable) if operation == "merge-hf" else private_root(cfg) / "envs/mac/bin/python"
     if command is None and not interpreter.is_file():
@@ -203,7 +216,7 @@ def guarded_export(operation: str, source: Path, adapter: Path | None, destinati
     destination.mkdir(mode=0o700)
     stat = destination.stat(); identity = (stat.st_dev, stat.st_ino)
     token = uuid.uuid4().hex
-    plan = {"operation": operation, "source": str(source), "adapter": str(adapter.resolve()) if adapter else None, "destination": str(destination.resolve()), "parent_pid": os.getpid(), "token": token, "configuration": cfg, "memory_limit_gib": min(cfg["mac"]["max_memory_gib"], first["available_ram_gib"] - 18)}
+    plan = {"operation": operation, "source": str(source), "adapter": str(adapter.resolve()) if adapter else None, "destination": str(destination.resolve()), "parent_pid": os.getpid(), "token": token, "configuration": cfg, "merge_plan": merge_plan, "memory_limit_gib": min(cfg["mac"]["max_memory_gib"], first["available_ram_gib"] - 18)}
     child = None
     marker_written = False
     old_handlers = {}
@@ -263,7 +276,7 @@ def worker(destination: Path, token: str) -> None:
         mx.set_cache_limit(2 * 2**30)
     source = Path(plan["source"])
     adapter = Path(plan["adapter"]) if plan["adapter"] else None
-    result = {"merge-hf": lambda: _merge_hf(source, adapter, destination), "convert-mlx": lambda: _convert_mlx(source, destination), "fuse-mac": lambda: _fuse_mac(source, adapter, destination)}[plan["operation"]]()
+    result = {"merge-hf": lambda: _merge_hf(source, adapter, destination, plan["configuration"]), "convert-mlx": lambda: _convert_mlx(source, destination), "fuse-mac": lambda: _fuse_mac(source, adapter, destination)}[plan["operation"]]()
     write_report(destination / RESULT, result)
 
 

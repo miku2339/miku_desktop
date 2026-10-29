@@ -18,6 +18,7 @@ import time
 from persona import mac_gate, mac_observations, private_root, read_jsonl, targets, training_profile, write_report
 from mac_loop import ResourceMonitor, checkpoint_directory, train_resumable
 from load_watchdog import WeightLoadWatchdog, sequential_weight_loading
+from completion_tokens import COMPLETION_MASK_VERSION, mlx_completion, tokenize_completion
 
 
 def run_directory(cfg: dict, run_id: str) -> Path:
@@ -54,6 +55,7 @@ def run_fingerprint(cfg: dict, device: str, index_sha256: str, probe=False, smok
         "learning_rate": limits["learning_rate"], "targets": cfg["target_pattern"],
         "last_layers": limits.get("last_layers"), "gradient_checkpointing": True,
         "seed": 39, "rng_strategy": "microstep_seed_v1", "data_sha256": data_sha256,
+        "completion_mask_version": COMPLETION_MASK_VERSION,
         "preparation": limits.get("preparation"), "quantization": ("bf16-cpu-then-cuda-sequential" if limits.get("precision", "bf16") == "bf16" else "nf4-direct-cuda-sequential") if device == "dgx" else "existing-nvfp4",
         "mlx": limits.get("mlx"), "mlx_vlm_commit": limits.get("mlx_vlm_commit"), "transformers": limits.get("transformers")}
     return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
@@ -120,7 +122,7 @@ def train_mac(cfg: dict, args) -> dict:
             messages = row["prompt"] + row["completion"]
             count = len(processor.tokenizer.apply_chat_template(messages, tokenize=True, return_dict=False, enable_thinking=False))
             if count <= max_length:
-                prepared.append({"messages": messages})
+                prepared.append(mlx_completion(processor.tokenizer, row, max_length))
         if len(prepared) < 10:
             raise ValueError("Too few complete samples fit the configured context; increase the context explicitly")
         report["targets"] = names
@@ -130,7 +132,7 @@ def train_mac(cfg: dict, args) -> dict:
 
         profile = training_profile(cfg, "mac", args.probe, args.smoke)
         settings = VLMTrainingArgs(iters=profile["steps"], batch_size=limit["batch_size"], gradient_accumulation_steps=profile["gradient_accumulation"], max_seq_length=max_length, train_on_completions=True, grad_checkpoint=True, steps_per_report=1, steps_per_save=20, adapter_file=str(directory / "adapter/weights.safetensors"))
-        trainer = Trainer(model, settings, optimizer=optim.AdamW(learning_rate=limit["learning_rate"]), processing_class=processor, train_dataset=prepared, seed=39)
+        trainer = Trainer(model, settings, optimizer=optim.AdamW(learning_rate=limit["learning_rate"]), processing_class=processor, train_dataset=prepared, prepared=True, seed=39)
         data_digest = hashlib.sha256((private_root(cfg) / "data/export/train.jsonl").read_bytes()).hexdigest()
         index_digest = hashlib.sha256((model_path / "model.safetensors.index.json").read_bytes()).hexdigest()
         fingerprint = run_fingerprint(cfg, "mac", index_digest, args.probe, args.smoke, data_digest)
@@ -267,12 +269,17 @@ def train_dgx(cfg: dict, args) -> dict:
             for row in read_jsonl(source / f"{split}.jsonl"):
                 tokens = processor.tokenizer.apply_chat_template(row["prompt"] + row["completion"], tokenize=True, return_dict=False, enable_thinking=False)
                 if len(tokens) <= length:
-                    result.append({"prompt": row["prompt"], "completion": row["completion"]})
+                    result.append(tokenize_completion(processor.tokenizer, row, length))
             if not result: raise ValueError("No complete samples fit the selected context")
             return result
         train_rows, valid_rows = data_rows("train"), data_rows("valid")
         settings = SFTConfig(output_dir=str(directory / "adapter"), learning_rate=limits["learning_rate"], per_device_train_batch_size=limits["batch_size"], gradient_accumulation_steps=limits["probe_gradient_accumulation"] if args.probe else limits["gradient_accumulation"], max_steps=(limits["probe_smoke_steps"] if args.smoke else limits["probe_steps"]) if args.probe else -1, num_train_epochs=limits["max_epochs"], max_length=length, completion_only_loss=True, bf16=True, gradient_checkpointing=True, logging_steps=1, save_steps=1 if args.smoke else 25, save_total_limit=2, report_to="none", push_to_hub=False, seed=39, data_seed=39, eval_strategy="no" if args.smoke else "steps", eval_steps=25)
         class ResourceGuard(TrainerCallback):
+            def on_step_end(self, training_args, state, control, **kwargs):
+                if args.probe and state.global_step == 1:
+                    control.should_save = True
+                return control
+
             def on_step_begin(self, training_args, state, control, **kwargs):
                 available = int(re.search(r"MemAvailable:\s+(\d+)", Path("/proc/meminfo").read_text()).group(1)) * 1024 / 2**30
                 if available < limits["runtime_ram_reserve_gib"] or shutil.disk_usage(directory).free / 2**30 < 20:
@@ -286,9 +293,12 @@ def train_dgx(cfg: dict, args) -> dict:
         report["targets"] = target_names
         report["trainable_parameters"] = sum(p.numel() for p in model.parameters() if p.requires_grad)
         write_report(directory / "run.json", report)
-        trainer.train(resume_from_checkpoint=str(args.resume) if args.resume else None)
-        trainer.save_model(str(directory / "adapter"))
-        processor.save_pretrained(directory / "adapter")
+        report["phase"] = "training"
+        write_report(directory / "run.json", report)
+        with WeightLoadWatchdog(limits["runtime_ram_reserve_gib"] + 2, directory, phase="training"):
+            trainer.train(resume_from_checkpoint=str(args.resume) if args.resume else None)
+            trainer.save_model(str(directory / "adapter"))
+            processor.save_pretrained(directory / "adapter")
         report["status"] = "probe_complete" if args.probe else "trained_not_accepted"
         report["peak_memory_bytes"] = torch.cuda.max_memory_allocated()
         return report

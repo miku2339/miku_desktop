@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
 import signal
+import re
 import subprocess
 import time
 
@@ -27,6 +29,27 @@ def write(path: Path, value: dict) -> None:
 
 def process_start(pid: int) -> str:
     return Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[19]
+
+
+def finish_run(root: Path, run_id: str | None, code: int) -> None:
+    if not run_id or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,79}", run_id):
+        return
+    directory = root / "private/runs" / run_id
+    path = directory / "run.json"
+    if directory.is_symlink() or not path.is_file():
+        return
+    report = json.loads(path.read_text())
+    if report.get("run_id") != run_id or report.get("status") != "running":
+        return
+    steps = 0
+    for checkpoint in (directory / "adapter").glob("checkpoint-*/trainer_state.json"):
+        value = json.loads(checkpoint.read_text()).get("global_step")
+        if type(value) is int and 0 <= value <= 50:
+            steps = max(steps, value)
+    status = "timed_out" if code == 124 else "interrupted" if code < 0 else "failed"
+    report.update(status=status, external_exit_code=code, verified_checkpoint_steps=steps,
+        finished_at=datetime.now(timezone.utc).isoformat(), for_deployment=False, acceptance_passed=False)
+    write(path, report)
 
 
 def stop_child(pid: int | None, started: str | None = None) -> None:
@@ -59,7 +82,14 @@ def restore(lease_path: Path) -> dict:
             return lease
         if set(lease.get("originally_active", [])) - set(UNITS):
             raise ValueError("Unexpected service in lease")
+        terminated = lease.get("child_pid") is not None
         stop_child(lease.get("child_pid"), lease.get("child_started"))
+        if terminated:
+            try:
+                finish_run(lease_path.parent.parent, lease.get("run_id"),
+                    124 if time.time() >= lease["deadline"] else -signal.SIGTERM)
+            except (OSError, ValueError, TypeError, AttributeError) as error:
+                lease["run_receipt_error"] = type(error).__name__
         results = {}
         for unit in lease["originally_active"]:
             result = systemctl("start", unit, check=False)
@@ -94,6 +124,12 @@ def run_window(root: Path, approval_path: Path, command: list[str], dry_run: boo
         raise ValueError("Use the isolated training Python")
     if len(command) < 3 or Path(command[1]).resolve() != (root / "tools/persona_training/persona.py").resolve() or command[2] != "train-dgx" or "--probe" not in command:
         raise ValueError("This window permits only the approved DGX technical probe")
+    try:
+        run_id = command[command.index("--run-id") + 1]
+    except (ValueError, IndexError):
+        raise ValueError("A technical probe run ID is required")
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,79}", run_id):
+        raise ValueError("Invalid technical probe run ID")
     active = [unit for unit in UNITS if systemctl("is-active", unit, check=False).stdout.strip() == "active"]
     if dry_run:
         return {"would_pause": active, "max_seconds": seconds, "training_started": False}
@@ -101,7 +137,7 @@ def run_window(root: Path, approval_path: Path, command: list[str], dry_run: boo
     windows.mkdir(mode=0o700, exist_ok=True)
     lease_path = windows / f"{int(time.time())}.json"
     timer = f"miku-persona-restore-{lease_path.stem}"
-    lease = {"started_at": time.time(), "deadline": time.time() + seconds, "originally_active": active, "timer": timer, "child_pid": None}
+    lease = {"started_at": time.time(), "deadline": time.time() + seconds, "originally_active": active, "timer": timer, "child_pid": None, "run_id": run_id}
     write(lease_path, lease)
     restore_script = Path(__file__).resolve()
     subprocess.run([
@@ -119,6 +155,17 @@ def run_window(root: Path, approval_path: Path, command: list[str], dry_run: boo
             systemctl("stop", unit)
         environment = dict(os.environ)
         environment["MIKU_TRAINING_ROOT"] = str(root / "private")
+        headers = root / "toolchain/python-dev/usr/include"
+        if (headers / "python3.12/Python.h").is_file():
+            include_paths = [headers / "python3.12", headers]
+            environment["CPATH"] = os.pathsep.join([str(path) for path in include_paths]
+                + ([environment["CPATH"]] if environment.get("CPATH") else []))
+        environment["TRITON_CACHE_DIR"] = str(root / "cache/triton")
+        ptxas = Path("/usr/local/cuda/bin/ptxas")
+        if ptxas.is_file():
+            version = subprocess.run([str(ptxas), "--version"], capture_output=True, text=True, check=True)
+            if "release 13." in version.stdout:
+                environment["TRITON_PTXAS_PATH"] = str(ptxas)
         with (root / "logs/technical-probe.log").open("ab") as log:
             child = subprocess.Popen(command, env=environment, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
         lease["child_pid"] = child.pid
@@ -133,6 +180,7 @@ def run_window(root: Path, approval_path: Path, command: list[str], dry_run: boo
         lease["child_exit"] = code
         lease["child_pid"] = None
         write(lease_path, lease)
+        finish_run(root, run_id, code)
     finally:
         if child is not None and child.poll() is None:
             stop_child(child.pid, lease.get("child_started"))

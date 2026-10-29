@@ -34,7 +34,8 @@ def write(path: Path, value: dict):
 
 
 def watch(pid: int, identity: str, reserve: float, status: Path, stop_report: Path,
-          *, memory=available_memory, birth=process_start, kill=os.kill, sleep=time.sleep) -> None:
+          *, phase="weight_loading", memory=available_memory, birth=process_start, kill=os.kill, sleep=time.sleep) -> None:
+    if phase not in ["weight_loading", "training"]: raise ValueError("Invalid resource guard phase")
     def owned():
         try: return birth(pid) == identity
         except (OSError, ValueError, IndexError): return False
@@ -43,13 +44,13 @@ def watch(pid: int, identity: str, reserve: float, status: Path, stop_report: Pa
     while owned():
         try:
             available = memory()
-            reason = "available_memory_below_reserve_during_weight_loading" if available < reserve else None
+            reason = "available_memory_below_reserve_during_" + phase if available < reserve else None
         except (OSError, ValueError):
-            available, reason = None, "memory_observation_failed_during_weight_loading"
+            available, reason = None, "memory_observation_failed_during_" + phase
         if reason:
             report = {"reason": reason, "available_gib": available, "reserve_gib": reserve,
-                "training_pid": pid, "training_start": identity, "phase": "weight_loading",
-                "checkpoint_exists": False, "action": "terminate_only_owned_training_process",
+                "training_pid": pid, "training_start": identity, "phase": phase,
+                "checkpoint_exists": any((stop_report.parent / "adapter").glob("checkpoint-*/trainer_state.json")), "action": "terminate_only_owned_training_process",
                 "timestamp": datetime.now(timezone.utc).isoformat()}
             try: write(stop_report, report)
             except OSError: pass
@@ -68,20 +69,22 @@ def watch(pid: int, identity: str, reserve: float, status: Path, stop_report: Pa
 
 
 class WeightLoadWatchdog:
-    def __init__(self, reserve: float, directory: Path):
-        self.reserve, self.directory = reserve, directory
+    def __init__(self, reserve: float, directory: Path, phase="weight_loading"):
+        if phase not in ["weight_loading", "training"]: raise ValueError("Invalid resource guard phase")
+        self.reserve, self.directory, self.phase = reserve, directory, phase
         self.child = None
 
     def __enter__(self):
         if available_memory() < self.reserve:
             raise RuntimeError("Weight loading memory reserve is unavailable")
         pid = os.getpid()
-        status = self.directory / "load-watchdog.json"
+        prefix = "load" if self.phase == "weight_loading" else "training"
+        status = self.directory / (prefix + "-watchdog.json")
         status.unlink(missing_ok=True)
-        stop_report = self.directory / "load-resource-stop.json"
+        stop_report = self.directory / (prefix + "-resource-stop.json")
         self.child = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "--pid", str(pid),
             "--identity", process_start(pid), "--reserve", str(self.reserve), "--status", str(status),
-            "--stop-report", str(stop_report)], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+            "--stop-report", str(stop_report), "--phase", self.phase], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL, start_new_session=True)
         deadline = time.monotonic() + 5
         try:
@@ -125,7 +128,8 @@ if __name__ == "__main__":
     parser.add_argument("--reserve", type=float, required=True)
     parser.add_argument("--status", type=Path, required=True)
     parser.add_argument("--stop-report", type=Path, required=True)
+    parser.add_argument("--phase", choices=["weight_loading", "training"], default="weight_loading")
     args = parser.parse_args()
     if args.pid <= 1 or args.pid != os.getppid() or args.reserve < 16:
         parser.error("Only the direct parent training process may be watched, with at least 16 GiB reserve")
-    watch(args.pid, args.identity, args.reserve, args.status, args.stop_report)
+    watch(args.pid, args.identity, args.reserve, args.status, args.stop_report, phase=args.phase)

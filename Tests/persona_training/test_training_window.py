@@ -21,7 +21,7 @@ class TrainingWindowTests(unittest.TestCase):
         self.root = Path(self.directory.name)
         self.approval = self.root / "approval.json"
         self.value = {"approved_by": "user", "units": list(window.UNITS), "max_seconds": 1800, "expires_at": time.time() + 300}
-        self.command = [str(self.root / ".venv/bin/python"), str(self.root / "tools/persona_training/persona.py"), "train-dgx", "--probe"]
+        self.command = [str(self.root / ".venv/bin/python"), str(self.root / "tools/persona_training/persona.py"), "train-dgx", "--probe", "--run-id", "probe-test"]
 
     def save(self):
         self.approval.write_text(json.dumps(self.value))
@@ -45,7 +45,35 @@ class TrainingWindowTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             window.run_window(self.root, self.approval, ["/bin/sh", "other"], True)
         with self.assertRaises(ValueError):
-            window.run_window(self.root, self.approval, self.command[:-1], True)
+            window.run_window(self.root, self.approval, self.command[:3], True)
+
+    def test_timeout_records_a_terminal_state_and_verified_checkpoint(self):
+        path = self.root / "private/runs/probe-test/run.json"
+        path.parent.mkdir(parents=True)
+        path.write_text(json.dumps({"run_id": "probe-test", "status": "running", "phase": "weight_loading"}))
+        window.finish_run(self.root, "probe-test", 124)
+        report = json.loads(path.read_text())
+        self.assertEqual(report["status"], "timed_out")
+        self.assertEqual(report["verified_checkpoint_steps"], 0)
+        checkpoint = path.parent / "adapter/checkpoint-1/trainer_state.json"
+        checkpoint.parent.mkdir(parents=True)
+        checkpoint.write_text('{"global_step":1}')
+        path.write_text(json.dumps({"run_id": "probe-test", "status": "running"}))
+        window.finish_run(self.root, "probe-test", -15)
+        report = json.loads(path.read_text())
+        self.assertEqual(report["status"], "interrupted")
+        self.assertEqual(report["verified_checkpoint_steps"], 1)
+        self.assertFalse(report["acceptance_passed"])
+
+    def test_terminal_results_are_never_overwritten_or_invented(self):
+        path = self.root / "private/runs/probe-test/run.json"
+        path.parent.mkdir(parents=True)
+        expected = {"run_id": "probe-test", "status": "probe_complete"}
+        path.write_text(json.dumps(expected))
+        window.finish_run(self.root, "probe-test", 0)
+        self.assertEqual(json.loads(path.read_text()), expected)
+        window.finish_run(self.root, "../other", 124)
+        self.assertFalse((self.root / "private/runs/other").exists())
 
     def test_an_approval_can_only_be_consumed_once(self):
         self.save()
@@ -85,11 +113,16 @@ class TrainingWindowTests(unittest.TestCase):
     def test_launch_failure_restores_both_services(self):
         self.save()
         (self.root / "logs").mkdir()
+        headers = self.root / "toolchain/python-dev/usr/include/python3.12"
+        headers.mkdir(parents=True)
+        (headers / "Python.h").write_text("")
         with patch.object(window, "systemctl", return_value=subprocess.CompletedProcess([], 0, "active\n", "")) as service, \
                 patch.object(window.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)), \
-                patch.object(window.subprocess, "Popen", side_effect=OSError("launch failed")), \
+                patch.object(window.subprocess, "Popen", side_effect=OSError("launch failed")) as child, \
                 self.assertRaises(OSError):
             window.run_window(self.root, self.approval, self.command, False)
+        self.assertIn(str(headers.resolve()), child.call_args.kwargs["env"]["CPATH"])
+        self.assertEqual(child.call_args.kwargs["env"]["TRITON_CACHE_DIR"], str((self.root / "cache/triton").resolve()))
         for unit in window.UNITS:
             self.assertIn(("stop", unit), [c.args for c in service.call_args_list])
             self.assertIn(("start", unit), [c.args for c in service.call_args_list])
@@ -109,6 +142,39 @@ class TrainingWindowTests(unittest.TestCase):
         self.assertIn("restored_at", result)
         self.assertEqual(service.call_args_list[0].args, ("start", window.UNITS[0]))
         self.assertTrue(all(window.UNITS[1] not in c.args for c in service.call_args_list))
+
+    def test_damaged_run_or_checkpoint_receipt_never_blocks_restoration(self):
+        directory = self.root / "private/runs/probe-test"
+        directory.mkdir(parents=True)
+        run_path = directory / "run.json"
+        checkpoint = directory / "adapter/checkpoint-1/trainer_state.json"
+        checkpoint.parent.mkdir(parents=True)
+        lease_path = self.root / "windows/lease.json"
+        lease_path.parent.mkdir()
+        for run, state in [("{", "{}"), ('{"run_id":"probe-test","status":"running"}', "{")]:
+            with self.subTest(run=run, checkpoint=state):
+                run_path.write_text(run)
+                checkpoint.write_text(state)
+                lease_path.write_text(json.dumps({"originally_active": list(window.UNITS),
+                    "child_pid": 12345, "run_id": "probe-test", "deadline": 0}))
+                with patch.object(window, "stop_child"), patch.object(window, "systemctl",
+                        return_value=subprocess.CompletedProcess([], 0, "active\n", "")) as service:
+                    result = window.restore(lease_path)
+                self.assertIn("restored_at", result)
+                self.assertEqual(result["run_receipt_error"], "JSONDecodeError")
+                for unit in window.UNITS:
+                    self.assertIn(("start", unit), [call.args for call in service.call_args_list])
+
+    def test_receipt_write_error_never_blocks_restoration(self):
+        lease = self.root / "lease.json"
+        lease.write_text(json.dumps({"originally_active": list(window.UNITS),
+            "child_pid": 12345, "run_id": "probe-test", "deadline": 0}))
+        with patch.object(window, "stop_child"), \
+                patch.object(window, "finish_run", side_effect=OSError("receipt is not writable")), \
+                patch.object(window, "systemctl", return_value=subprocess.CompletedProcess([], 0, "active\n", "")):
+            result = window.restore(lease)
+        self.assertIn("restored_at", result)
+        self.assertEqual(result["run_receipt_error"], "OSError")
 
     def test_unexpected_service_is_never_started(self):
         lease = self.root / "lease.json"

@@ -16,6 +16,22 @@ from train import dgx_budget_gate, load_dgx_weights, run_fingerprint
 
 
 class WatchdogTests(unittest.TestCase):
+    def test_training_reserve_guard_reports_training_phase_and_saved_checkpoint(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            checkpoint = root / "adapter/checkpoint-1/trainer_state.json"
+            checkpoint.parent.mkdir(parents=True)
+            checkpoint.write_text('{"global_step":1}')
+            identities = iter(["owned", "owned", "owned", "gone"])
+            signals = []
+            watch(123, "owned", 18, root / "ready.json", root / "stop.json", phase="training",
+                memory=lambda: 17, birth=lambda pid: next(identities, "gone"),
+                kill=lambda pid, sig: signals.append((pid, sig)), sleep=lambda _: None)
+            report = json.loads((root / "stop.json").read_text())
+            self.assertEqual(report["phase"], "training")
+            self.assertTrue(report["checkpoint_exists"])
+            self.assertEqual(signals, [(123, signal.SIGTERM)])
+
     def observe(self, memory, ignores_term=False, replace_identity=False, fail_report=False):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -111,6 +127,13 @@ class WatchdogTests(unittest.TestCase):
 
 
 class PrecisionTests(unittest.TestCase):
+    def test_resume_fingerprint_rejects_a_different_completion_mask(self):
+        cfg = persona.config()
+        current = run_fingerprint(cfg, "mac", "index", True, data_sha256="same-data")
+        with patch("train.COMPLETION_MASK_VERSION", "legacy_prefix_length"):
+            legacy = run_fingerprint(cfg, "mac", "index", True, data_sha256="same-data")
+        self.assertNotEqual(current, legacy)
+
     def test_tiny_probe_refuses_low_ram_or_inactive_services_before_torch_import(self):
         import builtins
         original = builtins.__import__

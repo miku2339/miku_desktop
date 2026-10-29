@@ -1,6 +1,10 @@
 """Opt-in CPU checks for adapter math; never load model weights."""
 import os
+from pathlib import Path
+import sys
 import unittest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts/persona_training"))
 
 
 @unittest.skipUnless(os.environ.get("MIKU_TEST_MLX") == "1", "Use the isolated Mac environment for CPU operator checks")
@@ -20,6 +24,28 @@ class MLXOperatorTests(unittest.TestCase):
         before, after = adapter(x), adapter.fuse()(x)
         mx.eval(before, after)
         self.assertTrue(mx.allclose(before, after).item())
+
+    def test_prepared_vlm_batches_supervise_only_final_reply_and_eos(self):
+        import mlx.core as mx
+        from types import SimpleNamespace
+        from mlx_vlm.trainer import Trainer, VLMTrainingArgs
+        from completion_tokens import mlx_completion
+        from test_completion_tokens import ExactTokenizer, row
+
+        tokenizer = ExactTokenizer()
+        rows = [row("你好。"), row("A longer reply with different padding.")]
+        prepared = [mlx_completion(tokenizer, item, 1024) for item in rows]
+        args = VLMTrainingArgs(iters=1, batch_size=2, max_seq_length=1024)
+        trainer = Trainer(SimpleNamespace(config={}), args, train_dataset=prepared,
+            processing_class=SimpleNamespace(tokenizer=tokenizer), prepared=True)
+        batch = next(iter(trainer.task.batches(trainer.train_dataset, train=False)))
+        self.assertIs(trainer.train_dataset, prepared)
+        actual = []
+        for ids, mask in zip(batch["input_ids"].tolist(), batch["completion_mask"].tolist()):
+            actual.append(tokenizer.decode([token for token, active in zip(ids, mask) if active]))
+        expected = [item["completion"][0]["content"] + tokenizer.eos_token for item in rows]
+        self.assertCountEqual(actual, expected)
+        self.assertTrue(mx.all(batch["completion_mask"] <= batch["attention_mask"]).item())
 
     def test_nvfp4_frozen_base_passes_finite_input_gradient(self):
         import mlx.core as mx

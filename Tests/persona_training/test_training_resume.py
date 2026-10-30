@@ -11,7 +11,7 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts/persona_training"))
 import persona
-from mac_loop import ResourceMonitor, TrainingPaused, checkpoint_directory, train_resumable
+from mac_loop import ResourceMonitor, TrainingPaused, checkpoint_directory, train_resumable, verify_restored_arrays
 from train import dgx_budget_gate, run_fingerprint
 
 
@@ -180,6 +180,37 @@ class ResumeCPUTests(unittest.TestCase):
             trainer, _ = self.trainer()
             train_resumable(trainer, Path(temp), "same", lambda: None, save_every=1)
             self.assertEqual(len(list(Path(temp).glob("state-*"))), 2)
+
+    def test_complete_checkpoint_reloads_fresh_model_and_optimizer_without_new_updates(self):
+        import mlx.core as mx
+        from mlx.utils import tree_flatten
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            original, _ = self.trainer()
+            complete = train_resumable(original, root / "source", "same", lambda: None)
+            source = checkpoint_directory(root / "source")
+            saved = {str(p.relative_to(source)): p.read_bytes() for p in source.rglob("*") if p.is_file()}
+            fresh, calls = self.trainer()
+            fresh.model.weight = mx.full_like(fresh.model.weight, 100)
+            result = train_resumable(fresh, root / "reloaded", "same", lambda: None, resume=source)
+            self.assertEqual(calls, [])
+            self.assertEqual(result["completed_microsteps"], complete["completed_microsteps"])
+            self.assertEqual(result["resume_verification"]["completed_microsteps"], 7)
+            self.assertTrue(result["resume_verification"]["all_finite"])
+            self.assertGreater(result["resume_verification"]["trainable_tensors_equal"], 0)
+            self.assertGreater(result["resume_verification"]["optimizer_tensors_equal"], 0)
+            for (_, expected), (_, actual) in zip(tree_flatten(original.model.parameters()), tree_flatten(fresh.model.parameters())):
+                self.assertTrue(mx.array_equal(expected, actual).item())
+            for (_, expected), (_, actual) in zip(tree_flatten(original.optimizer.state), tree_flatten(fresh.optimizer.state)):
+                self.assertTrue(mx.array_equal(expected, actual).item())
+            self.assertEqual(saved, {str(p.relative_to(source)): p.read_bytes() for p in source.rglob("*") if p.is_file()})
+
+    def test_restore_comparison_rejects_changed_or_nonfinite_tensors(self):
+        import mlx.core as mx
+        expected = {"adapter": mx.array([1.0, 2.0])}
+        for actual in [{"other": expected["adapter"]}, {"adapter": mx.array([1.0])},
+            {"adapter": mx.array([1.0, 3.0])}, {"adapter": mx.array([1.0, float("nan")])}]:
+            with self.assertRaises(ValueError): verify_restored_arrays(actual, expected)
 
 
 if __name__ == "__main__": unittest.main()

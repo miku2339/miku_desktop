@@ -13,6 +13,7 @@ import sys
 import time
 
 from persona import config, mac_gate, mac_observations, private_root, write_report
+from mac_loop import checkpoint_directory
 
 
 def stop_child(child, deadline: float) -> int:
@@ -43,8 +44,14 @@ def run_child(command: list[str], log, deadline: float) -> tuple[int, bool]:
             child.wait()
 
 
-def run(cfg: dict, hours: float) -> dict:
+def run(cfg: dict, hours: float, resume: Path | None = None) -> dict:
     root = private_root(cfg)
+    checkpoint = None
+    if resume:
+        source = checkpoint_directory(resume)
+        if not source.is_relative_to((root / "runs").resolve()):
+            raise ValueError("Initial checkpoint must belong to this private training root")
+        checkpoint = str(source)
     runtime = root / "runtime"
     runtime.mkdir(mode=0o700, parents=True, exist_ok=True)
     status_path = runtime / "mac-probe-queue.json"
@@ -52,7 +59,6 @@ def run(cfg: dict, hours: float) -> dict:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         deadline = time.time() + hours * 3600
         hard_deadline = time.monotonic() + hours * 3600
-        checkpoint = None
         attempt = 0
         last_reasons = None
         while time.monotonic() < hard_deadline:
@@ -110,9 +116,10 @@ if __name__ == "__main__":
     signal.signal(signal.SIGTERM, cancel_queue)
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--hours", type=float, default=6)
+    parser.add_argument("--resume", type=Path)
     args = parser.parse_args()
     if not 0 < args.hours <= 6:
         parser.error("The technical-probe queue is limited to six hours")
     cfg = config()
     (private_root(cfg) / "logs").mkdir(mode=0o700, parents=True, exist_ok=True)
-    print(json.dumps(run(cfg, args.hours)))
+    print(json.dumps(run(cfg, args.hours, args.resume)))

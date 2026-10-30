@@ -17,10 +17,14 @@ from train import dgx_gate, run_fingerprint
 
 
 class IdleSchedulerTests(unittest.TestCase):
-    def run_queue(self, gates, outcomes, hours=1):
+    def run_queue(self, gates, outcomes, hours=1, resume=False):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             (root / "logs").mkdir()
+            source = root / "runs/original/checkpoints/state-final"
+            if resume:
+                source.mkdir(parents=True)
+                (source / "checkpoint.json").write_text('{"completed_microsteps":20}')
             clock, commands, statuses = [1000.0], [], []
             self.processes, self.signals = [], []
             values = iter(gates)
@@ -71,7 +75,9 @@ class IdleSchedulerTests(unittest.TestCase):
                  patch("run_when_idle.subprocess.Popen", side_effect=execute), \
                  patch("run_when_idle.os.killpg", side_effect=lambda pid, number: self.signals.append((pid, number))), \
                  patch("run_when_idle.write_report", side_effect=report):
-                result = run_when_idle.run(persona.config(), hours)
+                result = run_when_idle.run(persona.config(), hours, source if resume else None)
+            if resume:
+                self.assertEqual((source / "checkpoint.json").read_text(), '{"completed_microsteps":20}')
             return result, commands, statuses
 
     def test_waits_without_starting_a_model_until_all_gates_allow(self):
@@ -97,6 +103,31 @@ class IdleSchedulerTests(unittest.TestCase):
         self.assertTrue(checkpoint.endswith("/checkpoint"))
         waiting = next(s for s in statuses if s["status"] == "waiting")
         self.assertEqual(waiting["checkpoint"], checkpoint)
+
+    def test_explicit_checkpoint_waits_for_gates_and_is_passed_to_first_probe(self):
+        reasons = ["not_on_ac_power", "user_not_idle_10_minutes", "voice_call_active",
+            "memory_pressure_not_normal", "insufficient_available_ram", "insufficient_free_disk"]
+        gates = [{"allowed": False, "reasons": [reason]} for reason in reasons]
+        result, commands, statuses = self.run_queue(gates + [{"allowed": True, "reasons": []}],
+            [("probe_complete", 0)], resume=True)
+        self.assertEqual(result["status"], "probe_complete")
+        self.assertEqual(len(commands), 1)
+        self.assertEqual([status["reasons"][0] for status in statuses if status["status"] == "waiting"], reasons)
+        checkpoint = commands[0][commands[0].index("--resume") + 1]
+        self.assertTrue(checkpoint.endswith("/runs/original/checkpoints/state-final"))
+        self.assertIn("--probe", commands[0])
+
+    def test_initial_checkpoint_outside_private_runs_is_rejected_before_loading(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "checkpoint.json").write_text("{}")
+            with patch.dict(os.environ, {"MIKU_TRAINING_ROOT": temp}), \
+                 patch("run_when_idle.mac_observations") as observe, \
+                 patch("run_when_idle.subprocess.Popen") as start:
+                with self.assertRaisesRegex(ValueError, "private training root"):
+                    run_when_idle.run(persona.config(), 1, root)
+                observe.assert_not_called()
+                start.assert_not_called()
 
     def test_failed_child_is_not_retried_or_reported_as_complete(self):
         for status, code in [("probe_complete", 1), ("failed", 0), ("trained_not_accepted", 0)]:

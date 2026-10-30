@@ -97,6 +97,25 @@ def _step_seed(seed, iteration):
     return int.from_bytes(hashlib.sha256(f"{seed}:{iteration}".encode()).digest()[:4], "big")
 
 
+def verify_restored_arrays(actual, expected):
+    import mlx.core as mx
+    from mlx.utils import tree_flatten
+
+    actual = dict(tree_flatten(actual))
+    expected = dict(tree_flatten(expected))
+    if actual.keys() != expected.keys():
+        raise ValueError("Restored checkpoint tensor names do not match")
+    for name in expected:
+        left, right = actual[name], expected[name]
+        if left.shape != right.shape or left.dtype != right.dtype:
+            raise ValueError(f"Restored checkpoint tensor shape or dtype does not match: {name}")
+        if not bool(mx.all(mx.isfinite(left)).item()) or not bool(mx.all(mx.isfinite(right)).item()):
+            raise ValueError(f"Restored checkpoint tensor is not finite: {name}")
+        if not bool(mx.array_equal(left, right).item()):
+            raise ValueError(f"Restored checkpoint tensor differs: {name}")
+    return len(expected)
+
+
 def train_resumable(trainer, destination: Path, fingerprint: str, guard, *, resume=None, seed=39, save_every=20):
     import mlx.core as mx
     import mlx.nn as nn
@@ -115,6 +134,7 @@ def train_resumable(trainer, destination: Path, fingerprint: str, guard, *, resu
     np.random.seed(seed)
     completed, updates, gradients = 0, 0, None
     restored_rng = None
+    restore = {}
     if resume:
         source = checkpoint_directory(resume)
         saved = json.loads((source / "checkpoint.json").read_text())
@@ -126,6 +146,13 @@ def train_resumable(trainer, destination: Path, fingerprint: str, guard, *, resu
         model.load_weights(str(source / "adapter/weights.safetensors"), strict=False)
         state = _unpack(saved["state"], mx.load(str(source / "state.safetensors")))
         optimizer.state, gradients = state["optimizer"], state["gradients"]
+        from mlx.utils import tree_unflatten
+        adapter = mx.load(str(source / "adapter/weights.safetensors"))
+        restore = {"resumed_from": str(source), "resume_verification": {
+            "trainable_tensors_equal": verify_restored_arrays(model.trainable_parameters(), tree_unflatten(list(adapter.items()))),
+            "optimizer_tensors_equal": verify_restored_arrays(optimizer.state, state["optimizer"]),
+            "all_finite": True, "completed_microsteps": completed, "optimizer_steps": updates}}
+        del adapter
         restored_rng = saved["rng"]
         if restored_rng.get("mlx") != {"strategy": "microstep_seed_v1", "seed": seed, "next_microstep": completed + 1}:
             raise ValueError("Invalid MLX RNG checkpoint")
@@ -137,7 +164,7 @@ def train_resumable(trainer, destination: Path, fingerprint: str, guard, *, resu
             guard()
         except TrainingPaused as error:
             return {"status": "paused", "reason": str(error), "completed_microsteps": completed,
-                "remaining_microsteps": args.iters - completed, "checkpoint": str(source)}
+                "remaining_microsteps": args.iters - completed, "checkpoint": str(source), **restore}
         next(iterator)
     if restored_rng:
         random.setstate(_unpack(restored_rng["python"], {}))
@@ -211,8 +238,8 @@ def train_resumable(trainer, destination: Path, fingerprint: str, guard, *, resu
             guard()
             if completed % save_every == 0: save("running")
         final = save("complete")
-        return {"status": "complete", "completed_microsteps": completed, "remaining_microsteps": 0, "checkpoint": str(final)}
+        return {"status": "complete", "completed_microsteps": completed, "remaining_microsteps": 0, "checkpoint": str(final), **restore}
     except TrainingPaused as error:
         final = save("paused")
         return {"status": "paused", "reason": str(error) or "interrupted", "completed_microsteps": completed,
-            "remaining_microsteps": args.iters - completed, "checkpoint": str(final)}
+            "remaining_microsteps": args.iters - completed, "checkpoint": str(final), **restore}

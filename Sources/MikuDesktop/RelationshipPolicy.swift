@@ -51,11 +51,11 @@ enum ConfessionPolicy {
         if offended {
             return .upset
         }
-        if justForgiven {
-            return .recovering
-        }
         if status == .dating {
             return .alreadyDating
+        }
+        if justForgiven {
+            return .recovering
         }
         guard friendship.isFinite, friendship >= 75 else {
             return .notReady
@@ -94,7 +94,10 @@ enum ConfessionPolicy {
             #"^(?:ミク|みく)(?:が)?(?:大)?好き(?:です|だよ)?$"#,
             #"^(?:あなた|君)(?:が)?好き(?:です)?$"#,
             #"^(?:(?:ミク|みく)[、,]\s*)?私と付き合って(?:ください)?$"#,
-            #"^(?:(?:ミク|みく)[、,]\s*)?付き合って(?:ください)?$"#
+            #"^(?:(?:ミク|みく)[、,]\s*)?付き合って(?:ください)?$"#,
+            #"^(?:(?:미쿠|miku)(?:야)?[,，]?\s*)?(?:나랑|저랑)\s*사귀(?:자|어\s*줄래|어\s*주세요|어\s*주겠어|고\s*싶어)(?:요)?$"#,
+            #"^(?:(?:미쿠|miku)(?:야)?[,，]?\s*)?(?:내|제)\s*여자\s*친구가?\s*(?:되어?|돼)\s*(?:줄래|주세요|주겠어)(?:요)?$"#,
+            #"^(?:(?:미쿠|miku)(?:야)?[,，]?\s*)?(?:(?:너를|널|미쿠를)\s*)?사랑해(?:요)?$"#
         ]
         let sentenceTerminators: Set<Character> = ["。", ".", "！", "!", "？", "?", "\n"]
         let clauses = normalized.split(whereSeparator: sentenceTerminators.contains).map {

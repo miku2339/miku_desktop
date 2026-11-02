@@ -147,6 +147,19 @@ private actor RoutedKnowledgeDownloader {
     }
 }
 
+private actor DelayedOnlineDownloader {
+    let data: Data
+    private(set) var started = false
+
+    init(data: Data) { self.data = data }
+
+    func download(_ request: URLRequest) async -> (Data, URLResponse) {
+        started = true
+        try? await Task.sleep(nanoseconds: 200_000_000)
+        return (data, HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!)
+    }
+}
+
 @main
 struct SongKnowledgeTests {
     private static var checks = 0
@@ -216,6 +229,152 @@ struct SongKnowledgeTests {
             try operation()
             failures.append("\(message): did not throw")
         } catch {}
+    }
+
+    static func onlineData(items: [[String: Any]]) -> Data {
+        try! JSONSerialization.data(withJSONObject: ["version": 1, "items": items])
+    }
+
+    static func onlineItem(slug: String = "new-online-song", title: String = "New Online Song") -> [String: Any] {
+        [
+            "slug": slug, "type": "song", "title": title, "originalTitle": "新しい曲",
+            "summary": "Source summary", "content": "Source factual content",
+            "facts": [["label": "Producer", "value": "Source Producer"]],
+            "sources": [["label": "VocaDB", "url": "https://vocadb.net/S/1234"]],
+            "url": "https://mikuwiki.qimake.com/wiki/\(slug)?lang=en",
+        ]
+    }
+
+    static func koreanSearchChecks() async {
+        let fallback = SongKnowledgeText(traditionalChinese: "中文描述", english: "English description", japanese: "日本語の説明")
+        expect(fallback.value(for: "ko") == "English description", "missing Korean content falls back to English")
+        let empty = SongKnowledgeText(traditionalChinese: "中文描述", english: "English description", japanese: "日本語の説明", korean: "")
+        expect(empty.value(for: "ko") == "English description", "empty Korean content falls back to English")
+        let translated = SongKnowledgeText(traditionalChinese: "中文描述", english: "English description", japanese: "日本語の説明", korean: "한국어 설명")
+        expect(translated.value(for: "ko") == "한국어 설명", "available Korean content is retained")
+        expect(fallback.value(for: "zh-Hant") == "中文描述", "Korean fallback keeps existing Chinese content unchanged")
+
+        let folder = temporaryFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let fixture = folder.appendingPathComponent("bundled.json")
+        let source = document(version: "korean-local", entries: [
+            entry(id: "song.korean-description", title: "Example Song", korean: "청록빛 선율에 관한 노래 설명")
+        ])
+        try! data(source).write(to: fixture)
+        let fake = FakeKnowledgeDownloader(data: onlineData(items: [onlineItem()]))
+        let store = SongKnowledgeStore(
+            applicationSupportDirectory: folder, bundledURL: fixture,
+            downloader: { try await fake.download($0) }, apiKeyLoader: { "aimcp_test_korean_search" }
+        )
+        do {
+            let result = try await store.search(matching: "청록빛 선율", language: "ko")
+            expect(result.entries.map(\.id) == ["song.korean-description"], "Korean description can be searched offline")
+            expect(!result.searchedOnline, "Korean description match stays offline")
+            expect(await fake.calls == 0, "Korean local description search never calls the downloader")
+        } catch {
+            failures.append("Korean local description search failed: \(error)")
+        }
+    }
+
+    static func onlineSearchChecks(base: SongKnowledgeDocument, apiKey: String) async {
+        let folder = temporaryFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let fixture = folder.appendingPathComponent("bundled.json")
+        try! data(base).write(to: fixture)
+        let fake = FakeKnowledgeDownloader(data: onlineData(items: [onlineItem()]))
+        let store = SongKnowledgeStore(
+            applicationSupportDirectory: folder, bundledURL: fixture,
+            downloader: { try await fake.download($0) }, apiKeyLoader: { apiKey }
+        )
+        do {
+            let local = try await store.search(matching: "Melt", language: "en")
+            expect(!local.searchedOnline && !local.entries.isEmpty, "search uses offline entries before AIMCP")
+            expect(await fake.calls == 0, "local search sends no network request")
+            let before = await store.allEntries()
+            let online = try await store.search(matching: "New Online Song", language: "zh-Hant")
+            expect(online.searchedOnline && online.entries.count == 1, "a missing offline song is queried online")
+            expect(online.entries.first?.id == "song.new-online-song", "online IDs match the snapshot namespace")
+            expect(online.entries.first?.sourceStatus == .online, "online results have distinct provenance")
+            expect(online.entries.first?.creators == ["Source Producer"], "online credits come only from supplied facts")
+            expect(online.entries.first?.sourceURL == "https://mikuwiki.qimake.com/wiki/new-online-song?lang=en", "online results retain the canonical Wiki URL")
+            expect(online.sources["song.new-online-song"]?.first?.url == "https://vocadb.net/S/1234", "online results retain original source links")
+            expect(await store.allEntries() == before, "online search does not replace or grow the offline catalog")
+            let request = await fake.requests.first!
+            let query = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)!.queryItems!
+            expect(request.url?.scheme == "https" && request.url?.host == "mikuwiki.qimake.com" && request.url?.path == "/api/v1/knowledge", "online lookup is confined to the fixed Wiki HTTPS endpoint")
+            expect(query == [URLQueryItem(name: "q", value: "New Online Song"), URLQueryItem(name: "type", value: "song"), URLQueryItem(name: "lang", value: "zh-TW"), URLQueryItem(name: "limit", value: "5")], "online query contains only the requested title, type, language and bound")
+            expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer \(apiKey)" && !request.url!.absoluteString.contains(apiKey), "online key is sent only in Authorization")
+            expect(request.httpShouldHandleCookies == false && request.timeoutInterval == 8 && request.httpBody == nil, "online lookup excludes cookies, chat history and unbounded timeouts")
+            expect(!FileManager.default.fileExists(atPath: folder.appendingPathComponent("MikuDesktop/Knowledge/miku-knowledge-aimcp.json").path), "online lookup does not create an offline cache file")
+            for label in ["製作參與", "制作参加", "Production credits", "제작 참여"] {
+                var credited = onlineItem()
+                credited["facts"] = [["label": label, "value": "Production Participant"]]
+                await fake.set(data: onlineData(items: [credited]))
+                let result = try await store.search(matching: "New Online Song", match: .title)
+                expect(result.entries.first?.creators == ["Production Participant"], "source production credits are retained for \(label)")
+                expect(result.entries.first?.content.english.contains("composer") == false, "a general production credit does not invent a composer role")
+            }
+            for slug in ["a", String(repeating: "a", count: 100)] {
+                await fake.set(data: onlineData(items: [onlineItem(slug: slug)]))
+                let result = try await store.search(matching: "New Online Song", match: .title)
+                expect(result.entries.count == 1, "online search accepts Wiki's full valid slug length range")
+                expect(result.entries.first?.id.count ?? 0 <= 64, "long Wiki slugs receive bounded snapshot-compatible IDs")
+                if slug.count == 100 { expect(result.entries.first?.id.hasPrefix("song.wiki.") == true, "long slugs use the shared hash namespace") }
+            }
+            let mentioned = document(version: "mention", entries: [entry(id: "song.mention", title: "Offline Mention", content: "Mentions New Online Song without being that song.")])
+            let mentionFixture = folder.appendingPathComponent("mention.json")
+            try data(mentioned).write(to: mentionFixture)
+            await fake.set(data: onlineData(items: [onlineItem()]))
+            let mentionStore = SongKnowledgeStore(applicationSupportDirectory: folder, bundledURL: mentionFixture, downloader: { try await fake.download($0) }, apiKeyLoader: { apiKey })
+            let exact = try await mentionStore.search(matching: "New Online Song", match: .title)
+            expect(exact.searchedOnline && exact.entries.first?.id == "song.new-online-song", "a title mentioned only in another local article does not suppress online lookup")
+            await fake.set(data: onlineData(items: []))
+            let missing = try await store.search(matching: "Absent Song", language: "ja")
+            expect(missing.searchedOnline && missing.entries.isEmpty, "a source no-match stays empty")
+            for status in [401, 403, 429, 503] {
+                await fake.set(status: status)
+                let priorCalls = await fake.calls
+                do {
+                    _ = try await store.search(matching: "Unavailable \(status)")
+                    failures.append("online HTTP \(status) did not throw")
+                } catch SongKnowledgeError.httpStatus(status) { checks += 1 }
+                catch { failures.append("online HTTP \(status) returned \(error)") }
+                expect(await fake.calls == priorCalls + 1, "online HTTP errors never trigger a second source or credential fallback")
+                expect(await store.allEntries() == before, "online failure preserves offline data")
+            }
+            await fake.set(data: onlineData(items: [onlineItem()]), status: 200, responseURL: URL(string: "https://untrusted.example/redirect"))
+            do {
+                _ = try await store.search(matching: "Redirected Song")
+                failures.append("online redirect did not throw")
+            } catch SongKnowledgeError.invalidResponse { checks += 1 }
+            catch { failures.append("online redirect returned \(error)") }
+            let noKeyFake = FakeKnowledgeDownloader(data: onlineData(items: [onlineItem()]))
+            let noKeyStore = SongKnowledgeStore(applicationSupportDirectory: folder, bundledURL: fixture, downloader: { try await noKeyFake.download($0) }, apiKeyLoader: { nil })
+            let noKey = try await noKeyStore.search(matching: "Unknown Without Key")
+            let noKeyCalls = await noKeyFake.calls
+            expect(noKey.entries.isEmpty && !noKey.searchedOnline && noKeyCalls == 0, "missing AIMCP configuration leaves local lookup usable without sending requests")
+            let delayed = DelayedOnlineDownloader(data: onlineData(items: [onlineItem()]))
+            let cancelledStore = SongKnowledgeStore(applicationSupportDirectory: folder, bundledURL: fixture, downloader: { await delayed.download($0) }, apiKeyLoader: { apiKey })
+            let pending = Task { try await cancelledStore.search(matching: "Cancelled Search") }
+            while await !delayed.started { await Task.yield() }
+            pending.cancel()
+            do {
+                _ = try await pending.value
+                failures.append("cancelled online lookup returned stale results")
+            } catch is CancellationError { checks += 1 }
+            catch { failures.append("cancelled online lookup returned \(error)") }
+            let timeoutStore = SongKnowledgeStore(applicationSupportDirectory: folder, bundledURL: fixture, downloader: { _ in throw URLError(.timedOut) }, apiKeyLoader: { apiKey })
+            do {
+                _ = try await timeoutStore.search(matching: "Timed Out Song")
+                failures.append("online timeout did not throw")
+            } catch let error as URLError where error.code == .timedOut { checks += 1 }
+            catch { failures.append("online timeout returned \(error)") }
+            let hashVersion = "r340282366920938463463374607431768211455"
+            let versionFake = FakeKnowledgeDownloader(data: pageData(version: hashVersion, entries: [], total: 0, nextCursor: nil, truncated: false))
+            let versionStore = SongKnowledgeStore(applicationSupportDirectory: folder, bundledURL: fixture, downloader: { try await versionFake.download($0) }, apiKeyLoader: { apiKey })
+            let installed = try await versionStore.checkForUpdates()
+            expect(installed.version == hashVersion, "popular versions preserve a full 128-bit decimal hash without integer conversion")
+        } catch { failures.append("online search flow: \(error)") }
     }
 
     static func main() async {
@@ -518,7 +677,7 @@ struct SongKnowledgeTests {
             let request = await aimcpFake.requests.first
             expect(request?.url?.scheme == aimcpURL.scheme && request?.url?.host == aimcpURL.host && request?.url?.path == aimcpURL.path, "AIMCP uses only the configured snapshot endpoint")
             expect(request?.httpMethod == "GET" && request?.httpBody == nil, "AIMCP snapshot sends no request body or chat")
-            expect(URLComponents(url: request!.url!, resolvingAgainstBaseURL: false)?.queryItems == [URLQueryItem(name: "pageSize", value: "250")], "AIMCP query contains only pagination metadata")
+            expect(URLComponents(url: request!.url!, resolvingAgainstBaseURL: false)?.queryItems == [URLQueryItem(name: "collection", value: "popular"), URLQueryItem(name: "pageSize", value: "250")], "AIMCP requests the bounded popular offline collection")
             expect(request?.value(forHTTPHeaderField: "Authorization") == "Bearer \(apiKey)", "AIMCP key is sent only as a bearer header")
         } catch {
             failures.append("AIMCP update flow: \(error)")
@@ -563,6 +722,7 @@ struct SongKnowledgeTests {
             expect(requests.count == 5, "AIMCP follows every continuation page")
             expect(URLComponents(url: requests[0].url!, resolvingAgainstBaseURL: false)?.queryItems?.contains(URLQueryItem(name: "pageSize", value: "250")) == true, "AIMCP explicitly enables pagination")
             expect(URLComponents(url: requests[1].url!, resolvingAgainstBaseURL: false)?.queryItems?.contains(URLQueryItem(name: "cursor", value: "page-1")) == true, "AIMCP sends the returned continuation cursor")
+            expect(requests.allSatisfy { URLComponents(url: $0.url!, resolvingAgainstBaseURL: false)?.queryItems?.contains(URLQueryItem(name: "collection", value: "popular")) == true }, "every continuation remains in the popular collection")
             let korean = await pagedStore.entries(matching: "Paged 1000").first
             expect(korean?.text(for: "ko") == "한국어 1000", "AIMCP preserves Korean song content")
 
@@ -948,6 +1108,8 @@ struct SongKnowledgeTests {
             failures.append("preference flow: \(error)")
         }
 
+        await koreanSearchChecks()
+        await onlineSearchChecks(base: base, apiKey: apiKey)
         await VocaDBChecks.run { expect($0, $1) }
 
         if failures.isEmpty {

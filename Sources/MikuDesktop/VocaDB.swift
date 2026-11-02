@@ -150,12 +150,14 @@ enum VocaDB {
             #"^(.{1,60}?)\s*(?:這首歌|这首歌|呢首歌)?\s*(?:是|係)?\s*(?:誰|谁|邊個|边个)\s*(?:寫|写|作|唱|做)"#,
             #"^(.{1,60}?)\s*(?:是|係)\s*(?:什麼|甚麼|什么|咩)\s*(?:歌|曲)"#,
             #"(?i)(?:do you know|have you heard(?: of)?|who (?:wrote|made|sang|composed))\s+(?:the song\s+)?(.{1,60}?)\s*[?.!]*$"#,
-            #"^(.{1,60}?)\s*(?:って|を|は)\s*(?:知ってる|知ってます|知って|聴いたこと|誰の曲|誰が作)"#
+            #"^(.{1,60}?)\s*(?:って|を|は)\s*(?:知ってる|知ってます|知って|聴いたこと|誰の曲|誰が作)"#,
+            #"^(.{1,60}?)\s*(?:이라는\s*노래|라는\s*노래|이란\s*곡|란\s*곡|노래|곡)?\s*(?:을|를|은|는)?\s*(?:알아(?:요)?|아세요|들어\s*봤어(?:요)?|들어\s*보셨나요)\s*[?？.!]*$"#,
+            #"^(.{1,60}?)\s*(?:은|는|이란\s*곡|란\s*곡)?\s*누가\s*(?:만들|썼|작곡|불렀)"#
         ]
         for pattern in patterns {
             if let found = firstCapture(pattern, in: value) {
                 let title = found.trimmingCharacters(in: CharacterSet(charactersIn: " ，、,。.!！?？~～♪"))
-                if title.count >= 2, !["這首歌", "这首歌", "呢首歌", "它", "佢", "this", "that", "it", "this song"].contains(title.lowercased()) {
+                if title.count >= 2, !["這首歌", "这首歌", "呢首歌", "它", "佢", "this", "that", "it", "this song", "이 노래", "그 노래", "이 곡", "그 곡"].contains(title.lowercased()) {
                     return title
                 }
             }

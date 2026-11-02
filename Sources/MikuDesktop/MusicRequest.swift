@@ -57,13 +57,13 @@ enum MusicRequestParser {
             .replacingOccurrences(of: "’", with: "'")
         guard !value.isEmpty, value.count <= 160 else { return nil }
         value = value.replacingOccurrences(
-            of: #"^(?:miku|初音(?:未來|未来|ミク)?|ミク)[\s，、,：:!！~～]*"#,
+            of: #"^(?:miku|初音(?:未來|未来|ミク)?|ミク|미쿠(?:야)?|하츠네\s*미쿠)[\s，、,：:!！~～]*"#,
             with: "",
             options: [.regularExpression, .caseInsensitive]
         )
         let lower = value.lowercased()
         let negations = ["不要", "不用", "不想", "別", "别", "唔好", "唔使", "唔想", "停", "關掉", "关掉",
-                         "don't", "dont", "do not", "stop", "止めて", "やめて", "ないで"]
+                         "don't", "dont", "do not", "stop", "止めて", "やめて", "ないで", "틀지 마", "틀지마", "재생하지 마", "재생하지마", "켜지 마", "켜지마", "열지 마", "열지마", "듣기 싫", "듣고 싶지 않", "끄지 마", "멈춰"]
         guard !negations.contains(where: lower.contains) else { return nil }
 
         let platform = detectPlatform(in: lower)
@@ -81,9 +81,9 @@ enum MusicRequestParser {
 
         // "打開 Spotify" / "open YouTube": the song she just named, or else just the service.
         if let platform,
-           rest.replacingOccurrences(of: #"[\s，、,。.!！?？~～]|請|请|幫我|帮我|你|可以|能不能|一下|吧|啦|嗎|吗|please|can you|could you|ください"#,
+           rest.replacingOccurrences(of: #"[\s，、,。.!！?？~～]|請|请|幫我|帮我|你|可以|能不能|一下|吧|啦|嗎|吗|please|can you|could you|ください|부탁해|주세요|줘|줄래|요"#,
                                      with: "", options: [.regularExpression, .caseInsensitive]).isEmpty,
-           value.range(of: #"打開|打开|開|开|open|launch|開いて|起動"#, options: [.regularExpression, .caseInsensitive]) != nil {
+           value.range(of: #"打開|打开|開|开|open|launch|開いて|起動|열어|켜|실행"#, options: [.regularExpression, .caseInsensitive]) != nil {
             return MusicRequest(query: referenced ?? "", platform: platform)
         }
 
@@ -114,9 +114,12 @@ enum MusicRequestParser {
     /// (搜尋「…」, 推薦你聽「…」), then a title she knows, then 『…』. Other 「…」 are left
     /// out: she also uses them for quoted feelings (「你並不孤單」).
     static func lastTitle(in text: String, knownTitles: [String]) -> String? {
-        if let marked = lastCapture(#"《([^《》]{1,60})》"#, in: text) { return marked }
-        let musicWords = #"(?:搜尋|搜索|搜|聽|听|播放|播|放|點播|点播|推薦|推荐|歌曲|這首|这首|呢首|首歌|曲|search(?:ing)? for|play|listen to|を検索|検索|聴いて|かけ|流し)"#
+        if let marked = lastCapture(#"[《〈]([^《》〈〉]{1,60})[》〉]"#, in: text) { return marked }
+        let musicWords = #"(?:搜尋|搜索|搜|聽|听|播放|播|放|點播|点播|推薦|推荐|歌曲|這首|这首|呢首|首歌|曲|search(?:ing)? for|play|listen to|を検索|検索|聴いて|かけ|流し|노래|곡|추천|재생|검색)"#
         if let named = lastCapture(musicWords + #"\s*「([^「」]{1,60})」"#, in: text) { return named }
+        if let named = lastCapture(
+            #"[「“\"]([^「」“”\"]{1,60})[」”\"](?:을|를)?\s*(?:추천|들어\s*볼|틀어\s*줄|재생|검색)"#, in: text
+        ) { return named }
         let folded = text.folding(options: [.caseInsensitive, .widthInsensitive], locale: nil)
         var best: (position: String.Index, title: String)?
         for title in knownTitles where !title.isEmpty {
@@ -137,44 +140,44 @@ enum MusicRequestParser {
     }
 
     static func offersToPlay(_ text: String) -> Bool {
-        let pattern = #"要(?:不要)?(?:試試|试试|聽|听)|試試看|试试看|要唔要|聽唔聽|想聽嗎|想听吗|要聽嗎|要听吗|聽聽看|听听看|播給你|放給你|推薦你聽|推荐你听|want to (?:try|listen|hear)|shall i (?:play|put)|should i play|give it a (?:try|listen)|聴いてみる|聴いてみない|かけようか|流そうか"#
+        let pattern = #"要(?:不要)?(?:試試|试试|聽|听)|試試看|试试看|要唔要|聽唔聽|想聽嗎|想听吗|要聽嗎|要听吗|聽聽看|听听看|播給你|放給你|推薦你聽|推荐你听|want to (?:try|listen|hear)|shall i (?:play|put)|should i play|give it a (?:try|listen)|聴いてみる|聴いてみない|かけようか|流そうか|들어\s*볼래|들어\s*볼까|들어볼래|들어볼까|틀어\s*줄까|재생해\s*줄까"#
         return text.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
     }
 
     private static func isAffirmative(_ value: String) -> Bool {
-        let pattern = #"^(?:好啊|好呀|好吖|好的|好喔|好哦|好喇|好啦|好吧|好|可以啊|可以呀|可以|要|想|想聽|想听|聽|听|行|ok|okay|yes|yeah|sure|please|嗯嗯|嗯|うん|いいよ|はい|ええ|聴く|聴きたい)[\s，、,。.!！~～♪]*$"#
+        let pattern = #"^(?:好啊|好呀|好吖|好的|好喔|好哦|好喇|好啦|好吧|好|可以啊|可以呀|可以|要|想|想聽|想听|聽|听|行|ok|okay|yes|yeah|sure|please|嗯嗯|嗯|うん|いいよ|はい|ええ|聴く|聴きたい|응|네|좋아|좋아요|그래|그래요|들을래)[\s，、,。.!！~～♪]*$"#
         return value.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
     }
 
     /// Drops a leading "好啊，" / "OK, " so the request after it is read on its own.
     private static func removingAcknowledgement(from value: String) -> String {
-        let pattern = #"^(?:好啊|好呀|好吖|好的|好喔|好哦|好喇|好啦|好吧|好|可以啊|可以呀|可以|行|ok|okay|yes|yeah|sure|嗯嗯|嗯|うん|いいよ|はい|ええ)(?:[\s，、,。.!！~～]+|(?=用|在|喺|幫|帮|播|開|打開|打开|放|請|请|play|open|put))"#
+        let pattern = #"^(?:好啊|好呀|好吖|好的|好喔|好哦|好喇|好啦|好吧|好|可以啊|可以呀|可以|行|ok|okay|yes|yeah|sure|嗯嗯|嗯|うん|いいよ|はい|ええ|응|네|좋아|좋아요|그래|그래요)(?:[\s，、,。.!！~～]+|(?=用|在|喺|幫|帮|播|開|打開|打开|放|請|请|play|open|put))"#
         return value.replacingOccurrences(of: pattern, with: "", options: [.regularExpression, .caseInsensitive])
     }
 
     /// "它" / "this one" / "それ": the song meant is the one she just named.
     private static func isPointer(_ query: String) -> Bool {
         ["它", "佢", "牠", "這首", "这首", "呢首", "那首", "嗰首", "這個", "这个", "呢個", "那個", "那个", "這首歌", "那首歌",
-         "this", "that", "it", "this one", "that one", "this song", "that song", "それ", "これ", "その曲", "この曲"]
+         "this", "that", "it", "this one", "that one", "this song", "that song", "それ", "これ", "その曲", "この曲", "그거", "이거", "그 곡", "이 곡", "그 노래", "이 노래"]
             .contains(query.lowercased())
     }
 
     static func detectPlatform(in lower: String) -> MusicPlatform? {
-        if lower.range(of: #"apple\s*musi(?:c)?|apple\s*音樂|apple\s*音乐|蘋果音樂|苹果音乐|アップルミュージック"#, options: .regularExpression) != nil {
+        if lower.range(of: #"apple\s*musi(?:c)?|apple\s*音樂|apple\s*音乐|蘋果音樂|苹果音乐|アップルミュージック|애플\s*뮤직"#, options: .regularExpression) != nil {
             return .appleMusic
         }
-        if lower.range(of: #"spotify|スポティファイ"#, options: .regularExpression) != nil { return .spotify }
-        if lower.range(of: #"you\s*tube|油管|ユーチューブ"#, options: .regularExpression) != nil { return .youtube }
+        if lower.range(of: #"spotify|スポティファイ|스포티파이"#, options: .regularExpression) != nil { return .spotify }
+        if lower.range(of: #"you\s*tube|油管|ユーチューブ|유튜브"#, options: .regularExpression) != nil { return .youtube }
         return nil
     }
 
     // MARK: - Pieces
 
-    private static let platformPattern = #"(?:apple\s*musi(?:c)?|apple\s*音樂|apple\s*音乐|蘋果音樂|苹果音乐|アップルミュージック|spotify|スポティファイ|you\s*tube|油管|ユーチューブ)"#
+    private static let platformPattern = #"(?:apple\s*musi(?:c)?|apple\s*音樂|apple\s*音乐|蘋果音樂|苹果音乐|アップルミュージック|애플\s*뮤직|spotify|スポティファイ|스포티파이|you\s*tube|油管|ユーチューブ|유튜브)"#
 
     private static func removingPlatform(from value: String) -> String {
         let pattern = #"(?:(?:用|在|去|到|喺|開|打開|打开|上|on|in|with|from|using|via)\s*)?"# + platformPattern
-            + #"\s*(?:上面|上|入面|裡面|里面|裡|里|度|app|應用|应用|で|から|の)?"#
+            + #"\s*(?:上面|上|入面|裡面|里面|裡|里|度|app|應用|应用|에서|으로|로|에|で|から|の)?"#
         return value.replacingOccurrences(of: pattern, with: " ", options: [.regularExpression, .caseInsensitive])
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -193,7 +196,9 @@ enum MusicRequestParser {
         let weakEN = #"^(?:(?:please|can you|could you|would you|will you|hey|ok|okay)[\s,]+)*(?:open|listen to|i want to hear|i'd like to hear)\s*(?<q>.*)$"#
         let strongJA = #"^(?<q>.*?)\s*(?:を)?\s*(?:流して|再生して|かけて|聴かせて|聞かせて|流そう|再生)(?:ください|くれる|くれない|ほしい|欲しい|よ|ね)?[?？!！。〜～\s]*$"#
         let weakJA = #"^(?<q>.*?)\s*(?:を)?\s*(?:開いて|聴きたい|聞きたい)(?:ください|な|よ|です)?[?？!！。〜～\s]*$"#
-        for (pattern, strong) in [(strongZH, true), (strongEN, true), (strongJA, true), (weakZH, false), (weakEN, false), (weakJA, false)] {
+        let strongKO = #"^(?:제발\s*)?(?<q>.*?)\s*(?:을|를)?\s*(?:틀어|재생해|들려줘|들려)(?:\s*(?:줘|주세요|줄래|줄래요|줘요))?[?？!！。~～\s]*$"#
+        let weakKO = #"^(?:제발\s*)?(?<q>.*?)\s*(?:을|를)?\s*(?:열어|듣고\s*싶어|듣고\s*싶어요)(?:\s*(?:줘|주세요|줄래|줄래요|줘요))?[?？!！。~～\s]*$"#
+        for (pattern, strong) in [(strongKO, true), (weakKO, false), (strongZH, true), (strongEN, true), (strongJA, true), (weakZH, false), (weakEN, false), (weakJA, false)] {
             if let query = capture(pattern, in: value) { return Command(query: query, strong: strong) }
         }
         return nil
@@ -240,7 +245,7 @@ enum MusicRequestParser {
     /// Not a song: games, "with me", or a pointer at something said earlier.
     private static func isExcluded(_ query: String) -> Bool {
         let lower = query.lowercased()
-        let notMusic = ["game", "with me", "together", "遊戲", "游戏", "ゲーム", "猜拳", "包剪揼", "じゃんけん"]
+        let notMusic = ["game", "with me", "together", "遊戲", "游戏", "ゲーム", "게임", "이야기", "얘기", "동화", "가위바위보", "猜拳", "包剪揼", "じゃんけん"]
         if notMusic.contains(where: lower.contains) { return true }
         return false
     }
@@ -249,12 +254,12 @@ enum MusicRequestParser {
         let lower = query.lowercased()
         return ["隨便", "随便", "都可以", "都得", "是但", "你推薦", "你推荐", "你揀", "你拣", "你決定", "你决定", "你選", "你选",
                 "不知道", "唔知", "whatever", "anything", "you choose", "you pick", "なんでも", "任せる", "まかせる", "わからない",
-                "好", "好啊", "好呀", "好的", "嗯", "ok", "okay", "yes", "no", "うん", "はい"]
+                "好", "好啊", "好呀", "好的", "嗯", "ok", "okay", "yes", "no", "うん", "はい", "아무거나", "상관없어", "모르겠어", "추천해", "골라줘", "좋아", "응", "네", "아니"]
             .contains { lower == $0 || lower.hasPrefix($0) && lower.count <= $0.count + 2 }
     }
 
     static func asksWhatToPlay(_ text: String) -> Bool {
-        let pattern = #"想聽哪|想听哪|聽哪|听哪|想聽甚麼|想聽什麼|想听什么|聽甚麼歌|聽什麼歌|听什么歌|聽咩|聽邊首|听哪首|哪一首|點歌|点歌|what (?:song|would you like to (?:hear|listen))|which song|what should (?:i|we) play|何を聴|何聴|どの曲|何の曲|リクエスト"#
+        let pattern = #"想聽哪|想听哪|聽哪|听哪|想聽甚麼|想聽什麼|想听什么|聽甚麼歌|聽什麼歌|听什么歌|聽咩|聽邊首|听哪首|哪一首|點歌|点歌|what (?:song|would you like to (?:hear|listen))|which song|what should (?:i|we) play|何を聴|何聴|どの曲|何の曲|リクエスト|어떤\s*(?:노래|곡)|무슨\s*(?:노래|곡)|뭐\s*들|뭘\s*들"#
         return text.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
     }
 }

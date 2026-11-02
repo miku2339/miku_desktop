@@ -11,6 +11,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var notebookController: DiaryWindowController?
     private var albumController: MemoryAlbumWindowController?
     private var knowledgeController: SongKnowledgeWindowController?
+    /// Settings, the album, song knowledge and the diary, in one window with a sidebar.
+    private var notebookWindow: NotebookWindowController?
     private var rhythmController: RhythmGameWindowController?
     private var settingsObserver: NSObjectProtocol?
     private var speechMuteObserver: NSObjectProtocol?
@@ -18,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         replaceOtherInstances()
+        MikuTrainingActivity.shared.start()
         NSApp.setActivationPolicy(.accessory)
         statusItem.button?.title = "♪"
         statusItem.button?.toolTip = "Miku Desktop"
@@ -25,7 +28,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         MikuSpeech.shared.onPlayback = { [weak self] event in
             self?.wallpaperController?.speechPlayback(event)
-            self?.afterSpeech(event)
+        }
+        MikuSpeech.shared.onVoiceSegmentFinished = { [weak self] text in
+            self?.chatController?.receiveVoiceSegmentFinished(text)
+        }
+        MikuSpeech.shared.onPlaybackWithSource = { [weak self] event, source in
+            guard let self else { return }
+            if source == .voiceCall, event == .interrupted || event == .failed {
+                self.discardPendingAudio()
+            }
+            self.afterSpeech(event)
+            if source == .voiceCall {
+                self.chatController?.receiveVoicePlayback(event)
+            } else if case .started = event {
+                self.chatController?.pauseVoiceCallForExternalAudio(cancelPendingReply: true)
+            }
         }
         // Retries and failures of reading aloud, so an occasional silent reply can be traced.
         MikuSpeech.shared.onDiagnostic = { payload in CompanionMemory.shared.logDiagnostic(payload) }
@@ -75,6 +92,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.desktopControlsController?.refreshLocalization()
                 self?.albumController?.refreshLocalization()
                 self?.knowledgeController?.refreshLocalization()
+                self?.notebookWindow?.refreshLocalization()
                 self?.settingsController?.refreshInteraction()
                 self?.wallpaperController?.setLanguage(AppLanguage.resolved.rawValue)
             }
@@ -107,8 +125,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.weatherService.start()
                     let controls = DesktopControlsWindowController()
                     controls.onOpenChat = { [weak self] in self?.openChat(nil) }
-                    controls.onOpenAlbum = { [weak self] in self?.openAlbum(nil) }
-                    controls.onOpenSettings = { [weak self] in self?.openSettings(nil) }
+                    controls.onOpenNotebook = { [weak self] in self?.openNotebook(nil) }
                     self.desktopControlsController = controls
                 case .failure:
                     self.presentStartupError()
@@ -132,6 +149,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        chatController?.endVoiceCall()
         MikuSpeech.shared.stop()
         server?.stop()
         CompanionMemory.shared.saveNow()
@@ -169,9 +187,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         for (key, action) in [
             ("comeOver", #selector(callCompanionOver(_:))),
-            ("memoryAlbum", #selector(openAlbum(_:))),
-            ("takeMemoryPhoto", #selector(takeMemoryPhoto(_:))),
-            ("songKnowledge", #selector(openKnowledge(_:)))
+            ("takeMemoryPhoto", #selector(takeMemoryPhoto(_:)))
         ] {
             let item = NSMenuItem(title: L10n.text(key), action: action, keyEquivalent: "")
             item.target = self
@@ -300,6 +316,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Something she noticed and wanted to say: speech bubble on the desktop, and in the chat.
     private func deliverProactive(_ reply: CompanionReply) {
+        guard chatController?.isVoiceCallActive != true else { return }
         // Something she says on her own stays silent while she's meant to be asleep.
         voice(reply, awake: !SleepSchedule.shared.isAsleep(), speakEvenIfSilent: false)
         if let chatController {
@@ -314,10 +331,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Shows her reply and plays what goes with it, one after another: her voice (reading aloud),
     /// then a hum clip if she hummed, then a song you asked her to play.
     /// `speakEvenIfSilent`: chat replies still go through speech so its status updates.
-    private func voice(_ reply: CompanionReply, awake: Bool, speakEvenIfSilent: Bool) {
+    private func voice(_ reply: CompanionReply, awake: Bool, speakEvenIfSilent: Bool, userInitiated: Bool = false) {
         let speech = MikuSpeech.shared
-        let speaks = awake && speech.willSpeakAutomatically
-        let hums = awake && HumText.containsHum(reply.text) && humAllowed && HumText.hasClips()
+        let callReply = userInitiated && chatController?.isVoiceCallActive == true
+        let speaks = awake && (callReply
+            ? speech.enabled && speech.hasConfiguredModel && !speech.isMuted
+            : speech.willSpeakAutomatically)
+        let hums = !callReply && awake && HumText.containsHum(reply.text) && humAllowed && HumText.hasClips()
         wallpaperController?.receiveReply(reply, voiced: speaks || hums)
         // A new reply: whatever the previous one was waiting for no longer applies to it.
         pendingHum = nil
@@ -325,13 +345,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         guard speaks else {
             // Reading aloud is off or blocked; chat replies still update the speech status.
-            if speakEvenIfSilent { speech.speak(reply.text) }
+            if speakEvenIfSilent { speech.speak(reply.text, userInitiated: callReply, source: callReply ? .voiceCall : .standard, style: .fromEmotion(reply.emotion)) }
             if !(hums && HumPlayer.shared.play()) { flushPendingMusic() }
             return
         }
         // The hum waits for her voice; set before speaking, as speech can fail at once.
         if hums { pendingHum = false }
-        speech.speak(hums ? HumText.removingHum(reply.text) : reply.text)
+        speech.speak(hums || callReply ? HumText.removingHum(reply.text) : reply.text, userInitiated: callReply, source: callReply ? .voiceCall : .standard, style: .fromEmotion(reply.emotion))
         if pendingHum != nil { pendingHum = true }
         musicArmed = true
         // Speech gave up straight away and no hum is playing: the song needn't wait.
@@ -346,9 +366,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// A hum waiting for her voice to finish; true once that speech has started.
     private var pendingHum: Bool?
 
+    private func discardPendingAudio() {
+        pendingMusicTimer?.invalidate()
+        pendingMusicTimer = nil
+        pendingMusic = nil
+        pendingHum = nil
+        musicArmed = false
+    }
+
+    private func stopVoiceCallOutput() {
+        discardPendingAudio()
+        HumPlayer.shared.stop()
+        MikuSpeech.shared.stop()
+    }
+
     private func afterSpeech(_ event: MikuSpeech.PlaybackEvent) {
         switch event {
-        case .started:
+        case .started, .streamingStarted, .streamingStopped:
             return
         case .interrupted:
             // Cut off (muted, stopped): the hum is dropped. A newer line cutting in arrives
@@ -398,6 +432,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         musicArmed = false
         guard let plan = pendingMusic else { return }
         pendingMusic = nil
+        chatController?.pauseVoiceCallForExternalAudio()
         Task { await MusicPlayback.shared.perform(plan) }
     }
 
@@ -407,6 +442,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             controller.onReply = { [weak self] reply in
                 self?.voice(reply, awake: true, speakEvenIfSilent: true)
             }
+            controller.onVoiceReply = { [weak self] reply in
+                self?.wallpaperController?.receiveReply(reply, voiced: true)
+                self?.musicArmed = true
+            }
+            controller.onVoiceReplyBegan = { [weak self] in
+                self?.pendingHum = nil
+                self?.musicArmed = false
+                HumPlayer.shared.stop()
+            }
+            controller.onVoicePhrase = { [weak self] text in
+                self?.wallpaperController?.receiveReply(
+                    CompanionReply(text: text, emotion: "calm", action: "idle"),
+                    voiced: true
+                )
+            }
+            controller.onVoiceCallStop = { [weak self] in self?.stopVoiceCallOutput() }
             controller.onPlayMusic = { [weak self] plan in self?.queueMusic(plan) }
             controller.onThinking = { [weak self] thinking in
                 self?.wallpaperController?.setThinking(thinking)
@@ -456,16 +507,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func openAlbum(_ sender: Any?) {
-        prepareAlbum().present()
+        notebook().show(.album)
     }
 
     @objc private func takeMemoryPhoto(_ sender: Any?) {
-        prepareAlbum().presentAndCapture()
+        notebook().show(.album)
+        prepareAlbum().captureInNotebook()
     }
 
     @objc private func openKnowledge(_ sender: Any?) {
-        if knowledgeController == nil { knowledgeController = SongKnowledgeWindowController() }
-        knowledgeController?.present()
+        notebook().show(.songs)
+    }
+
+    /// Miku's notebook, created on first use; its pages come from the controllers below.
+    private func notebook() -> NotebookWindowController {
+        if let notebookWindow { return notebookWindow }
+        let window = NotebookWindowController(settingsSections: SettingsWindowController.notebookSections)
+        window.pageProvider = { [unowned self] page in
+            switch page {
+            case .settings: return prepareSettings()
+            case .album: return prepareAlbum()
+            case .songs:
+                if let knowledgeController { return knowledgeController }
+                let controller = SongKnowledgeWindowController()
+                knowledgeController = controller
+                return controller
+            case .diary:
+                if let notebookController { return notebookController }
+                let controller = DiaryWindowController()
+                notebookController = controller
+                return controller
+            }
+        }
+        notebookWindow = window
+        return window
     }
 
     @objc private func muteSpeechForAnHour(_ sender: Any?) {
@@ -532,6 +607,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func openSettings(_ sender: Any?) {
+        notebook().show(.settings)
+    }
+
+    private func prepareSettings() -> SettingsWindowController {
         if settingsController == nil {
             let controller = SettingsWindowController()
             controller.onSceneChanged = { [weak self] scene in self?.applyScene(scene) }
@@ -543,7 +622,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             controller.updateWeather(weatherService.latest, failed: weatherService.lastError != nil)
             settingsController = controller
         }
-        settingsController?.present()
+        return settingsController!
     }
 
     private func openRhythmGame() {
@@ -556,9 +635,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         rhythmController?.start()
     }
 
+    /// Opens the notebook on the page used last.
     @objc private func openNotebook(_ sender: Any?) {
-        if notebookController == nil { notebookController = DiaryWindowController() }
-        notebookController?.present()
+        notebook().show()
     }
 
     @objc private func resetMemory(_ sender: Any?) {

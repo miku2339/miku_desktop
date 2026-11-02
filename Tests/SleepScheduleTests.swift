@@ -55,6 +55,18 @@ struct SleepScheduleTests {
         expectFalse(SleepSchedule.isBedtimeRequest("How do you say good night in Japanese?"), "英文詢問晚安翻譯不算睡覺請求")
         expectFalse(SleepSchedule.isBedtimeRequest("What does good night mean?"), "英文解釋晚安不算睡覺請求")
         expectFalse(SleepSchedule.isBedtimeRequest("今天好累"), "普通聊天不會送她上床")
+        expectTrue(SleepSchedule.isBedtimeRequest("잘 자, 미쿠"), "辨識韓語晚安")
+        expectTrue(SleepSchedule.isBedtimeRequest("이제 자러 갈게"), "辨識韓語準備上床")
+        expectTrue(SleepSchedule.isGoodMorning("좋은 아침, 미쿠!"), "辨識韓語早安")
+        expectFalse(SleepSchedule.isBedtimeRequest("잘 자라고 하지 마"), "拒絕說韓語晚安不會誤觸")
+        expectFalse(SleepSchedule.isBedtimeRequest("잠이 안 와, 잘 자"), "韓語睡不著優先")
+        expectFalse(SleepSchedule.isBedtimeRequest("잘 자는 무슨 뜻이야?"), "韓語詞意詢問不會誤觸")
+        expectFalse(SleepSchedule.isBedtimeRequest("잘 자를 영어로 어떻게 말해?"), "韓語翻譯詢問不會誤觸")
+        expectFalse(SleepSchedule.isBedtimeRequest("자러 가지 마"), "韓語拒絕上床不會誤觸")
+        expectFalse(SleepSchedule.isBedtimeRequest("자러 가기 싫어"), "韓語不想去睡不會誤觸")
+        expectFalse(SleepSchedule.isBedtimeRequest("일찍 자지 않을 거야"), "韓語表示不會早睡不會誤觸")
+        expectFalse(SleepSchedule.isBedtimeRequest("자러 가는 건 아니야"), "韓語否定去睡不會誤觸")
+        expectFalse(SleepSchedule.isBedtimeRequest("잘 자라는 노래 알아?"), "提到含晚安的韓文歌名不會誤觸")
         let calendar = Calendar.current
         let beforeLateEvening = calendar.date(bySettingHour: 21, minute: 59, second: 59, of: now)!
         let lateEvening = calendar.date(bySettingHour: 22, minute: 0, second: 0, of: now)!

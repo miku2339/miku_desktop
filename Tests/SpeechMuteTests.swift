@@ -81,6 +81,15 @@ struct SpeechMuteTests {
         expect(SpeechVoice.voice(forReplyLanguage: "zh-Hant") == "zh", "選國語時聲音跟國語")
         expect(SpeechVoice.voice(forReplyLanguage: "auto") == nil, "自動時沒有固定聲音")
 
+        expect(voice("오늘도 수고했어", "zh") == "ko", "韓語文字不誤用國語")
+        expect(voice("《メルト》 정말 좋아", "ja") == "ko", "韓語主句不被日文歌名切換")
+        expect(voice("我喜歡《사랑해》這首歌", "ko") == "zh", "中文主句不被韓文歌名切換")
+        expect(voice("我很喜歡하츠네 미쿠的歌", "ko") == "zh", "中文主句提韓文名字仍讀國語")
+        expect(voice("我鍾意하츠네 미쿠嘅歌", "ko") == "yue", "粵語主句提韓文名字仍讀粵語")
+        expect(voice("初音未來의 노래를 좋아해", "zh") == "ko", "韓語主句提漢字名字仍讀韓語")
+        expect(voice("♪", "ko") == "ko", "韓語短句保留選擇")
+        expect(SpeechVoice.voice(forReplyLanguage: "ko") == "ko", "固定韓語對應韓語朗讀")
+
         let chineseVoice = SpeechVoice.chineseVoice(for:)
         expect(chineseVoice(["我今天很累，想休息一下"]) == "zh", "自動辨識國語")
         expect(chineseVoice(["今日好攰"]) == "yue", "自動辨識粵語")

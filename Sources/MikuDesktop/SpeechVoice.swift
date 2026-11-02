@@ -1,6 +1,6 @@
 import Foundation
 
-/// Which voice reads a reply: "yue" (Cantonese), "zh" (Mandarin), "ja" or "en".
+/// Which voice reads a reply: "yue" (Cantonese), "zh" (Mandarin), "ja", "en" or "ko".
 ///
 /// The text decides first, so Mandarin text is never read in the Cantonese voice (or the
 /// other way round), and Japanese or English text always gets its own voice. Chinese text
@@ -12,11 +12,19 @@ enum SpeechVoice {
     static let mandarin = "zh"
     static let japanese = "ja"
     static let english = "en"
+    static let korean = "ko"
 
     /// `preferred`: the language Miku was asked to speak ("auto", "yue", "zh", "ja", "en").
     static func voice(for text: String, preferred: String) -> String {
         let spokenText = textOutsideQuotedTitles(in: text)
         let scalars = spokenText.unicodeScalars
+        if scalars.contains(where: { isHangul($0.value) }) {
+            if scalars.contains(where: { (0x3400...0x9FFF).contains(Int($0.value)) }),
+               count(cantoneseWords, in: spokenText) > 0 || count(mandarinWords, in: spokenText) > 0 {
+                return count(cantoneseWords, in: spokenText) > count(mandarinWords, in: spokenText) ? cantonese : mandarin
+            }
+            return korean
+        }
         if scalars.contains(where: { (0x3040...0x30FF).contains(Int($0.value)) }) {
             return japanese
         }
@@ -30,7 +38,7 @@ enum SpeechVoice {
         if scalars.contains(where: { (0x41...0x5A).contains(Int($0.value)) || (0x61...0x7A).contains(Int($0.value)) }) {
             return english
         }
-        return [cantonese, mandarin, japanese, english].contains(preferred) ? preferred : mandarin
+        return [cantonese, mandarin, japanese, english, korean].contains(preferred) ? preferred : mandarin
     }
 
     /// Chooses a Chinese voice from newest to oldest text. Unmarked Chinese, English and
@@ -41,7 +49,7 @@ enum SpeechVoice {
             let scalars = spokenText.unicodeScalars
             let hasHan = scalars.contains { (0x3400...0x9FFF).contains(Int($0.value)) }
             let hasKana = scalars.contains { (0x3040...0x30FF).contains(Int($0.value)) }
-            guard hasHan, !hasKana else { continue }
+            guard hasHan, !hasKana, !scalars.contains(where: { isHangul($0.value) }) else { continue }
 
             let yue = count(cantoneseWords, in: spokenText)
             let zh = count(mandarinWords, in: spokenText)
@@ -58,6 +66,7 @@ enum SpeechVoice {
         case "zh-Hant": return mandarin
         case "ja": return japanese
         case "en": return english
+        case "ko": return korean
         default: return nil
         }
     }
@@ -75,6 +84,12 @@ enum SpeechVoice {
         expression.numberOfMatches(in: text, range: NSRange(text.startIndex..., in: text))
     }
 
+    private static func isHangul(_ value: UInt32) -> Bool {
+        (0xAC00...0xD7AF).contains(value) || (0x1100...0x11FF).contains(value)
+            || (0x3130...0x318F).contains(value) || (0xA960...0xA97F).contains(value)
+            || (0xD7B0...0xD7FF).contains(value)
+    }
+
     private static let quotedTitle = try! NSRegularExpression(
         pattern: "〈[^〉]*〉|《[^》]*》|「[^」]*」|『[^』]*』|“[^”]*”|‘[^’]*’|\"[^\"]*\""
     )
@@ -88,6 +103,7 @@ enum SpeechVoice {
         let hasOutsideLanguage = outside.unicodeScalars.contains {
             let value = Int($0.value)
             return (0x3400...0x9FFF).contains(value)
+                || isHangul($0.value)
                 || (0x3040...0x30FF).contains(value)
                 || (0x41...0x5A).contains(value)
                 || (0x61...0x7A).contains(value)

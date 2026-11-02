@@ -438,7 +438,7 @@ final class AwarenessService {
     private static var language: String {
         let chosen = UserDefaults.standard.string(forKey: "replyLanguage") ?? "auto"
         if chosen == "yue" { return "zh-Hant" } // Cantonese: Chinese text, Cantonese prompt
-        if ["zh-Hant", "en", "ja"].contains(chosen) { return chosen }
+        if ["zh-Hant", "en", "ja", "ko"].contains(chosen) { return chosen }
         return AppLanguage.resolved.rawValue
     }
 
@@ -479,6 +479,21 @@ final class AwarenessService {
             return """
             （相手の発言ではなく、あなた自身が気づいたこと：\(what)）
             それについて、そばにいる友だちがふと気づいたように、短く自然なひと言を相手にかけてください（三十文字以内）。興味を示す、気づかう、話題にするなど。画面を細かく説明したり、個人情報を読み上げたり、スクリーンショットや見張っていることには触れないこと。言うことがなければ text は空にしてください。
+            """
+        case "ko":
+            let what: String
+            switch observation.kind {
+            case .welcomeBack: what = "사용자가 약 \(detail)분 만에 컴퓨터로 돌아왔어."
+            case .breakTime: what = "사용자가 약 \(detail)분 동안 컴퓨터를 계속 사용하고 있어\(app.map { " (현재 \($0) 사용 중)" } ?? "")."
+            case .app: what = "사용자가 \(detail)을 한동안 사용하고 있어."
+            case .song: what = "사용자가 듣고 있는 곡: \(detail)."
+            case .video: what = "사용자가 보고 있는 영상: \(detail)."
+            case .randomEvent: what = ""
+            case .screen: what = "이 이미지는 사용자의 현재 화면이야\(app.map { " (앞에 열린 앱: \($0))" } ?? "")."
+            }
+            return """
+            (사용자가 한 말이 아니라 네가 직접 알아챈 일: \(what))
+            옆에 있는 친구처럼 한국어로 짧고 자연스럽게 한마디 해 줘. 관심을 보이거나 가볍게 말을 걸어도 좋아. 화면을 자세히 설명하거나 개인정보를 읽지 말고, 스크린샷이나 감시를 언급하지 마. 할 말이 없으면 text를 비워 둬.
             """
         default:
             let what: String
@@ -537,6 +552,11 @@ final class AwarenessService {
             return """
             （相手の発言ではなく、あなたに起きたこと：\(moment.ja)）
             自分から相手に、短く自然なひと言をかけてください（三十五文字以内）。合う動作も選ぶこと。
+            """
+        case "ko":
+            return """
+            (사용자가 한 말이 아니라 네게 방금 생긴 일: \(moment.en))
+            한국어로 짧고 자연스럽게 먼저 한마디 하고, 어울리는 동작을 골라 줘. 기억에 없는 일을 지어내거나 확실하지 않은 곡 정보를 말하지 마.
             """
         default:
             return """

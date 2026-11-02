@@ -263,6 +263,7 @@ final class MemoryAlbumWindowController: NSWindowController, NSWindowDelegate {
             fields.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -16),
             preview.widthAnchor.constraint(equalTo: fields.widthAnchor),
             preview.heightAnchor.constraint(greaterThanOrEqualToConstant: 170),
+            titleField.widthAnchor.constraint(equalTo: fields.widthAnchor),
             noteScroll.widthAnchor.constraint(equalTo: fields.widthAnchor),
             noteScroll.heightAnchor.constraint(equalToConstant: 70),
             emptyLabel.widthAnchor.constraint(equalTo: fields.widthAnchor)
@@ -562,10 +563,11 @@ final class MemoryAlbumWindowController: NSWindowController, NSWindowDelegate {
 }
 
 private enum AlbumText {
-    private static func text(_ zh: String, _ en: String, _ ja: String) -> String {
+    private static func text(_ zh: String, _ en: String, _ ja: String, _ ko: String) -> String {
         switch AppLanguage.resolved {
         case .traditionalChinese: return zh
         case .japanese: return ja
+        case .korean: return ko
         default: return en
         }
     }
@@ -574,72 +576,94 @@ private enum AlbumText {
         switch AppLanguage.resolved {
         case .traditionalChinese: return Locale(identifier: "zh_Hant_TW")
         case .japanese: return Locale(identifier: "ja_JP")
+        case .korean: return Locale(identifier: "ko_KR")
         default: return Locale(identifier: "en_US")
         }
     }
 
-    static var title: String { text("共同回憶相簿", "Shared Memories", "思い出アルバム") }
-    static var capture: String { text("拍照留念", "Take a photo", "記念写真を撮る") }
-    static var capturing: String { text("拍攝中…", "Taking photo…", "撮影中…") }
-    static var preservation: String { text("這些由你拍下的照片會獨立保存；重設對話記憶不會刪除相簿。", "Photos you take are stored separately. Resetting conversation memory will not delete this album.", "撮影した写真は会話の記憶とは別に保存されます。会話の記憶をリセットしても削除されません。") }
-    static var empty: String { text("還沒有共同回憶。按「拍照留念」保存此刻。", "No shared memories yet. Take a photo to save this moment.", "まだ思い出はありません。「記念写真を撮る」で今を残しましょう。") }
-    static var loadFailed: String { text("暫時讀不到相簿資料；現有照片檔案仍原樣保留。", "The album data couldn’t be read. Existing photo files were left untouched.", "アルバムのデータを読み込めません。既存の写真ファイルはそのまま残されています。") }
-    static var emptyDetail: String { text("選擇一張照片，或拍下新的回憶。", "Choose a photo or capture a new memory.", "写真を選ぶか、新しい思い出を撮影してください。") }
-    static var untitled: String { text("未命名的回憶", "Untitled memory", "無題の思い出") }
-    static var photoTitle: String { text("標題", "Title", "タイトル") }
-    static var titlePlaceholder: String { text("為這刻起個名字", "Name this moment", "この瞬間に名前をつける") }
-    static var note: String { text("小記", "Note", "メモ") }
-    static var categoryTitle: String { text("類別", "Category", "カテゴリー") }
-    static var add: String { text("加入相簿", "Add to album", "アルバムに追加") }
-    static var save: String { text("儲存", "Save", "保存") }
-    static var export: String { text("匯出", "Export", "書き出す") }
-    static var delete: String { text("刪除", "Delete", "削除") }
-    static var cancel: String { text("取消", "Cancel", "キャンセル") }
-    static var ok: String { text("好", "OK", "OK") }
-    static var tryAgain: String { text("請稍後再試。", "Please try again in a moment.", "しばらくしてからもう一度お試しください。") }
-    static var captureFailed: String { text("暫時未能拍下這一刻", "Couldn’t capture this moment", "この瞬間を撮影できませんでした") }
-    static var saveFailed: String { text("未能儲存這張回憶", "Couldn’t save this memory", "この思い出を保存できませんでした") }
-    static var saveFailureDetail: String { text("照片未加入相簿，現有內容沒有改動。請檢查儲存空間後再試。", "The photo wasn’t added and the existing album was unchanged. Check available storage and try again.", "写真は追加されず、既存のアルバムも変更されていません。空き容量を確認して、もう一度お試しください。") }
-    static var exportFailed: String { text("未能匯出照片", "Couldn’t export the photo", "写真を書き出せませんでした") }
-    static var deleteFailed: String { text("未能刪除照片", "Couldn’t delete the photo", "写真を削除できませんでした") }
-    static var deleteConfirm: String { text("刪除這張共同回憶？", "Delete this shared memory?", "この思い出を削除しますか？") }
-    static var deleteDetail: String { text("照片及小記會永久刪除。", "The photo and its note will be permanently deleted.", "写真とメモは完全に削除されます。") }
+    static var title: String { text("共同回憶相簿", "Shared Memories", "思い出アルバム", "함께한 추억") }
+    static var capture: String { text("拍照留念", "Take a photo", "記念写真を撮る", "사진 찍기") }
+    static var capturing: String { text("拍攝中…", "Taking photo…", "撮影中…", "사진 찍는 중…") }
+    static var preservation: String { text("這些由你拍下的照片會獨立保存；重設對話記憶不會刪除相簿。", "Photos you take are stored separately. Resetting conversation memory will not delete this album.", "撮影した写真は会話の記憶とは別に保存されます。会話の記憶をリセットしても削除されません。", "직접 찍은 사진은 따로 보관돼요. 대화 기억을 초기화해도 이 앨범은 삭제되지 않아요.") }
+    static var empty: String { text("還沒有共同回憶。按「拍照留念」保存此刻。", "No shared memories yet. Take a photo to save this moment.", "まだ思い出はありません。「記念写真を撮る」で今を残しましょう。", "아직 함께한 추억이 없어요. 사진을 찍어 이 순간을 남겨 보세요.") }
+    static var loadFailed: String { text("暫時讀不到相簿資料；現有照片檔案仍原樣保留。", "The album data couldn’t be read. Existing photo files were left untouched.", "アルバムのデータを読み込めません。既存の写真ファイルはそのまま残されています。", "앨범 자료를 읽을 수 없어요. 기존 사진 파일은 그대로 유지했어요.") }
+    static var emptyDetail: String { text("選擇一張照片，或拍下新的回憶。", "Choose a photo or capture a new memory.", "写真を選ぶか、新しい思い出を撮影してください。", "사진을 고르거나 새로운 추억을 찍어 보세요.") }
+    static var untitled: String { text("未命名的回憶", "Untitled memory", "無題の思い出", "제목 없는 추억") }
+    static var photoTitle: String { text("標題", "Title", "タイトル", "제목") }
+    static var titlePlaceholder: String { text("為這刻起個名字", "Name this moment", "この瞬間に名前をつける", "이 순간에 이름 붙이기") }
+    static var note: String { text("小記", "Note", "メモ", "메모") }
+    static var categoryTitle: String { text("類別", "Category", "カテゴリー", "분류") }
+    static var add: String { text("加入相簿", "Add to album", "アルバムに追加", "앨범에 추가") }
+    static var save: String { text("儲存", "Save", "保存", "저장") }
+    static var export: String { text("匯出", "Export", "書き出す", "내보내기") }
+    static var delete: String { text("刪除", "Delete", "削除", "삭제") }
+    static var cancel: String { text("取消", "Cancel", "キャンセル", "취소") }
+    static var ok: String { text("好", "OK", "OK", "확인") }
+    static var tryAgain: String { text("請稍後再試。", "Please try again in a moment.", "しばらくしてからもう一度お試しください。", "잠시 후 다시 시도해 주세요.") }
+    static var captureFailed: String { text("暫時未能拍下這一刻", "Couldn’t capture this moment", "この瞬間を撮影できませんでした", "이 순간을 촬영할 수 없어요") }
+    static var saveFailed: String { text("未能儲存這張回憶", "Couldn’t save this memory", "この思い出を保存できませんでした", "이 추억을 저장할 수 없어요") }
+    static var saveFailureDetail: String { text("照片未加入相簿，現有內容沒有改動。請檢查儲存空間後再試。", "The photo wasn’t added and the existing album was unchanged. Check available storage and try again.", "写真は追加されず、既存のアルバムも変更されていません。空き容量を確認して、もう一度お試しください。", "사진을 추가하지 못했어요. 기존 앨범은 그대로예요. 저장 공간을 확인한 뒤 다시 시도해 주세요.") }
+    static var exportFailed: String { text("未能匯出照片", "Couldn’t export the photo", "写真を書き出せませんでした", "사진을 내보낼 수 없어요") }
+    static var deleteFailed: String { text("未能刪除照片", "Couldn’t delete the photo", "写真を削除できませんでした", "사진을 삭제할 수 없어요") }
+    static var deleteConfirm: String { text("刪除這張共同回憶？", "Delete this shared memory?", "この思い出を削除しますか？", "이 추억을 삭제할까요?") }
+    static var deleteDetail: String { text("照片及小記會永久刪除。", "The photo and its note will be permanently deleted.", "写真とメモは完全に削除されます。", "사진과 메모가 영구 삭제돼요.") }
 
     static func captureFailureDetail(_ error: Error) -> String {
         guard let error = error as? MemoryPhotoCaptureError else { return tryAgain }
         switch error {
         case .notReady:
-            return text("Miku 或場景仍在準備中，請稍後再拍。", "Miku or the scene is still getting ready. Try again shortly.", "ミクまたはシーンを準備中です。少し待ってから撮影してください。")
+            return text("Miku 或場景仍在準備中，請稍後再拍。", "Miku or the scene is still getting ready. Try again shortly.", "ミクまたはシーンを準備中です。少し待ってから撮影してください。", "미쿠나 장면을 준비 중이에요. 잠시 후 다시 촬영해 주세요.")
         case .emptyLayer:
-            return text("拍到的畫面是空白，因此沒有儲存。", "The captured image was blank, so nothing was saved.", "撮影した画像が空白だったため、保存されませんでした。")
+            return text("拍到的畫面是空白，因此沒有儲存。", "The captured image was blank, so nothing was saved.", "撮影した画像が空白だったため、保存されませんでした。", "촬영된 이미지가 비어 있어 저장하지 않았어요.")
         case .sceneUnavailable:
-            return text("暫時未能辨識目前場景，因此沒有儲存。", "The current scene couldn’t be identified, so nothing was saved.", "現在のシーンを確認できなかったため、保存されませんでした。")
+            return text("暫時未能辨識目前場景，因此沒有儲存。", "The current scene couldn’t be identified, so nothing was saved.", "現在のシーンを確認できなかったため、保存されませんでした。", "현재 장면을 확인할 수 없어 저장하지 않았어요.")
         case .snapshotFailed:
-            return text("暫時無法擷取目前畫面，因此沒有儲存。", "The current view couldn’t be captured, so nothing was saved.", "現在の画面を撮影できなかったため、保存されませんでした。")
+            return text("暫時無法擷取目前畫面，因此沒有儲存。", "The current view couldn’t be captured, so nothing was saved.", "現在の画面を撮影できなかったため、保存されませんでした。", "현재 화면을 촬영할 수 없어 저장하지 않았어요.")
         }
     }
 
     static func category(_ category: MemoryAlbum.Category) -> String {
         switch category {
-        case .everyday: return text("日常", "Everyday", "日常")
-        case .firstMeeting: return text("初次見面", "First meeting", "初めて会った日")
-        case .birthday: return text("生日", "Birthday", "誕生日")
-        case .achievement: return text("一起完成的事", "Something we achieved", "一緒に成し遂げたこと")
+        case .everyday: return text("日常", "Everyday", "日常", "일상")
+        case .firstMeeting: return text("初次見面", "First meeting", "初めて会った日", "처음 만난 날")
+        case .birthday: return text("生日", "Birthday", "誕生日", "생일")
+        case .achievement: return text("一起完成的事", "Something we achieved", "一緒に成し遂げたこと", "함께 이룬 일")
         }
     }
 
     static func sceneName(_ scene: String) -> String {
-        let names: [String: (String, String, String)] = [
-            "shibuya": ("澀谷", "Shibuya", "渋谷"),
-            "shibuya-station": ("澀谷站", "Shibuya Station", "渋谷駅"),
-            "ikebukuro": ("池袋", "Ikebukuro", "池袋"),
-            "akihabara": ("秋葉原", "Akihabara", "秋葉原"),
-            "shinjuku": ("新宿", "Shinjuku", "新宿"),
-            "hallway": ("走廊", "Hallway", "廊下"),
-            "musicroom": ("音樂室", "Music room", "音楽室"),
-            "room": ("房間", "Room", "部屋")
+        let names: [String: (String, String, String, String)] = [
+            "shibuya": ("澀谷", "Shibuya", "渋谷", "시부야"),
+            "shibuya-station": ("澀谷站", "Shibuya Station", "渋谷駅", "시부야역"),
+            "ikebukuro": ("池袋", "Ikebukuro", "池袋", "이케부쿠로"),
+            "akihabara": ("秋葉原", "Akihabara", "秋葉原", "아키하바라"),
+            "shinjuku": ("新宿", "Shinjuku", "新宿", "신주쿠"),
+            "hallway": ("走廊", "Hallway", "廊下", "복도"),
+            "musicroom": ("音樂室", "Music room", "音楽室", "음악실"),
+            "room": ("房間", "Room", "部屋", "방")
         ]
         guard let name = names[scene] else { return scene }
-        return text(name.0, name.1, name.2)
+        return text(name.0, name.1, name.2, name.3)
+    }
+}
+
+// MARK: - In Miku's notebook
+
+extension MemoryAlbumWindowController: NotebookPage {
+    func notebookPageWillAppear() {
+        refreshLocalization()
+    }
+
+    /// Leaving the album stops a photo that is still being taken, as closing it did.
+    func notebookPageWillDisappear() {
+        captureToken = nil
+        captureTask?.cancel()
+        captureTask = nil
+        captureButton.isEnabled = true
+    }
+
+    /// "Take a memory photo" from a menu: shows the album and takes the picture.
+    func captureInNotebook() {
+        startCapture()
     }
 }

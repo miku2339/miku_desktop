@@ -3,8 +3,8 @@ import Foundation
 @main
 struct CompanionRequestTests {
     static func main() {
-        let requests = ["過來一下", "Miku，過來一下～", "請你走過來", "能不能過來陪我", "可不可以過來一下", "过来看看", "過來一下，我想跟你說件事", "come here", "Miku, come over here!", "Could you please come closer?", "ミク、こっちに来て", "そばに来てね", "ここにおいで"]
-        let other = ["不要過來", "Miku，不用過來", "別走過來", "don't come here", "Please do not come over", "こっちに来ないで", "そばに来てほしくない", "「過來」這首歌是誰寫的", "過來這首歌很好聽", "她剛才走過來", "come home", "the song is called come here", "", "晚安"]
+        let requests = ["過來一下", "Miku，過來一下～", "請你走過來", "能不能過來陪我", "可不可以過來一下", "过来看看", "過來一下，我想跟你說件事", "come here", "Miku, come over here!", "Could you please come closer?", "ミク、こっちに来て", "そばに来てね", "ここにおいで", "미쿠야, 여기로 와 줘", "이리 와", "내 옆으로 와줄래?", "가까이 와 주세요"]
+        let other = ["不要過來", "Miku，不用過來", "別走過來", "don't come here", "Please do not come over", "こっちに来ないで", "そばに来てほしくない", "「過來」這首歌是誰寫的", "過來這首歌很好聽", "她剛才走過來", "come home", "the song is called come here", "", "晚安", "여기로 오지 마", "미쿠야, 오지마", "‘이리 와’라는 노래 알아?", "친구가 여기로 왔어", "여기로 와 주지 마"]
         for text in requests { precondition(CompanionRequest.isComeOver(text), "Missed request: \(text)") }
         for text in other { precondition(!CompanionRequest.isComeOver(text), "Unexpected request: \(text)") }
         let musicChecks = MusicRequestChecks.run()
@@ -45,6 +45,23 @@ enum MusicRequestChecks {
         expect("千本桜を再生して", "千本桜", nil)
         expect("打開 Spotify", "", .spotify)
         expect("open youtube", "", .youtube)
+
+        expect("유튜브에서 Tell Your World 틀어 줘", "Tell Your World", .youtube)
+        expect("스포티파이에서 メルト를 재생해 줘", "メルト", .spotify)
+        expect("애플 뮤직에서 千本桜 틀어 줘", "千本桜", .appleMusic)
+        expect("유튜브 열어 줘", "", .youtube)
+        expect("Tell Your World 듣고 싶어", "Tell Your World", nil)
+        expect("그 노래 틀어 줘", "Tell Your World", nil, after: "Tell Your World를 들어 볼래?")
+        expect("응", "Tell Your World", nil, after: "Tell Your World를 들어 볼래?")
+        expect("メルト", "メルト", nil, after: "어떤 노래를 듣고 싶어?")
+        expect("응", "달빛", nil, after: "「달빛」을 들어 볼래?")
+        expect("그 노래 틀어 줘", "달빛", nil, after: "〈달빛〉을 추천해!")
+        reject("응", after: "‘혼자가 아니야’라는 말이 참 좋지?")
+        reject("노래 틀지 마")
+        reject("Tell Your World 재생하지 마")
+        reject("게임 틀어 줘")
+        reject("이야기 들려줘")
+        reject("아무거나", after: "어떤 노래를 듣고 싶어?")
 
         // Answering her "what would you like to hear?".
         let asked = "真乖～♪ 那我們繼續聽歌吧！你想聽哪一首？Miku 隨時準備好為你獻唱喔～♪"

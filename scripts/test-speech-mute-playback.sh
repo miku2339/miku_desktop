@@ -21,6 +21,8 @@ swiftc \
   "$project_root/Sources/MikuDesktop/SpeechMute.swift" \
   "$project_root/Sources/MikuDesktop/SpeechQuietTimes.swift" \
   "$project_root/Sources/MikuDesktop/SpeechVoice.swift" \
+  "$project_root/Sources/MikuDesktop/VoiceCallAudio.swift" \
+  "$project_root/Sources/MikuDesktop/VoicePCMStream.swift" \
   "$project_root/Sources/MikuDesktop/MikuSpeech.swift" \
   "$project_root/Sources/MikuDesktop/HumText.swift" \
   "$project_root/Sources/MikuDesktop/HumPlayer.swift" \

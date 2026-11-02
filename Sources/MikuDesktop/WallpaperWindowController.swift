@@ -285,6 +285,10 @@ final class WallpaperWindowController: NSObject, WKNavigationDelegate, WKScriptM
         switch event {
         case let .started(text, duration):
             call(webView: webView, function: "startVoice", payload: ["text": text, "duration": duration])
+        case let .streamingStarted(text):
+            call(webView: webView, function: "startVoiceStream", payload: ["text": text])
+        case .streamingStopped:
+            evaluate("window.mikuCompanion?.pauseVoiceStream?.()")
         case .ended, .interrupted:
             evaluate("window.mikuCompanion?.stopVoice?.()")
         case .failed:

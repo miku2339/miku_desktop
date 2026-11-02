@@ -454,3 +454,33 @@ test('a reply held while she walks over keeps talking if its audio already start
   harness.api.receiveReply(harness.state.pendingCallReply);
   assert.equal(harness.state.talk, playing);
 });
+
+test('finishing the model reply preserves audio already streaming', () => {
+  const harness = createHarness();
+  harness.talking.setThinking(true);
+  harness.api.startVoiceStream({ text: '我先陪你坐一下。' });
+  const playing = harness.state.talk;
+  harness.setElapsed(3);
+  harness.talking.setThinking(false);
+  harness.api.receiveReply({ emotion: 'gentle', action: 'idle', text: '我先陪你坐一下。慢慢說就好。', voiced: true });
+  assert.equal(harness.state.talk, playing);
+  assert.equal(harness.state.pendingVoice, null);
+  harness.influences.fill(0);
+  harness.talking.applyTalking(3.2);
+  assert.equal(mouthIsClosed(harness.influences), false);
+});
+
+test('a final bubble never re-arms text mouth timing after streamed audio', () => {
+  for (const paused of [false, true]) {
+    const harness = createHarness();
+    harness.api.startVoiceStream({ text: '這段語音還沒結束。' });
+    if (paused) harness.api.pauseVoiceStream();
+    harness.setElapsed(5);
+    harness.api.receiveReply({ emotion: 'calm', action: 'idle', text: '這段語音還沒結束。', voiced: true });
+    harness.setElapsed(5.1);
+    harness.api.voiceFailed();
+    assert.equal(harness.state.pendingVoice, null);
+    assert.equal(harness.state.talk, null);
+    assert.equal(harness.state.streamingVoice, false);
+  }
+});

@@ -116,7 +116,7 @@ final class SleepSchedule {
 
     static func isGoodNight(_ text: String) -> Bool {
         let lowered = text.lowercased()
-        return ["晚安", "早唞", "good night", "goodnight", "nighty night", "おやすみ", "お休み"].contains { lowered.contains($0) }
+        return ["晚安", "早唞", "good night", "goodnight", "nighty night", "おやすみ", "お休み", "잘 자", "잘자", "안녕히 주무세요"].contains { lowered.contains($0) }
     }
 
     /// Explicitly staying awake always wins over a bedtime phrase in the same message.
@@ -127,6 +127,9 @@ final class SleepSchedule {
         if ["why don't you go to sleep", "why don't you go to bed"].contains(where: { lowered.contains($0) }) {
             return false
         }
+        if lowered.range(of: #"자러\s*가기\s*싫|자지\s*않|자러\s*가는\s*건\s*아니"#, options: .regularExpression) != nil {
+            return true
+        }
         return [
             "不想睡", "不想去睡", "不要睡", "不要去睡", "不用睡", "不用去睡", "不需要睡", "不需要去睡", "別睡", "别睡", "不能睡", "我不睡", "睡不著", "睡不着", "不睏", "不困",
             "唔想瞓", "唔想去瞓", "唔好瞓", "唔使瞓", "唔使去瞓", "我唔瞓", "瞓唔着", "瞓唔著",
@@ -135,7 +138,7 @@ final class SleepSchedule {
             "don't want to go to bed", "do not want to go to bed", "don't go to sleep", "do not go to sleep", "don't go to bed", "do not go to bed",
             "not going to sleep", "not going to bed", "not going to go to sleep", "not going to go to bed",
             "won't go to sleep", "won't go to bed", "don't need to sleep", "do not need to sleep", "don't need to go to bed", "do not need to go to bed",
-            "not sleepy", "not tired"
+            "not sleepy", "not tired", "잠이 안 와", "잠이 안와", "잠이 안와요", "졸리지 않", "안 졸려", "안졸려", "자고 싶지 않", "자기 싫", "자지 마", "자지마", "안 잘", "안잘", "안 자", "못 자", "못자", "자러 가지 마", "자러가지 마", "자러 가지마", "자러가지마", "잠들지 마", "잠들지마"
         ].contains { lowered.contains($0) }
     }
 
@@ -150,7 +153,7 @@ final class SleepSchedule {
             "想睡了", "想睡覺了", "想睡觉了", "我睡了", "準備睡", "准备睡", "去瞓", "瞓覺", "瞓啦", "瞓喇", "想瞓", "要瞓", "準備瞓",
             "寝よう", "寝てね", "寝なよ", "寝なさい", "もう寝る", "寝るね", "寝るよ", "寝るわ", "寝ます", "眠ります", "そろそろ寝",
             "go to sleep", "go to bed", "going to sleep", "going to bed", "gonna sleep", "gonna go to bed", "time for bed", "time to sleep",
-            "off to bed", "heading to bed", "get some sleep", "should sleep", "need to sleep"
+            "off to bed", "heading to bed", "get some sleep", "should sleep", "need to sleep", "자러 가", "자러가", "잘게", "잘 거야", "잘거야", "자야겠", "자야 겠", "이제 자", "이제자", "일찍 자", "어서 자", "잠자리에", "자러 갈", "자야지", "자자"
         ].contains { lowered.contains($0) }
     }
 
@@ -164,6 +167,7 @@ final class SleepSchedule {
             "good night mean", "what is good night", "good night in ", "how to say good night", "how do you say good night",
             "don't say good night", "do not say good night", "not saying good night", "won't say good night",
             "translate", "translation", "the phrase", "the words", "the word",
+            "뜻", "의미", "번역", "어떻게 말", "어떻게 해", "영어로", "일본어로", "중국어로", "라고 말하지", "라고 하지", "라는 말", "라는 노래", "노래 제목", "잘 자는",
             "おやすみの意味", "おやすみは", "おやすみとは", "おやすみという", "おやすみと言わない", "おやすみじゃない", "英語で", "中国語で", "翻訳", "言い方",
             "「", "」", "『", "』", "\"good night\"", "“good night”", "‘good night’"
         ]
@@ -182,6 +186,6 @@ final class SleepSchedule {
 
     static func isGoodMorning(_ text: String) -> Bool {
         let lowered = text.lowercased()
-        return ["早晨", "早安", "早上好", "good morning", "morning!", "おはよう"].contains { lowered.contains($0) }
+        return ["早晨", "早安", "早上好", "good morning", "morning!", "おはよう", "좋은 아침", "좋은아침", "잘 잤어", "잘잤어"].contains { lowered.contains($0) }
     }
 }

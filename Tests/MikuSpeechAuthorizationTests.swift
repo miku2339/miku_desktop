@@ -6,6 +6,7 @@ struct MikuSpeechAuthorizationTests {
         try testLoopbackEndpointPolicy()
         try testLocalRequestsNeverCarryRemoteCredentials()
         try testOpenAISpeechBody()
+        try testCapabilitiesRequest()
         try testAudioModelDiscovery()
         testWAVValidation()
         print("PASS: local speech authorization and wire checks")
@@ -57,6 +58,7 @@ struct MikuSpeechAuthorizationTests {
             "http://127.0.0.1:8001/v1/audio/speech",
             "http://127.0.0.1:8000/v1/../api/jobs",
             "http://127.0.0.1:8000/api/jobs",
+            "http://127.0.0.1:8000/v1/audio/speech?model=anything",
             "https://miku-tts.qimake.si/api/jobs"
         ] {
             do {
@@ -66,6 +68,25 @@ struct MikuSpeechAuthorizationTests {
                 continue
             }
         }
+    }
+
+    private static func testCapabilitiesRequest() throws {
+        let endpoint = try url("http://127.0.0.1:8000/v1")
+        let request = try MikuSpeechAuthorization.capabilitiesRequest(model: "owner/tts-model", endpoint: endpoint)
+        let components = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)!
+        precondition(components.path == "/v1/audio/capabilities")
+        precondition(components.queryItems == [URLQueryItem(name: "model", value: "owner/tts-model")])
+        precondition(request.value(forHTTPHeaderField: "Authorization") == nil)
+        for (model, target) in [("bad\nmodel", endpoint), ("tts", try url("https://example.com/v1"))] {
+            do {
+                _ = try MikuSpeechAuthorization.capabilitiesRequest(model: model, endpoint: target)
+                preconditionFailure("Invalid capability request was accepted")
+            } catch MikuSpeechAuthorization.AuthorizationError.untrustedServiceURL {}
+        }
+        let data = try MikuSpeechWire.speechBody(model: "tts", input: "Hello", language: "en", style: "neutral", streaming: true)
+        let body = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        precondition(body["response_format"] as? String == "pcm_s16le" && body["stream"] as? Bool == true)
+        precondition(body["style"] as? String == "neutral")
     }
 
     private static func testOpenAISpeechBody() throws {

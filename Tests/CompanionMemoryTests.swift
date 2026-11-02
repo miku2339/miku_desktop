@@ -27,6 +27,13 @@ struct CompanionMemoryTests {
             guard condition() else { throw TestFailure(message: message) }
             checks += 1
         }
+        try check(CompanionMemory.isApology("미안해, 잘못했어"), "韓語道歉")
+        try check(!CompanionMemory.isApology("미안하지 않아"), "韓語否認道歉不會原諒")
+        try check(!CompanionMemory.isApology("죄송하지 않아요"), "韓語禮貌否認道歉")
+        try check(!CompanionMemory.isApology("미안한 게 아니야"), "韓語不是在道歉")
+        try check(CompanionMemory.isAccidentExplanation("실수였어, 잘못 눌렀어"), "韓語誤觸解釋")
+        try check(CompanionMemory.cleanFact("내 비밀번호는 secret이다") == nil, "韓語密碼不儲存")
+        try check(CompanionMemory.cleanFact("나는 노래 듣는 것을 좋아해") != nil, "韓語一般喜好可儲存")
         func fixture(_ name: String, friendship: Double) throws -> URL {
             let fixtureFolder = folder.appendingPathComponent(name, isDirectory: true)
             try FileManager.default.createDirectory(at: fixtureFolder, withIntermediateDirectories: true)
@@ -44,6 +51,45 @@ struct CompanionMemoryTests {
             }
             return value
         }
+
+        let ordinaryApology = CompanionMemory(fileURL: try fixture("ordinary-apology", friendship: 80), defaults: defaults)
+        ordinaryApology.recordTouch("boundary", part: "chest")
+        try check(ordinaryApology.noteUserMessage("對不起"), "A sincere apology is accepted")
+        try check(!ordinaryApology.isOffended && ordinaryApology.context().justForgiven, "Accepting an apology ends the offended state")
+        try check(!ordinaryApology.context().forgaveAccident, "A quick apology does not invent an accidental mouse event")
+        let ordinaryApologyScore = try preciseFriendship(ordinaryApology)
+        try check(ordinaryApologyScore == 74, "A normal apology keeps the established friendship policy")
+
+        let accidentURL = try fixture("confirmed-accident", friendship: 80)
+        let accident = CompanionMemory(fileURL: accidentURL, defaults: defaults)
+        accident.recordTouch("boundary", part: "skirt")
+        try check(accident.noteUserMessage("剛剛是不小心點錯了，不是故意的。"), "An explicit accidental touch explanation settles the incident")
+        try check(!accident.isOffended && accident.context().forgaveAccident, "Confirmed accidental touches do not remain an offence")
+        let accidentScore = try preciseFriendship(accident)
+        try check(accidentScore == 80, "A confirmed accidental touch restores its full penalty")
+        try check(accident.context().boundaryStrikesToday == 0, "A confirmed accident is removed from today's boundary count")
+        accident.saveNow()
+        let loadedAccident = CompanionMemory(fileURL: accidentURL, defaults: defaults)
+        try check(!loadedAccident.isOffended && loadedAccident.context().boundaryStrikesToday == 0, "The corrected accident state survives reload")
+
+        let deniedAccident = CompanionMemory(fileURL: try fixture("denied-accident", friendship: 80), defaults: defaults)
+        deniedAccident.recordTouch("boundary", part: "chest")
+        try check(!deniedAccident.noteUserMessage("不是不小心，我就是故意的"), "Denying an accident cannot settle an offence")
+        try check(deniedAccident.isOffended, "A deliberately repeated violation stays unresolved")
+        try check(!CompanionMemory.isAccidentExplanation("It was not an accident"), "Negated English accident claims are not confirmations")
+
+        let hovered = CompanionMemory(fileURL: try fixture("hover-is-not-touch", friendship: 80), defaults: defaults)
+        hovered.recordTouch("hover", part: "chest")
+        try check(!hovered.isOffended && hovered.context().touchesToday.isEmpty, "Hover events record neither touches nor offences")
+        let hoverScore = try preciseFriendship(hovered)
+        try check(hoverScore == 80, "Hover cannot affect friendship")
+
+        let datingApology = CompanionMemory(fileURL: try fixture("dating-apology", friendship: 90), defaults: defaults)
+        datingApology.noteUserMessage("我喜歡你，可以做我女朋友嗎？")
+        datingApology.recordTouch("boundary", part: "chest")
+        datingApology.noteUserMessage("對不起，我喜歡你")
+        try check(datingApology.relationshipStatus == .dating && !datingApology.isOffended, "Making up preserves an established relationship")
+        try check(datingApology.context().confessionDecision == .alreadyDating, "Making up does not make established partners confess again")
 
         for (friendship, level) in [(24.9, 0), (25, 1), (49.9, 1), (50, 2), (74.9, 2), (75, 3)] {
             try check(CompanionMemory.level(for: friendship) == level, "Friendship level boundary at \(friendship)")

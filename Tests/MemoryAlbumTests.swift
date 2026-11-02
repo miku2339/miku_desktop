@@ -283,6 +283,19 @@ struct MemoryAlbumTests {
         expect(japaneseViews.compactMap { $0 as? NSImageView }.contains(where: { $0.image != nil }), "selected photo preview survives Japanese refresh")
         controller.close()
 
+        let albumNotebook = NotebookWindowController(settingsSections: [])
+        albumNotebook.pageProvider = { _ in controller }
+        albumNotebook.show(.album)
+        titleField.stringValue = ""
+        titleField.placeholderString = "Title"
+        albumNotebook.window?.setContentSize(NSSize(width: 1080, height: 740))
+        albumNotebook.window?.contentView?.layoutSubtreeIfNeeded()
+        expect(titleField.frame.width > 200, "the embedded album title field has usable editing space")
+        expect(abs(titleField.frame.width - (noteView.enclosingScrollView?.frame.width ?? 0)) < 1, "the album title field fills the same detail width as its note field")
+        albumNotebook.close()
+
+        NotebookChecks.run { expect($0, $1) }
+
         if failures.isEmpty {
             print("MemoryAlbumTests: \(checks) checks passed")
         } else {

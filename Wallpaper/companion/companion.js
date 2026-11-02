@@ -10,7 +10,7 @@ import { createDailyActivities } from './daily-activities.js';
 import { characterEnvironment, defaultWeather, normalizeWeather, timeAnchors, useShibuyaScramble } from './environment.js';
 import { createAmbient } from './ambient.js';
 import { createRelationship, RELATIONSHIP_TOUCH_KINDS } from './relationship.js';
-import { shouldFallBack, talkFrame, textTalk, voiceTalk } from './talking.js';
+import { shouldFallBack, streamTalk, talkFrame, textTalk, voiceTalk } from './talking.js';
 import { checkLoop, shouldReportError } from './loop-health.js';
 import { canUseRoomBed, DEFAULT_ROOM_LAYOUT, loadRoomLayout, roomViewportGeometry } from './room-layout.js';
 import { createSleepCycle, isAsleep, normalizeOverride, scheduledAsleep } from './sleep.js';
@@ -265,8 +265,15 @@ const HOVER_PHRASES = {
     hand: ['ハイタッチする？', 'やっほー♪', '手、つなぐ？', 'ほら、手出して♪', 'どこか一緒に行く？'],
     body: ['ん？呼んだ？', '♪～', 'ここにいるよ！', '何してるの？', '歌ってあげようか？♪'],
     cold: ['……', 'ふん。', 'まだ怒ってるよ。', '（ぷいっ）']
+  },
+  ko: {
+    head: ['머리 쓰다듬어 줄 거야? ♪', '헤헤~', '오늘도 머릿결이 좋지!', '쓰다듬어도 돼 ♪', '내 양 갈래 머리 보고 있어?'],
+    hand: ['하이파이브 할까?', '안녕~ ♪', '손잡을래?', '자, 손 내밀어 봐 ♪', '같이 어디 갈까?'],
+    body: ['응? 나 찾았어?', '♪~', '나 여기 있어!', '뭐 하고 있어?', '노래 불러 줄까? ♪'],
+    cold: ['……', '흥.', '아직 화났거든.', '(고개를 돌린다)']
   }
 };
+
 const HOVER_NOTE_SYMBOLS = ['♪', '♫', '♬', '♪'];
 const TOUCH_PHRASES = {
   'zh-Hant': {
@@ -360,6 +367,36 @@ const TOUCH_PHRASES = {
     sleepMumble: ['ん…あと五分…', '…ネギ…いっぱい…', 'むにゃ…やめてよぉ…', '…すぅ…ん？…'],
     wokenUp: ['ん…？起こされちゃった…', 'ふぁ…いま何時…？', '…ねむい…どうしたの？'],
     morning: ['おはよう！よく眠れた～', 'ん～おはよう！今日もがんばろうね♪', 'ふぁ…おはよう、早起きだね。']
+  },
+  ko: {
+    headStroke: ['헤헤~ 한 번 더 ♪', '머리는 살살 쓰다듬어 줘.', '기분 좋아… ♪', '자꾸 받고 싶어지잖아~', '으응~ ♪', '오늘은 더 다정하네.'],
+    handHold: ['손 꼭 잡았어 ♪', '조금만 더 이러고 있자.', '손이 따뜻하네.', '놓지 마, 알았지?', '헤헤, 조금 부끄럽다…'],
+    poke: ['응? 너였구나 ♪', '간지럽잖아~ ♪', '왜 자꾸 콕콕 찔러~', '앗! 간지러워!', '흥, 기습이야!', '같이 놀고 싶어?'],
+    carry: ['우와! 어디로 데려가는 거야?', '노, 높아!', '내려 줘~', '날고 있어 ♪', '떨어뜨리지 않게 조심해!'],
+    teased: ['오늘은 유난히 붙어 있네~ ♪', '계속 그러면 부끄러워…', '할 일 없어? ♪', '알았어, 나 좋아하는 거 알아 ♪', '잠깐 쉬자. 어디 안 가니까.'],
+    shaking: ['으아아아—!', '자, 잠깐만!', '흔들지 마~!', '꺄아아아—', '머, 멈춰!'],
+    dizzyHeld: ['어, 어지러워…', '눈이 빙글빙글 돌아~', '세상이 돌고 있어…', '으으… 머리가…'],
+    dizzy: ['빙글빙글~ @_@', '별이 보여… ☆', '제, 제대로 못 서겠어…', '너무 어지러워~', '바닥이 돌고 있어…'],
+    recover: ['휴… 드디어 멈췄네.', '다음엔 살살 해 줘.', '응… 이제 괜찮아 ♪', '방금 별이 엄청 많이 보였어…'],
+    giggle: ['헤헤, 조금은 재미있었어 ♪', '한 번 더? …그럴 리가!', '아직 어질어질해… 헤헤 ♪'],
+    pout: ['흥! 흔들지 말라니까!', '일부러 그런 거지!', '또 흔들면 화낼 거야!', '난 아이돌이지, 장난감이 아니야!'],
+    sulk: ['흥, 이제 말 안 해!', '화났으니까 말 걸지 마!', '……흥.'],
+    forgive: ['…알았어. 이번 한 번만 용서해 줄게.', '다음엔 그러지 마.', '…조금만 용서해 주는 거야.', '대파 사 줘야 해!'],
+    ouch: ['아야…', '살살 내려 줘야지!', '으으… 부딪혔잖아.', '아야야…', '제대로 받아 줘야지!'],
+    boundary: ['야! 거기는 만지지 마!', '뭐 하는 거야?! 거긴 안 돼!', '…너무하잖아. 거기는 만지지 마.'],
+    boundarySkirt: ['야! 치마 들추지 마!', '뭐 하는 거야?! 변태!', '…너무하잖아. 내 치마 만지지 마.'],
+    boundaryHurt: ['…네가 그럴 줄은 몰랐어.', '우리 친구잖아? 거기는 안 돼.', '…그렇게 하면 정말 불편해.'],
+    boundaryAgain: ['싫다고 했잖아! 이제 말 안 해.', '……사과하기 전엔 말 안 할 거야.', '정말 싫어. 저리 가.'],
+    snub: ['……먼저 사과해.', '아직 화났어.', '만지지 마. 먼저 사과해.', '흥, 말하기 싫어.', '……'],
+    forgiven: ['…알았어, 이번엔 용서해 줄게. 다시는 그러지 마.', '…잘못한 걸 알면 됐어.', '응… 사과는 받아 줄게.'],
+    headStrokeDistant: ['어? 우린 아직 그렇게 친하지 않잖아…', '음… 머리 헝클어지겠다.', '…잠깐만이야.'],
+    handHoldDistant: ['가, 갑자기 손을? …조금 어색한데.', '음… 아직은 말자.', '…손이 차갑네.'],
+    pokeDistant: ['…왜?', '무슨 일이야?', '함부로 콕콕 찌르지 마.'],
+    carryDistant: ['어?! 내려 줘!', '갑자기 들어 올리지 마!', '나, 나 혼자 걸을 수 있어!'],
+    goodnight: ['졸려… 나 먼저 잘게. 잘 자~', '하암… 눈이 안 떠져. 잘 자.', '오늘도 수고했어. 나 이제 잘게, 잘 자 ♪'],
+    sleepMumble: ['으음… 조금만 더…', '…대파… 대파가 잔뜩…', '으응… 시끄러워…', '…쿨쿨… 응?…'],
+    wokenUp: ['으음…? 나 깨웠어…', '하암… 지금 몇 시야…?', '…졸려… 무슨 일이야?'],
+    morning: ['좋은 아침! 푹 잤어~', '으음~ 좋은 아침! 오늘도 같이 힘내자 ♪', '하암… 안녕. 일찍 일어났네.']
   }
 };
 
@@ -387,8 +424,17 @@ const CONTEXT_PHRASES = {
     storm: ['雷…ちょっと怖いね。', '外は大荒れだね、おうちにいよう。'],
     snow: ['雪だ！きれい♪', 'さむ～い、あったかくしてね。'],
     fog: ['外、霧がすごいね。']
+  },
+  ko: {
+    morning: ['좋은 아침! 오늘도 같이 힘내자 ♪', '안녕~ 아침은 먹었어?'],
+    night: ['늦었으니까 너무 늦게 자지 마.', '밤이 깊었네… 조금만 더 같이 있어 줄게.'],
+    rain: ['비가 오네. 우산 챙겨.', '빗소리 좋다…'],
+    storm: ['천둥… 조금 무서워.', '밖에 비바람이 세네. 안에 있자.'],
+    snow: ['눈이다! 예뻐 ♪', '으, 추워~ 따뜻하게 입어!'],
+    fog: ['밖에 안개가 자욱하네.']
   }
 };
+
 const HOVER_GREETING_COOLDOWN = 40;
 const HOVER_DWELL_SECONDS = 2.2;
 
@@ -663,6 +709,7 @@ function applyTalking(elapsed) {
 
 function hideBubbleAfter(ms) {
   clearTimeout(state.bubbleTimer);
+  if (state.streamingVoice) return;
   state.bubbleHideAt = performance.now() + ms;
   state.bubbleTimer = window.setTimeout(() => speechBubble.classList.remove('visible'), ms);
 }
@@ -672,6 +719,7 @@ function startVoice(payload = {}) {
   if (!showsCharacter || !payload || typeof payload !== 'object') return false;
   const text = typeof payload.text === 'string' ? payload.text.trim() : '';
   const duration = Number(payload.duration);
+  state.streamingVoice = false;
   state.pendingVoice = null;
   if (reducedMotion.matches) {
     state.talk = null;
@@ -689,15 +737,37 @@ function startVoice(payload = {}) {
   return true;
 }
 
+function startVoiceStream(payload = {}) {
+  if (!showsCharacter || !payload || typeof payload !== 'object') return false;
+  const text = typeof payload.text === 'string' ? payload.text.trim() : '';
+  const talk = streamTalk(text, currentElapsed());
+  if (!talk) return false;
+  state.pendingVoice = null;
+  state.streamingVoice = true;
+  state.talk = reducedMotion.matches ? null : talk;
+  clearTimeout(state.bubbleTimer);
+  return true;
+}
+
+function pauseVoiceStream() {
+  if (state.talk?.streaming) state.talk = null;
+  return true;
+}
+
 /** The audio stopped (finished, interrupted or muted): close her mouth. */
 function stopVoice() {
   if (state.talk?.voiced) state.talk = null;
+  if (state.streamingVoice) {
+    state.streamingVoice = false;
+    if (speechBubble.classList.contains('visible')) hideBubbleAfter(1500);
+  }
   return true;
 }
 
 /** The audio for a reply never came: if that was quick, talk from the text instead. */
 function voiceFailed() {
   const pending = state.pendingVoice;
+  stopVoice();
   state.pendingVoice = null;
   if (shouldFallBack(pending, currentElapsed())) startTalking(pending.text);
   return true;
@@ -718,7 +788,8 @@ function showBubble(text, emotion = 'calm', duration = null, { talk = true } = {
     // Read aloud: the mouth waits for the audio instead of moving now. If the audio is
     // already playing (the bubble was held while she walked over), leave the mouth going.
     if (!state.talk?.voiced) state.talk = null;
-    state.pendingVoice = { text: safeText, at: currentElapsed() };
+    state.pendingVoice = state.talk?.voiced || state.streamingVoice
+      ? null : { text: safeText, at: currentElapsed() };
   }
   speechBubble.classList.add('visible');
   // Longer replies stay up longer so they can actually be read.
@@ -729,7 +800,7 @@ function showBubble(text, emotion = 'calm', duration = null, { talk = true } = {
 function setThinking(thinking) {
   if (!showsCharacter) return;
   state.thinking = Boolean(thinking);
-  state.talk = null;
+  if (state.thinking || !state.talk?.voiced) state.talk = null;
   if (state.thinking) state.pendingVoice = null;
   clearTimeout(state.bubbleTimer);
   if (state.thinking) {
@@ -2765,6 +2836,25 @@ const PROP_PHRASES = {
     magicalMirai: ['マジカルミライだよ！楽しみ！'],
     tanabata: ['七夕だね、何をお願いする？'],
     summerFestival: ['夏祭りの季節だね～']
+  },
+  ko: {
+    leek: ['대파 빙글빙글~ ♪', '대파 시간!', '이에반 폴카~ ♪'],
+    drink: ['차 마실 시간~', '버블티 맛있어 ♪', '잠깐 쉬면서 한 잔 할까~'],
+    fan: ['여름 축제는 정말 신나~', '부채질하니까 시원해 ♪', '이따 불꽃놀이 볼까?'],
+    mirai: ['매지컬 미라이! 같이 응원하자!', '응원봉을 흔들어~ ♪', '오늘은 매지컬 미라이야!'],
+    listen: ['이 노래 좋다 ♪', '나도 같이 듣고 있어~', '응응, 리듬 좋네!'],
+    rain: ['비가 오네. 우산 잊지 마~', '우산 썼으니까 괜찮아 ♪'],
+    newYear: ['새해 복 많이 받아! 올해도 잘 부탁해~'],
+    mikuDay: ['오늘은 미쿠의 날! 3월 9일, 고마워 ♪'],
+    birthday: ['오늘은 내 생일이야! 같이 있어 줘서 고마워~'],
+    anniversary: ['오늘은 우리가 만난 지 1년 되는 날이야! 늘 함께해 줘서 고마워~'],
+    halloween: ['트릭 오어 트릿! 사탕 안 주면 장난칠 거야~'],
+    christmas: ['메리 크리스마스! 🎄'],
+    newYearsEve: ['올해의 마지막 날이네. 1년 동안 함께해 줘서 고마워!'],
+    snowMiku: ['SNOW MIKU의 계절이 왔어! 홋카이도는 정말 추워~'],
+    magicalMirai: ['매지컬 미라이야! 정말 기대돼!'],
+    tanabata: ['칠석이네. 무슨 소원 빌 거야?'],
+    summerFestival: ['여름 축제의 계절이야~']
   }
 };
 
@@ -3817,6 +3907,11 @@ function normalizedPointer(event) {
 }
 
 function browserReactionText(zone) {
+  if (state.language === 'ko') {
+    if (zone === 'head') return ['헤헤 ♪', '오늘도 같이 힘내자.'];
+    if (zone === 'hand') return ['안녕~', '만나서 반가워!'];
+    return ['안녕!', '나랑 이야기할래?'];
+  }
   if (zone === 'head') return ['嘿嘿♪', '今天也一起加油呀。'];
   if (zone === 'hand') return ['嗨～', '見到你真好！'];
   return ['你好呀！', '想和我聊聊嗎？'];
@@ -4275,6 +4370,12 @@ window.mikuCompanion = Object.freeze({
   },
   startVoice(payload = {}) {
     return startVoice(payload);
+  },
+  startVoiceStream(payload = {}) {
+    return startVoiceStream(payload);
+  },
+  pauseVoiceStream() {
+    return pauseVoiceStream();
   },
   stopVoice() {
     return stopVoice();

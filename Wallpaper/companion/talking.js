@@ -31,6 +31,14 @@ export function voiceTalk(text, start, duration) {
   return { chars, rate: chars.length / length, start, end: start + length, voiced: true };
 }
 
+/** The player starts and pauses this timing as streamed audio becomes audible. */
+export function streamTalk(text, start) {
+  const chars = [...String(text ?? '')];
+  if (!chars.length || !Number.isFinite(start)) return null;
+  return { chars, rate: isLatinOnly(text) ? 14 : 7.5, start,
+    end: start + MAX_VOICE_SECONDS, voiced: true, streaming: true };
+}
+
 /**
  * Mouth shape at `elapsed`: null when the line is over (the caller drops it), otherwise
  * { vowel, open } with open 0 while paused on punctuation.
@@ -39,7 +47,9 @@ export function talkFrame(talk, elapsed) {
   if (!talk || !Number.isFinite(elapsed)) return null;
   if (elapsed < talk.start || elapsed > talk.end + 0.15) return null;
   if (elapsed > talk.end) return { vowel: null, open: 0 };
-  const char = talk.chars[Math.min(talk.chars.length - 1, Math.floor((elapsed - talk.start) * talk.rate))] ?? '';
+  const position = Math.floor((elapsed - talk.start) * talk.rate);
+  const index = talk.streaming ? position % talk.chars.length : Math.min(talk.chars.length - 1, position);
+  const char = talk.chars[index] ?? '';
   if (!char || PAUSE.test(char)) return { vowel: null, open: 0 };
   const syllable = (elapsed - talk.start) * 7;
   const open = Math.sin((syllable % 1) * Math.PI);

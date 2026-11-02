@@ -3,6 +3,10 @@ import AppKit
 @MainActor
 final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFieldDelegate {
     var onReply: ((CompanionReply) -> Void)?
+    var onVoiceReply: ((CompanionReply) -> Void)?
+    var onVoiceReplyBegan: (() -> Void)?
+    var onVoicePhrase: ((String) -> Void)?
+    var onVoiceCallStop: (() -> Void)?
     /// A song you asked her to play; called just before her reply is delivered.
     var onPlayMusic: ((MusicPlan) -> Void)?
     var onThinking: ((Bool) -> Void)?
@@ -24,16 +28,28 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
     private var conversationGeneration = 0
     private var connectionTask: Task<Void, Never>?
     private var hasPositionedWindow = false
+    private let voiceCall = VoiceCallController()
+    private var sendingVoiceTurn = false
+    private var interruptingVoiceCall = false
+    private var awaitingVoicePlayback = false
+    private var voiceReplyToken: UUID?
+    private var voiceReplyStyle = MikuSpeech.VoiceStyle.neutral
+    private var voiceReplyBuffer = VoiceReplyBuffer()
+    private var voiceReplyProgress = VoiceReplyProgress()
+    private var voiceExchangeUser: ChatMessage?
+    private var voiceExchangeReplyID: UUID?
+    private var messageLabels: [UUID: NSTextField] = [:]
+    private var pendingVoiceBedtime: (sleepRevision: Int, generation: Int, requiresLateEvening: Bool)?
 
     // Header
     private let headerAvatar = MikuAvatarView(size: 40)
     private let nameLabel = NSTextField.mikuLabel("Miku", size: 16, weight: .bold)
     private let statusDot = StatusDotView()
     private let statusLabel = NSTextField.mikuLabel("", size: 11.5, color: MikuTheme.secondaryText)
-    private let clearButton = MikuPillButton(frame: .zero)
     private let settingsButton = MikuPillButton(frame: .zero)
     private let gameButton = MikuPillButton(frame: .zero)
     private let companionButton = MikuPillButton(frame: .zero)
+    private let callButton = MikuPillButton(frame: .zero)
     /// Mutes Miku's voice in one click (shown only while reading aloud is on).
     private let muteButton = MikuPillButton(frame: .zero)
     private var activeGame: GameSession?
@@ -50,6 +66,18 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
     private var bubbleLabels: [NSTextField] = []
     private var typingRow: NSView?
     private var errorRow: NSView?
+
+    // Voice call
+    private let voiceCallCard = MikuCardView()
+    private let voiceCallStatusLabel = NSTextField.mikuLabel("", size: 12.5, weight: .semibold)
+    private let voiceCallSubtitleLabel = NSTextField.mikuLabel("", size: 12)
+    private let voiceCallPrivacyLabel = NSTextField.mikuLabel("", size: 10.5, color: MikuTheme.secondaryText)
+    private let voiceCallMicButton = MikuPillButton(frame: .zero)
+    private let voiceCallEndButton = MikuPillButton(frame: .zero)
+    private let voiceCallInterruptButton = MikuPillButton(frame: .zero)
+    private let voiceCallLanguageButton = MikuPillButton(frame: .zero)
+    private var messagesBelowHeader: NSLayoutConstraint?
+    private var messagesBelowVoiceCall: NSLayoutConstraint?
 
     // Input
     private let inputCard = MikuCardView()
@@ -85,6 +113,16 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
         window.delegate = self
         hasPositionedWindow = window.setFrameAutosaveName("MikuChatWindow") && UserDefaults.standard.string(forKey: "NSWindow Frame MikuChatWindow") != nil
         buildUI()
+        voiceCall.onChange = { [weak self] in self?.voiceCallChanged() }
+        voiceCall.onInterrupt = { [weak self] in self?.interruptVoiceOutput() }
+        voiceCall.onUtterance = { [weak self] text in
+            guard let self, voiceCall.isActive, !isSending else { return }
+            send(text, voiceOrigin: true)
+        }
+        if let value = UserDefaults.standard.string(forKey: "voiceCallLanguage"),
+           let language = VoiceCallLanguage(rawValue: value) {
+            voiceCall.selectLanguage(language)
+        }
         showEmptyState()
         restoreConversation()
         NotificationCenter.default.addObserver(self, selector: #selector(memoryErased), name: .mikuMemoryErased, object: nil)
@@ -114,6 +152,7 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
 
     /// A line she said on her own (she noticed what you were doing).
     func receiveProactive(_ reply: CompanionReply) {
+        guard !voiceCall.isActive else { return }
         lastReplyText = reply.text
         let message = ChatMessage(role: .assistant, text: reply.text)
         hideEmptyState()
@@ -125,7 +164,100 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
 
     /// Whether you're in the middle of talking to her here.
     var isChatting: Bool {
-        isSending || (window?.isKeyWindow == true && !inputField.stringValue.isEmpty)
+        voiceCall.isActive || isSending || (window?.isKeyWindow == true && !inputField.stringValue.isEmpty)
+    }
+
+    var isVoiceCallActive: Bool { voiceCall.isActive }
+
+    func receiveVoicePlayback(_ event: MikuSpeech.PlaybackEvent) {
+        guard voiceCall.isActive else { return }
+        switch event {
+        case .started, .streamingStarted:
+            guard awaitingVoicePlayback else {
+                pauseVoiceCallForExternalAudio(cancelPendingReply: true)
+                return
+            }
+            voiceReplyProgress.started()
+            voiceCall.playbackStarted()
+        case .streamingStopped:
+            break
+        case .ended:
+            guard awaitingVoicePlayback else { return }
+            awaitingVoicePlayback = false
+            settleVoiceExchange(completed: true)
+            if let bedtime = pendingVoiceBedtime {
+                let sleep = SleepSchedule.shared
+                let shouldSleep = bedtime.generation == conversationGeneration
+                    && bedtime.sleepRevision == sleep.revision
+                    && (!bedtime.requiresLateEvening || SleepSchedule.isLateEvening())
+                pendingVoiceBedtime = nil
+                if shouldSleep {
+                    endVoiceCall()
+                    sleep.goToBed()
+                    return
+                }
+            }
+            voiceCall.playbackFinished()
+        case .failed:
+            guard awaitingVoicePlayback else { return }
+            awaitingVoicePlayback = false
+            pendingVoiceBedtime = nil
+            settleVoiceExchange(completed: false)
+            voiceReplyToken = nil
+            conversationGeneration &+= 1
+            chatTask?.cancel()
+            chatTask = nil
+            sendingVoiceTurn = false
+            memory.discardPendingConfessionDecision()
+            setSending(false)
+            onVoiceCallStop?()
+            voiceCall.replyFailed()
+        case .interrupted:
+            if !interruptingVoiceCall { endVoiceCall() }
+        }
+    }
+
+    func receiveVoiceSegmentFinished(_ text: String) {
+        guard voiceCall.isActive, awaitingVoicePlayback else { return }
+        voiceReplyProgress.segmentFinished(text)
+    }
+
+    func pauseVoiceCallForExternalAudio(cancelPendingReply: Bool = false) {
+        guard voiceCall.isActive else { return }
+        if !voiceCall.isMicrophoneMuted { voiceCall.toggleMicrophone() }
+        if cancelPendingReply, sendingVoiceTurn || awaitingVoicePlayback {
+            settleVoiceExchange(completed: false)
+            pendingVoiceBedtime = nil
+            awaitingVoicePlayback = false
+            conversationGeneration &+= 1
+            chatTask?.cancel()
+            chatTask = nil
+            sendingVoiceTurn = false
+            memory.discardPendingConfessionDecision()
+            cancelPendingBedtime()
+            setSending(false)
+            voiceCall.interruptAndListen()
+        }
+    }
+
+    func endVoiceCall() {
+        let wasActive = voiceCall.isActive || sendingVoiceTurn
+        settleVoiceExchange(completed: false)
+        pendingVoiceBedtime = nil
+        awaitingVoicePlayback = false
+        voiceReplyToken = nil
+        voiceReplyBuffer = VoiceReplyBuffer()
+        voiceCall.end()
+        if sendingVoiceTurn { cancelActiveConversation(endingVoiceCall: false) }
+        if wasActive {
+            onVoiceCallStop?()
+            MikuSpeech.shared.stop()
+        }
+        refreshVoiceCallUI()
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        endVoiceCall()
     }
 
     // MARK: - Mini games
@@ -156,6 +288,7 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
     /// Starts a game in the chat (also when you ask for one by typing).
     func startGame(_ game: MiniGame) {
         guard !isSending else { return }
+        endVoiceCall()
         MikuSpeech.shared.stop()
         hideEmptyState()
         removeChoiceRow()
@@ -171,7 +304,7 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
             showGameLines(session.start())
         case .rhythm:
             showGameLines([GameLine(
-                text: MiniGame.text("打拍子！數完 1、2、3、4，就跟著拍子按空白鍵～", yue: "打拍子！數完 1、2、3、4，就跟住拍子撳空白鍵～", "Rhythm time! After 1, 2, 3, 4, tap the space bar on every beat~", "リズムゲーム！1、2、3、4のあと、拍に合わせてスペースキーを押してね～"),
+                text: MiniGame.text("打拍子！數完 1、2、3、4，就跟著拍子按空白鍵～", yue: "打拍子！數完 1、2、3、4，就跟住拍子撳空白鍵～", "Rhythm time! After 1, 2, 3, 4, tap the space bar on every beat~", "リズムゲーム！1、2、3、4のあと、拍に合わせてスペースキーを押してね～", "리듬 게임이야! 하나, 둘, 셋, 넷을 세고 박자에 맞춰 스페이스 바를 눌러 줘~"),
                 emotion: "happy", action: "clap"
             )])
             onGameEvent?(.rhythm)
@@ -292,7 +425,7 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
     }
 
     @objc private func memoryRestored() {
-        cancelActiveConversation()
+        cancelActiveConversation(preserveVoiceHistory: false)
         failedText = nil
         failedImage = nil
         showEmptyState()
@@ -300,8 +433,9 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
     }
 
     @objc private func memoryErased() {
-        cancelActiveConversation()
+        cancelActiveConversation(preserveVoiceHistory: false)
         messages.removeAll()
+        lastReplyText = nil
         failedText = nil
         failedImage = nil
         showEmptyState()
@@ -337,13 +471,12 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
     func refreshLocalization() {
         window?.title = "Miku"
         setPlaceholder()
-        clearButton.toolTip = L10n.text("clearChat")
-        clearButton.setAccessibilityLabel(L10n.text("clearChat"))
         gameButton.toolTip = L10n.text("gamesMenu")
         gameButton.setAccessibilityLabel(L10n.text("gamesMenu"))
         companionButton.toolTip = L10n.text("companionTools")
         companionButton.setAccessibilityLabel(L10n.text("companionTools"))
         refreshMuteButton()
+        refreshVoiceCallUI()
         settingsButton.toolTip = L10n.text("settingsButton")
         settingsButton.setAccessibilityLabel(L10n.text("settingsButton"))
         attachButton.toolTip = L10n.text("attachImage")
@@ -358,6 +491,230 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
             button.title = L10n.text("suggestion\(index + 1)")
         }
         refreshConnectionStatus()
+    }
+
+    // MARK: - Voice call
+
+    @objc private func toggleVoiceCall() {
+        if voiceCall.isActive {
+            endVoiceCall()
+            return
+        }
+        guard !isSending else { return }
+        let speech = MikuSpeech.shared
+        guard speech.enabled else {
+            showError(L10n.text("voiceCallNeedsSpeech"))
+            return
+        }
+        guard speech.hasConfiguredModel else {
+            showError(L10n.text("voiceCallNeedsModel"))
+            return
+        }
+        guard !speech.isMuted else {
+            showError(L10n.text("voiceCallNeedsUnmute"))
+            return
+        }
+        cancelPendingBedtime()
+        pendingVoiceBedtime = nil
+        awaitingVoicePlayback = false
+        activeGame = nil
+        removeChoiceRow()
+        removeErrorRow()
+        onVoiceCallStop?()
+        speech.stop()
+        let sleep = SleepSchedule.shared
+        if sleep.isAsleep() { sleep.wake(minutes: 30) }
+        voiceCall.start()
+    }
+
+    @objc private func toggleVoiceMicrophone() {
+        voiceCall.toggleMicrophone()
+    }
+
+    private func voiceLanguageMenu() -> NSMenu {
+        let menu = NSMenu()
+        for language in VoiceCallLanguage.allCases {
+            let item = NSMenuItem(title: L10n.text(language.localizationKey), action: #selector(voiceLanguageChosen(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = language.rawValue
+            item.state = language == voiceCall.language ? .on : .off
+            menu.addItem(item)
+        }
+        return menu
+    }
+
+    @objc private func showVoiceLanguageMenu(_ sender: NSButton) {
+        voiceLanguageMenu().popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.maxY + 4), in: sender)
+    }
+
+    @objc private func voiceLanguageChosen(_ sender: NSMenuItem) {
+        guard let value = sender.representedObject as? String,
+              let language = VoiceCallLanguage(rawValue: value) else { return }
+        UserDefaults.standard.set(value, forKey: "voiceCallLanguage")
+        voiceCall.selectLanguage(language)
+        refreshVoiceCallUI()
+    }
+
+    @objc private func endVoiceCallPressed() {
+        endVoiceCall()
+    }
+
+    @objc private func interruptVoiceCall() {
+        guard voiceCall.isActive else { return }
+        interruptVoiceOutput()
+        voiceCall.interruptAndListen()
+    }
+
+    private func voiceCallChanged() {
+        MikuTrainingActivity.shared.setVoiceCallActive(voiceCall.isActive)
+        if voiceCall.phase == .failed, sendingVoiceTurn || awaitingVoicePlayback || voiceReplyToken != nil {
+            onVoiceCallStop?()
+            cancelActiveConversation(endingVoiceCall: false)
+        }
+        refreshVoiceCallUI()
+    }
+
+    /// A spoken interruption keeps the microphone and its opening words alive.
+    private func interruptVoiceOutput() {
+        guard voiceCall.isActive else { return }
+        interruptingVoiceCall = true
+        awaitingVoicePlayback = false
+        pendingVoiceBedtime = nil
+        onVoiceCallStop?()
+        cancelActiveConversation(endingVoiceCall: false)
+        interruptingVoiceCall = false
+    }
+
+    private func receiveVoiceText(_ text: String, generation: Int) {
+        guard generation == conversationGeneration, sendingVoiceTurn, voiceCall.isActive else { return }
+        do {
+            let phrases = try voiceReplyBuffer.append(text)
+            try appendVoicePhrases(phrases)
+        } catch {
+            chatTask?.cancel()
+            interruptVoiceOutput()
+            voiceCall.replyFailed()
+        }
+    }
+
+    private func appendVoicePhrases(_ phrases: [String]) throws {
+        let spoken = phrases.map(HumText.removingHum).filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        guard !spoken.isEmpty else { return }
+        if voiceReplyToken == nil {
+            awaitingVoicePlayback = true
+            voiceCall.replyReady()
+            onVoiceReplyBegan?()
+            voiceReplyToken = MikuSpeech.shared.beginVoiceReply(style: voiceReplyStyle)
+        }
+        guard let token = voiceReplyToken, voiceCall.isActive else { throw CancellationError() }
+        for phrase in spoken {
+            MikuSpeech.shared.appendVoiceReply(phrase, token: token)
+        }
+        onVoicePhrase?(voiceReplyBuffer.text)
+    }
+
+    private func finishVoiceReply(_ reply: CompanionReply) throws {
+        voiceReplyStyle = .fromEmotion(reply.emotion)
+        if let token = voiceReplyToken {
+            MikuSpeech.shared.setVoiceReplyStyle(voiceReplyStyle, token: token)
+        }
+        let phrases = try voiceReplyBuffer.append(reply.text, final: true)
+        try appendVoicePhrases(phrases)
+        guard voiceReplyToken != nil else { throw CancellationError() }
+    }
+
+    private func settleVoiceExchange(completed: Bool) {
+        guard let user = voiceExchangeUser else { return }
+        defer {
+            voiceExchangeUser = nil
+            voiceExchangeReplyID = nil
+            voiceReplyProgress = VoiceReplyProgress()
+        }
+        if completed {
+            if let id = voiceExchangeReplyID, let reply = messages.first(where: { $0.id == id }) {
+                memory.record(messages)
+                memory.didExchange(user: user, reply: reply, ai: ai)
+            }
+            return
+        }
+        guard voiceReplyProgress.hasStarted else {
+            if let id = voiceExchangeReplyID, let index = messages.firstIndex(where: { $0.id == id }) {
+                messages.remove(at: index)
+                if let label = messageLabels.removeValue(forKey: id) { label.stringValue = L10n.text("voiceCallReplyInterrupted") }
+                lastReplyText = messages.last(where: { $0.role == .assistant })?.text
+                memory.record(messages)
+            }
+            return
+        }
+        let heard = voiceReplyProgress.completedText
+        let text = heard + (heard.isEmpty ? "" : "\n") + L10n.text("voiceCallReplyInterrupted")
+        if let id = voiceExchangeReplyID, let index = messages.firstIndex(where: { $0.id == id }) {
+            let old = messages[index]
+            messages[index] = ChatMessage(id: id, role: .assistant, text: text, date: old.date)
+            messageLabels[id]?.stringValue = text
+        } else {
+            let reply = ChatMessage(role: .assistant, text: text)
+            messages.append(reply)
+            appendBubble(reply)
+        }
+        lastReplyText = heard.isEmpty ? nil : heard
+        memory.record(messages)
+    }
+
+    private func refreshVoiceCallUI() {
+        let active = voiceCall.isActive
+        let showsCard = active || voiceCall.phase == .failed
+        voiceCallCard.isHidden = !showsCard
+        if showsCard {
+            messagesBelowHeader?.isActive = false
+            messagesBelowVoiceCall?.isActive = true
+        } else {
+            messagesBelowVoiceCall?.isActive = false
+            messagesBelowHeader?.isActive = true
+        }
+
+        let callTitle = L10n.text(active ? "voiceCallEnd" : "voiceCallStart")
+        callButton.symbolName = active ? "phone.down.fill" : "phone.fill"
+        callButton.style = active ? .accent : .soft
+        callButton.toolTip = callTitle
+        callButton.setAccessibilityLabel(callTitle)
+        callButton.isEnabled = active || !isSending
+
+        let statusKey: String
+        switch voiceCall.phase {
+        case .inactive: statusKey = "voiceCallStart"
+        case .preparing:
+            statusKey = voiceCall.preparation == .downloading
+                ? "voiceCallDownloadingResources" : "voiceCallPreparingResources"
+        case .listening: statusKey = "voiceCallListening"
+        case .thinking:
+            statusKey = voiceCall.automaticInterruptionAvailable && !voiceCall.isMicrophoneMuted
+                ? "voiceCallThinkingListening" : "voiceCallThinking"
+        case .speaking:
+            statusKey = voiceCall.automaticInterruptionAvailable && !voiceCall.isMicrophoneMuted
+                ? "voiceCallSpeakingListening" : "voiceCallSpeaking"
+        case .paused: statusKey = "voiceCallPaused"
+        case .failed: statusKey = voiceCall.errorKey ?? "voiceCallFailed"
+        }
+        voiceCallStatusLabel.stringValue = L10n.text(statusKey)
+        voiceCallStatusLabel.textColor = voiceCall.phase == .failed ? MikuTheme.offline : MikuTheme.primaryText
+        voiceCallStatusLabel.setAccessibilityLabel(L10n.text(statusKey))
+        voiceCallSubtitleLabel.stringValue = voiceCall.transcript.isEmpty
+            ? L10n.text("voiceCallSubtitlePlaceholder") : voiceCall.transcript
+        voiceCallPrivacyLabel.stringValue = L10n.text("voiceCallPrivacy")
+        voiceCallLanguageButton.title = L10n.text(voiceCall.language.localizationKey)
+        voiceCallLanguageButton.toolTip = L10n.text("voiceCallLanguage")
+        voiceCallLanguageButton.setAccessibilityLabel(L10n.text("voiceCallLanguage"))
+        let micTitle = L10n.text(voiceCall.isMicrophoneMuted ? "voiceCallUnmuteMic" : "voiceCallMuteMic")
+        voiceCallMicButton.symbolName = voiceCall.isMicrophoneMuted ? "mic.slash.fill" : "mic.fill"
+        voiceCallMicButton.toolTip = micTitle
+        voiceCallMicButton.setAccessibilityLabel(micTitle)
+        voiceCallMicButton.isEnabled = active && voiceCall.phase != .preparing
+        voiceCallEndButton.toolTip = L10n.text("voiceCallEnd")
+        voiceCallEndButton.setAccessibilityLabel(L10n.text("voiceCallEnd"))
+        voiceCallInterruptButton.title = L10n.text("voiceCallInterrupt")
+        voiceCallInterruptButton.setAccessibilityLabel(L10n.text("voiceCallInterrupt"))
+        voiceCallInterruptButton.isHidden = voiceCall.phase != .thinking && voiceCall.phase != .speaking
     }
 
     // MARK: - Connection status
@@ -410,6 +767,7 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
         let text = inputField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         let image = pendingImage
         guard !text.isEmpty || image != nil, !isSending else { return }
+        endVoiceCall()
         inputField.stringValue = ""
         removePendingImage()
         // "Let's play rock-paper-scissors!": straight into the game.
@@ -427,16 +785,34 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
 
     @objc private func suggestionTapped(_ sender: MikuPillButton) {
         guard !isSending else { return }
+        endVoiceCall()
         send(sender.title)
     }
 
     @objc private func retry() {
         guard let failedText else { return }
+        endVoiceCall()
         send(failedText, image: failedImage, appendUser: false)
     }
 
-    @objc private func clearChat() {
+    @objc private func confirmClearChat() {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = L10n.text("clearChatConfirm")
+        alert.informativeText = L10n.text("clearChatDetail")
+        let clear = alert.addButton(withTitle: L10n.text("clearChat"))
+        clear.hasDestructiveAction = true
+        alert.addButton(withTitle: L10n.text("cancel"))
+        // Cancel is the default (Return), so a hurried keypress doesn't clear anything.
+        clear.keyEquivalent = ""
+        alert.buttons[1].keyEquivalent = "\r"
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        clearChat()
+    }
+
+    private func clearChat() {
         guard !isSending else { return }
+        endVoiceCall()
         MikuSpeech.shared.stop()
         activeGame = nil
         choiceRow = nil
@@ -453,6 +829,7 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
 
     @objc private func replayLastReply() {
         guard let lastReplyText else { return }
+        endVoiceCall()
         // You asked to hear it, so it plays even while she's muted.
         MikuSpeech.shared.speak(lastReplyText, userInitiated: true)
     }
@@ -465,6 +842,7 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
     /// Speaker icon: what clicking it will do, and whether she's muted now.
     @objc func refreshMuteButton() {
         let speech = MikuSpeech.shared
+        if voiceCall.isActive, !speech.enabled || speech.isMuted { endVoiceCall() }
         muteButton.isHidden = !speech.enabled
         let muted = speech.isMuted
         muteButton.symbolName = muted ? "speaker.slash.fill" : "speaker.wave.2.fill"
@@ -486,6 +864,7 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
 
     @objc private func showCompanionTools(_ sender: NSButton) {
         let menu = NSMenu()
+        menu.autoenablesItems = false
         for (key, action) in [
             ("comeOver", #selector(callOver)),
             ("takeMemoryPhoto", #selector(takeMemoryPhoto)),
@@ -505,6 +884,16 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
         stop.target = self
         stop.isEnabled = MikuSpeech.shared.isBusy
         menu.addItem(stop)
+        menu.addItem(.separator())
+        let language = NSMenuItem(title: L10n.text("voiceCallLanguage"), action: nil, keyEquivalent: "")
+        language.submenu = voiceLanguageMenu()
+        menu.addItem(language)
+        // Kept out of the header (it was easy to hit by accident) and asked about first.
+        menu.addItem(.separator())
+        let clear = NSMenuItem(title: L10n.text("clearChatMenu"), action: #selector(confirmClearChat), keyEquivalent: "")
+        clear.target = self
+        clear.isEnabled = !isSending && !messages.isEmpty
+        menu.addItem(clear)
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.maxY + 4), in: sender)
     }
 
@@ -513,8 +902,13 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
     @objc private func openAlbum() { onOpenAlbum?() }
     @objc private func openKnowledge() { onOpenKnowledge?() }
 
-    private func send(_ text: String, image: Data? = nil, appendUser: Bool = true) {
-        guard !isSending else { return }
+    private func send(_ text: String, image: Data? = nil, appendUser: Bool = true, voiceOrigin: Bool = false) {
+        guard !isSending, !voiceOrigin || voiceCall.isActive else { return }
+        if !voiceOrigin { endVoiceCall() }
+        sendingVoiceTurn = voiceOrigin
+        voiceReplyStyle = .neutral
+        voiceReplyToken = nil
+        voiceReplyBuffer = VoiceReplyBuffer()
         cancelPendingBedtime()
         failedText = nil
         failedImage = nil
@@ -529,6 +923,9 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
         } else {
             userMessage = messages.last(where: { $0.role == .user && $0.text == text }) ?? ChatMessage(role: .user, text: text)
         }
+        voiceExchangeUser = voiceOrigin ? userMessage : nil
+        voiceExchangeReplyID = nil
+        voiceReplyProgress = VoiceReplyProgress()
         // A picture on its own still needs a sentence for the model to answer.
         let prompt = text.isEmpty && image != nil ? L10n.text("imagePrompt") : text
         // Talking to her wakes her up; "good morning" gets her up for the day.
@@ -585,11 +982,22 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
                 let context = memory.context()
                 let initialDecision = context.confessionDecision
                 let confessionToken = context.confessionToken
+                let voiceTextHandler: (@Sendable (String) async -> Void)?
+                if voiceOrigin {
+                    voiceTextHandler = { [weak self] partial in
+                        guard let self else { return }
+                        await self.receiveVoiceText(partial, generation: generation)
+                    }
+                } else {
+                    voiceTextHandler = nil
+                }
                 var reply = try await ai.reply(
                     to: prompt, image: image, history: history, memory: context,
                     rememberSongPreferences: rememberSongPreferences,
                     relationshipIntent: relationshipIntent,
-                    music: musicPlan
+                    music: musicPlan,
+                    mode: voiceOrigin ? .voice : .text,
+                    onVoiceText: voiceTextHandler
                 )
                 guard !Task.isCancelled, generation == conversationGeneration else { return }
 
@@ -625,23 +1033,36 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
                         throw CancellationError()
                     }
                 }
+                if voiceOrigin { try finishVoiceReply(reply) }
                 let assistantMessage = ChatMessage(role: .assistant, text: reply.text)
                 chatTask = nil
                 setSending(false)
+                sendingVoiceTurn = false
                 messages.append(assistantMessage)
+                if voiceOrigin { voiceExchangeReplyID = assistantMessage.id }
                 lastReplyText = reply.text
                 appendBubble(assistantMessage)
-                memory.record(messages)
-                memory.didExchange(user: userMessage, reply: assistantMessage, ai: ai)
-                if let musicPlan { onPlayMusic?(musicPlan) }
-                onReply?(reply)
+                if !voiceOrigin {
+                    memory.record(messages)
+                    memory.didExchange(user: userMessage, reply: assistantMessage, ai: ai)
+                }
                 // After saying good night back, she goes to bed (once you've read her reply);
                 // late at night, her own "good night" means the same.
                 let automaticGoodNight = SleepSchedule.shouldAutomaticallySleep(
                     after: reply.text,
                     userText: text
                 )
-                if goodNight || automaticGoodNight {
+                if voiceOrigin {
+                    if goodNight || automaticGoodNight {
+                        pendingVoiceBedtime = (sleepRevision, generation, automaticGoodNight && !goodNight)
+                    }
+                }
+                if let musicPlan { onPlayMusic?(musicPlan) }
+                if voiceOrigin { onVoiceReply?(reply) } else { onReply?(reply) }
+                if voiceOrigin, let token = voiceReplyToken {
+                    MikuSpeech.shared.finishVoiceReply(token: token)
+                }
+                if !voiceOrigin, goodNight || automaticGoodNight {
                     scheduleBedtime(
                         sleep: sleep,
                         sleepRevision: sleepRevision,
@@ -652,14 +1073,38 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
                 if statusDot.color != MikuTheme.online { refreshConnectionStatus() }
             } catch is CancellationError {
                 guard generation == conversationGeneration else { return }
+                if voiceOrigin { settleVoiceExchange(completed: false) }
                 memory.discardPendingConfessionDecision()
                 chatTask = nil
                 setSending(false)
+                sendingVoiceTurn = false
+                if voiceOrigin {
+                    pendingVoiceBedtime = nil
+                    awaitingVoicePlayback = false
+                    voiceReplyToken = nil
+                    interruptingVoiceCall = true
+                    onVoiceCallStop?()
+                    MikuSpeech.shared.stop()
+                    interruptingVoiceCall = false
+                    voiceCall.replyFailed()
+                }
             } catch {
                 guard !Task.isCancelled, generation == conversationGeneration else { return }
+                if voiceOrigin { settleVoiceExchange(completed: false) }
                 memory.discardPendingConfessionDecision()
                 chatTask = nil
                 setSending(false)
+                sendingVoiceTurn = false
+                if voiceOrigin {
+                    pendingVoiceBedtime = nil
+                    awaitingVoicePlayback = false
+                    voiceReplyToken = nil
+                    interruptingVoiceCall = true
+                    onVoiceCallStop?()
+                    MikuSpeech.shared.stop()
+                    interruptingVoiceCall = false
+                    voiceCall.replyFailed()
+                }
                 failedText = text
                 failedImage = image
                 // She couldn't answer, but the song you asked for still opens.
@@ -671,11 +1116,27 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
         }
     }
 
-    private func cancelActiveConversation() {
-        MikuSpeech.shared.stop()
+    private func cancelActiveConversation(endingVoiceCall: Bool = true, preserveVoiceHistory: Bool = true) {
+        if preserveVoiceHistory {
+            settleVoiceExchange(completed: false)
+        } else {
+            voiceExchangeUser = nil
+            voiceExchangeReplyID = nil
+            voiceReplyProgress = VoiceReplyProgress()
+        }
+        pendingVoiceBedtime = nil
+        awaitingVoicePlayback = false
+        voiceReplyToken = nil
+        voiceReplyBuffer = VoiceReplyBuffer()
+        if endingVoiceCall {
+            voiceCall.end()
+            onVoiceCallStop?()
+        }
         conversationGeneration &+= 1
         chatTask?.cancel()
         chatTask = nil
+        sendingVoiceTurn = false
+        MikuSpeech.shared.stop()
         memory.discardPendingConfessionDecision()
         cancelPendingBedtime()
         setSending(false)
@@ -723,10 +1184,10 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
         inputField.isEnabled = !sending
         updateSendButton()
         suggestionButtons.forEach { $0.isEnabled = !sending }
-        clearButton.isEnabled = !sending
         onThinking?(sending)
         if sending { showTypingIndicator() } else { removeTypingIndicator() }
         if !sending { window?.makeFirstResponder(inputField) }
+        refreshVoiceCallUI()
     }
 
     private func updateSendButton() {
@@ -758,18 +1219,22 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
         titleStack.spacing = 1
         titleStack.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        configureIconButton(clearButton, symbol: "sparkles", action: #selector(clearChat))
         configureIconButton(settingsButton, symbol: "gearshape.fill", action: #selector(openSettings))
         configureIconButton(gameButton, symbol: "gamecontroller.fill", action: #selector(showGames(_:)))
         configureIconButton(companionButton, symbol: "ellipsis", action: #selector(showCompanionTools(_:)))
         configureIconButton(muteButton, symbol: "speaker.wave.2.fill", action: #selector(toggleMute))
+        configureIconButton(callButton, symbol: "phone.fill", action: #selector(toggleVoiceCall))
         muteButton.setAccessibilityIdentifier("chat-speech-mute")
         companionButton.setAccessibilityIdentifier("chat-companion-tools")
+        callButton.setAccessibilityIdentifier("chat-voice-call")
 
         let spacer = NSView()
         spacer.setContentHuggingPriority(NSLayoutConstraint.Priority(1), for: .horizontal)
         spacer.setContentCompressionResistancePriority(NSLayoutConstraint.Priority(1), for: .horizontal)
-        let headerStack = NSStackView(views: [headerAvatar, titleStack, spacer, muteButton, gameButton, companionButton, clearButton, settingsButton])
+        let headerButtons = NSStackView(views: [callButton, muteButton, gameButton, companionButton, settingsButton])
+        headerButtons.orientation = .horizontal
+        headerButtons.spacing = 4
+        let headerStack = NSStackView(views: [headerAvatar, titleStack, spacer, headerButtons])
         headerStack.orientation = .horizontal
         headerStack.distribution = .fill
         headerStack.alignment = .centerY
@@ -783,6 +1248,64 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
         divider.cornerRadius = 0
         divider.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(divider)
+
+        voiceCallCard.cornerRadius = 14
+        voiceCallCard.isHidden = true
+        voiceCallCard.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(voiceCallCard)
+        voiceCallStatusLabel.lineBreakMode = .byWordWrapping
+        voiceCallStatusLabel.maximumNumberOfLines = 3
+        voiceCallStatusLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        voiceCallStatusLabel.setAccessibilityIdentifier("voice-call-status")
+        configureIconButton(voiceCallMicButton, symbol: "mic.fill", action: #selector(toggleVoiceMicrophone))
+        configureIconButton(voiceCallEndButton, symbol: "phone.down.fill", action: #selector(endVoiceCallPressed))
+        voiceCallMicButton.setAccessibilityIdentifier("voice-call-microphone")
+        voiceCallEndButton.setAccessibilityIdentifier("voice-call-end")
+        let voiceTopRow = NSStackView(views: [voiceCallStatusLabel, voiceCallMicButton, voiceCallEndButton])
+        voiceTopRow.orientation = .horizontal
+        voiceTopRow.alignment = .centerY
+        voiceTopRow.spacing = 6
+        voiceCallSubtitleLabel.lineBreakMode = .byTruncatingTail
+        voiceCallSubtitleLabel.maximumNumberOfLines = 2
+        voiceCallSubtitleLabel.preferredMaxLayoutWidth = 300
+        voiceCallSubtitleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        voiceCallSubtitleLabel.setAccessibilityIdentifier("voice-call-transcript")
+        voiceCallPrivacyLabel.lineBreakMode = .byWordWrapping
+        voiceCallPrivacyLabel.maximumNumberOfLines = 2
+        voiceCallPrivacyLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        voiceCallInterruptButton.symbolName = "hand.raised.fill"
+        voiceCallInterruptButton.style = .soft
+        voiceCallInterruptButton.controlHeight = 26
+        voiceCallInterruptButton.horizontalPadding = 10
+        voiceCallInterruptButton.target = self
+        voiceCallInterruptButton.action = #selector(interruptVoiceCall)
+        voiceCallInterruptButton.setAccessibilityIdentifier("voice-call-interrupt")
+        voiceCallLanguageButton.style = .soft
+        voiceCallLanguageButton.controlHeight = 26
+        voiceCallLanguageButton.target = self
+        voiceCallLanguageButton.action = #selector(showVoiceLanguageMenu(_:))
+        voiceCallLanguageButton.setAccessibilityIdentifier("voice-call-language")
+        let voiceOptions = NSStackView(views: [voiceCallLanguageButton, voiceCallInterruptButton])
+        voiceOptions.orientation = .horizontal
+        voiceOptions.spacing = 8
+        let voiceContent = NSStackView(views: [voiceTopRow, voiceCallSubtitleLabel, voiceCallPrivacyLabel, voiceOptions])
+        voiceContent.orientation = .vertical
+        voiceContent.alignment = .leading
+        voiceContent.spacing = 6
+        voiceContent.translatesAutoresizingMaskIntoConstraints = false
+        voiceCallCard.addSubview(voiceContent)
+        NSLayoutConstraint.activate([
+            voiceCallCard.topAnchor.constraint(equalTo: divider.bottomAnchor, constant: 8),
+            voiceCallCard.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 14),
+            voiceCallCard.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -14),
+            voiceContent.topAnchor.constraint(equalTo: voiceCallCard.topAnchor, constant: 10),
+            voiceContent.bottomAnchor.constraint(equalTo: voiceCallCard.bottomAnchor, constant: -10),
+            voiceContent.leadingAnchor.constraint(equalTo: voiceCallCard.leadingAnchor, constant: 12),
+            voiceContent.trailingAnchor.constraint(equalTo: voiceCallCard.trailingAnchor, constant: -12),
+            voiceTopRow.widthAnchor.constraint(equalTo: voiceContent.widthAnchor),
+            voiceCallSubtitleLabel.widthAnchor.constraint(equalTo: voiceContent.widthAnchor),
+            voiceCallPrivacyLabel.widthAnchor.constraint(equalTo: voiceContent.widthAnchor)
+        ])
 
         // Messages
         messageStack.orientation = .vertical
@@ -801,6 +1324,9 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
         scrollView.borderType = .noBorder
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(scrollView)
+        let belowHeader = scrollView.topAnchor.constraint(equalTo: divider.bottomAnchor)
+        messagesBelowHeader = belowHeader
+        messagesBelowVoiceCall = scrollView.topAnchor.constraint(equalTo: voiceCallCard.bottomAnchor, constant: 8)
 
         buildEmptyState()
 
@@ -875,7 +1401,7 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
             divider.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
             divider.heightAnchor.constraint(equalToConstant: 1),
 
-            scrollView.topAnchor.constraint(equalTo: divider.bottomAnchor),
+            belowHeader,
             scrollView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
             scrollView.bottomAnchor.constraint(equalTo: inputCard.topAnchor, constant: -10),
@@ -983,6 +1509,7 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
             view.removeFromSuperview()
         }
         bubbleLabels.removeAll()
+        messageLabels.removeAll()
         typingRow = nil
         errorRow = nil
         choiceRow = nil
@@ -1014,6 +1541,7 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
         label.preferredMaxLayoutWidth = bubbleTextWidth()
         label.translatesAutoresizingMaskIntoConstraints = false
         bubbleLabels.append(label)
+        messageLabels[message.id] = label
 
         let bubble = MikuCardView()
         bubble.fillColor = isUser ? MikuTheme.userBubble : MikuTheme.mikuBubble

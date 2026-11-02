@@ -29,12 +29,12 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
     private let ai: LocalAI
     private let sceneKeys = ["shibuya", "ikebukuro", "akihabara", "shinjuku", "hallway", "musicroom", "room"]
     private let personalityKeys = ["lively", "gentle", "quiet", "custom"]
-    private let languageKeys = ["automatic", "traditionalChinese", "english", "japanese"]
-    private let languageValues = ["auto", "zh-Hant", "en", "ja"]
+    private let languageKeys = ["automatic", "traditionalChinese", "english", "japanese", "korean"]
+    private let languageValues = ["auto", "zh-Hant", "en", "ja", "ko"]
     // What Miku speaks: Chinese can be Mandarin or Cantonese (the app itself has no
     // Cantonese interface, so this list is separate from the interface languages).
-    private let replyLanguageKeys = ["automatic", "replyMandarin", "replyCantonese", "japanese", "english"]
-    private let replyLanguageValues = ["auto", "zh-Hant", "yue", "ja", "en"]
+    private let replyLanguageKeys = ["automatic", "replyMandarin", "replyCantonese", "japanese", "english", "korean"]
+    private let replyLanguageValues = ["auto", "zh-Hant", "yue", "ja", "en", "ko"]
 
     private let titleLabel = NSTextField.mikuLabel("", size: 20, weight: .bold, color: MikuTheme.deepTeal)
     private let subtitleLabel = NSTextField.mikuLabel("", size: 12.5, color: MikuTheme.secondaryText)
@@ -153,7 +153,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         updatePopupTitles(interfaceLanguagePopup, keys: languageKeys)
         updatePopupTitles(speechLanguagePopup, keys: [
             "speechLanguageAuto", "speechLanguageCantonese", "speechLanguageMandarin",
-            "speechLanguageJapanese", "speechLanguageEnglish"
+            "speechLanguageJapanese", "speechLanguageEnglish", "speechLanguageKorean"
         ])
         for (index, key) in personalityKeys.enumerated() {
             personalitySegment.setLabel(L10n.text(key), forSegment: index)
@@ -457,7 +457,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
             speechLanguagePopup,
             titles: [
                 "speechLanguageAuto", "speechLanguageCantonese", "speechLanguageMandarin",
-                "speechLanguageJapanese", "speechLanguageEnglish"
+                "speechLanguageJapanese", "speechLanguageEnglish", "speechLanguageKorean"
             ].map(L10n.text),
             values: MikuSpeech.Language.allCases.map(\.rawValue),
             action: #selector(speechLanguageChanged)
@@ -1083,5 +1083,46 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
     private func saveAndNotify() {
         configuration.save()
         NotificationCenter.default.post(name: .mikuSettingsChanged, object: nil)
+    }
+}
+
+// MARK: - In Miku's notebook
+
+extension SettingsWindowController: NotebookPage {
+    /// The settings sections, in page order, that the notebook sidebar can jump to.
+    static let notebookSections = [
+        "sectionScene", "sectionCharacter", "sectionMemory", "sectionAwareness",
+        "sectionLanguage", "sectionSpeech", "sectionAI", "sectionGeneral"
+    ]
+
+    func notebookPageWillAppear() {
+        refreshLocalization()
+        loadValues()
+        refreshLoginState()
+    }
+
+    func notebookPageWillDisappear() {
+        saveTextValues()
+    }
+
+    func notebookPageDidBecomeKey() {
+        // The user may have just approved the login item in System Settings.
+        refreshLoginState()
+    }
+
+    var notebookMaxWidth: CGFloat? { 720 }
+
+    /// Scrolls so the section's title sits just below the top of the page.
+    func notebookScroll(to key: String) {
+        guard let label = sectionLabels[key],
+              let scroll = label.enclosingScrollView,
+              let document = scroll.documentView else { return }
+        document.layoutSubtreeIfNeeded()
+        let clip = scroll.contentView
+        let rect = label.convert(label.bounds, to: document)
+        let maxY = max(0, document.bounds.height - clip.bounds.height)
+        let target = document.isFlipped ? rect.minY - 56 : document.bounds.height - rect.maxY - 56
+        clip.setBoundsOrigin(NSPoint(x: 0, y: min(maxY, max(0, target))))
+        scroll.reflectScrolledClipView(clip)
     }
 }

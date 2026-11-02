@@ -22,13 +22,12 @@ private final class GripView: NSView {
 @MainActor
 final class DesktopControlsWindowController: NSWindowController, NSWindowDelegate {
     var onOpenChat: (() -> Void)?
-    var onOpenSettings: (() -> Void)?
-    var onOpenAlbum: (() -> Void)?
+    /// Miku's notebook: settings, the album, song knowledge and her diary.
+    var onOpenNotebook: (() -> Void)?
 
     private static let originKey = "desktopControlsOrigin"
     private let chatButton = MikuPillButton(frame: .zero)
-    private let settingsButton = MikuPillButton(frame: .zero)
-    private let albumButton = MikuPillButton(frame: .zero)
+    private let notebookButton = MikuPillButton(frame: .zero)
     private var screenObserver: NSObjectProtocol?
     private var isRestoringPosition = false
 
@@ -74,23 +73,15 @@ final class DesktopControlsWindowController: NSWindowController, NSWindowDelegat
         chatButton.action = #selector(openChat)
         chatButton.setAccessibilityIdentifier("desktop-chat")
 
-        settingsButton.style = .soft
-        settingsButton.symbolName = "gearshape.fill"
-        settingsButton.iconOnly = true
-        settingsButton.controlHeight = 32
-        settingsButton.target = self
-        settingsButton.action = #selector(openSettings)
-        settingsButton.setAccessibilityIdentifier("desktop-settings")
+        notebookButton.style = .soft
+        notebookButton.symbolName = "book.closed.fill"
+        notebookButton.iconOnly = true
+        notebookButton.controlHeight = 32
+        notebookButton.target = self
+        notebookButton.action = #selector(openNotebook)
+        notebookButton.setAccessibilityIdentifier("desktop-notebook")
 
-        albumButton.style = .soft
-        albumButton.symbolName = "photo.on.rectangle.angled"
-        albumButton.iconOnly = true
-        albumButton.controlHeight = 32
-        albumButton.target = self
-        albumButton.action = #selector(openAlbum)
-        albumButton.setAccessibilityIdentifier("desktop-album")
-
-        let stack = NSStackView(views: [grip, chatButton, albumButton, settingsButton])
+        let stack = NSStackView(views: [grip, chatButton, notebookButton])
         stack.orientation = .horizontal
         stack.alignment = .centerY
         stack.spacing = 6
@@ -99,8 +90,7 @@ final class DesktopControlsWindowController: NSWindowController, NSWindowDelegat
         NSLayoutConstraint.activate([
             grip.widthAnchor.constraint(equalToConstant: 22),
             grip.heightAnchor.constraint(equalToConstant: 32),
-            settingsButton.widthAnchor.constraint(equalToConstant: 32),
-            albumButton.widthAnchor.constraint(equalToConstant: 32),
+            notebookButton.widthAnchor.constraint(equalToConstant: 32),
             stack.leadingAnchor.constraint(equalTo: background.leadingAnchor, constant: 8),
             stack.trailingAnchor.constraint(equalTo: background.trailingAnchor, constant: -7),
             stack.centerYAnchor.constraint(equalTo: background.centerYAnchor)
@@ -128,9 +118,8 @@ final class DesktopControlsWindowController: NSWindowController, NSWindowDelegat
 
     func refreshLocalization() {
         chatButton.title = L10n.text("chat")
-        settingsButton.title = L10n.text("settingsButton")
-        albumButton.title = L10n.text("memoryAlbum")
-        for button in [chatButton, albumButton, settingsButton] {
+        notebookButton.title = L10n.text("notebookTitle")
+        for button in [chatButton, notebookButton] {
             button.toolTip = button.title
             button.setAccessibilityLabel(button.title)
         }
@@ -181,11 +170,7 @@ final class DesktopControlsWindowController: NSWindowController, NSWindowDelegat
         onOpenChat?()
     }
 
-    @objc private func openSettings() {
-        onOpenSettings?()
-    }
-
-    @objc private func openAlbum() {
-        onOpenAlbum?()
+    @objc private func openNotebook() {
+        onOpenNotebook?()
     }
 }

@@ -91,6 +91,7 @@ private enum MikuSpeechKeychain {
 @MainActor
 final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
     static let shared = MikuSpeech()
+    typealias VoiceStyle = MikuVoiceStyle
 
     enum Language: String, CaseIterable {
         case automatic = "auto"
@@ -98,6 +99,7 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
         case mandarin = "zh"
         case japanese = "ja"
         case english = "en"
+        case korean = "ko"
     }
 
     enum SpeechError: LocalizedError {
@@ -111,6 +113,7 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
         case textTooLong
         case generationFailed
         case invalidAudio
+        case koreanModelRequired
 
         var errorDescription: String? {
             switch self {
@@ -134,6 +137,8 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
                 return L10n.text("speechErrorGenerationFailed")
             case .invalidAudio:
                 return L10n.text("speechErrorInvalidAudio")
+            case .koreanModelRequired:
+                return L10n.text("speechErrorKoreanModelRequired")
             }
         }
     }
@@ -249,6 +254,9 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
     enum PlaybackEvent: Equatable {
         /// The audio for `text` has started and lasts `duration` seconds.
         case started(text: String, duration: TimeInterval)
+        /// Streaming has no known sentence duration until its validated end frame.
+        case streamingStarted(text: String)
+        case streamingStopped
         /// It played to the end.
         case ended
         /// It was stopped, muted or replaced by a newer line before the end.
@@ -258,6 +266,16 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
     }
 
     var onPlayback: ((PlaybackEvent) -> Void)?
+    enum PlaybackSource: Equatable { case standard, voiceCall }
+    var onPlaybackWithSource: ((PlaybackEvent, PlaybackSource) -> Void)?
+    var onVoiceSegmentFinished: ((String) -> Void)?
+    private var playbackSource: PlaybackSource = .standard
+
+    private func emitPlayback(_ event: PlaybackEvent, source: PlaybackSource? = nil) {
+        let origin = source ?? playbackSource
+        onPlayback?(event)
+        onPlaybackWithSource?(event, origin)
+    }
 
     /// One line per retry or failure for diagnostics.log: what went wrong, the language, how
     /// long the line was and how long it took. Never the text itself.
@@ -295,6 +313,56 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
     private static let modelKey = "speechLocalModel"
     private static let maximumTextLength = 2_000
     private static let maximumAudioBytes = 64 * 1_024 * 1_024
+    private static let maximumVoiceReplyCharacters = 16_000
+    private static let maximumVoiceReplySegments = 32
+    private static let maximumVoiceReplyAudioBytes = 16 * 1_024 * 1_024
+
+    struct VoiceReplyOutput {
+        struct PCMDriver {
+            var begin: (Int, @escaping @MainActor (Bool) -> Void, @escaping @MainActor (Bool) -> Void) throws -> Void
+            var append: (Data) async throws -> Void
+            var finish: () async throws -> Void
+        }
+        var play: (Data, @escaping @MainActor (Bool) -> Void) throws -> TimeInterval
+        var stop: () -> Void
+        var pcm: PCMDriver? = nil
+    }
+
+    private struct VoiceReplySegment {
+        let text: String
+        let language: Language
+        let model: String
+    }
+
+    private final class VoiceReply {
+        let token: UUID
+        let endpoint: URL
+        let configuredModel: String
+        let preferredLanguage: String
+        let languageOverride: Language?
+        var pending: [VoiceReplySegment] = []
+        var ready: (VoiceReplySegment, Data)?
+        var playing: UUID?
+        var playingText: String?
+        var finished = false
+        var characters = 0
+        var segments = 0
+        var style: VoiceStyle = .neutral
+        var capabilities: [String: VoiceAudioCapabilities] = [:]
+        var unavailableCapabilities: Set<String> = []
+        var streaming = false
+        var streamAudible = false
+        var streamEndReceived = false
+        var playbackWaiter: CheckedContinuation<Void, Error>?
+
+        init(token: UUID, endpoint: URL, configuredModel: String, preferredLanguage: String, languageOverride: Language?) {
+            self.token = token
+            self.endpoint = endpoint
+            self.configuredModel = configuredModel
+            self.preferredLanguage = preferredLanguage
+            self.languageOverride = languageOverride
+        }
+    }
 
     private let defaults: UserDefaults
     private let session: URLSession
@@ -302,6 +370,9 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
     private var audioPlayer: AVAudioPlayer?
     private var operationTask: Task<Void, Never>?
     private var generation = UUID()
+    private let voiceReplyOutput: VoiceReplyOutput
+    private var voiceReply: VoiceReply?
+    private var voiceReplyGenerationTask: Task<Void, Never>?
     private var statusKey: String
     private var statusError: Error?
     private let mute: SpeechMute
@@ -311,8 +382,17 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
         self.init(defaults: .standard)
     }
 
-    init(defaults: UserDefaults) {
+    init(defaults: UserDefaults, voiceReplyOutput: VoiceReplyOutput? = nil) {
         self.defaults = defaults
+        self.voiceReplyOutput = voiceReplyOutput ?? VoiceReplyOutput(
+            play: { try VoiceCallAudio.shared.playWAV($0, completion: $1) },
+            stop: { VoiceCallAudio.shared.stopPlayback() },
+            pcm: .init(
+                begin: { try VoiceCallAudio.shared.beginPCMStream(sampleRate: $0, onActivity: $1, completion: $2) },
+                append: { try await VoiceCallAudio.shared.appendPCMStream($0) },
+                finish: { try await VoiceCallAudio.shared.finishPCMStream() }
+            )
+        )
         enabled = defaults.object(forKey: Self.enabledKey) as? Bool ?? false
         language = Language(rawValue: defaults.string(forKey: Self.languageKey) ?? "") ?? .automatic
         let mute = SpeechMute(defaults: defaults)
@@ -363,33 +443,41 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
     }
 
     /// `userInitiated`: you asked to hear it (a replay), so it plays even while muted.
-    func speak(_ text: String, language override: Language? = nil, userInitiated: Bool = false) {
+    func speak(_ text: String, language override: Language? = nil, userInitiated: Bool = false, source: PlaybackSource = .standard,
+               style: VoiceStyle = .neutral) {
+        if source == .voiceCall {
+            guard let token = beginVoiceReply(language: override, style: style) else { return }
+            appendVoiceReply(text, token: token)
+            finishVoiceReply(token: token)
+            return
+        }
         guard enabled else {
             setState(busy: false, key: "speechDisabled")
-            onPlayback?(.failed)
+            emitPlayback(.failed, source: source)
             return
         }
         if let blockedStatus = automaticSpeechBlockStatus(userInitiated: userInitiated) {
             if !isBusy { setState(busy: false, key: blockedStatus) }
-            onPlayback?(.failed)
+            emitPlayback(.failed, source: source)
             return
         }
         cancelCurrentPlayback()
+        playbackSource = source
 
         guard text.count <= Self.maximumTextLength else {
             setState(busy: false, error: SpeechError.textTooLong)
-            onPlayback?(.failed)
+            emitPlayback(.failed)
             return
         }
         let cleaned = Self.sanitized(text)
         guard !cleaned.isEmpty else {
             setState(busy: false, error: SpeechError.emptyText)
-            onPlayback?(.failed)
+            emitPlayback(.failed)
             return
         }
         guard cleaned.count <= Self.maximumTextLength else {
             setState(busy: false, error: SpeechError.textTooLong)
-            onPlayback?(.failed)
+            emitPlayback(.failed)
             return
         }
 
@@ -398,7 +486,323 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
         // Miku's speaking language when one is set, else the voice language setting.
         let preferred = SpeechVoice.voice(forReplyLanguage: defaults.string(forKey: "replyLanguage")) ?? language.rawValue
         let resolved = override ?? Language(rawValue: SpeechVoice.voice(for: cleaned, preferred: preferred)) ?? .mandarin
-        start(text: cleaned, language: resolved, userInitiated: userInitiated)
+        start(text: cleaned, language: resolved, userInitiated: userInitiated, style: style)
+    }
+
+    func beginVoiceReply(style: VoiceStyle = .neutral) -> UUID? {
+        beginVoiceReply(language: nil, style: style)
+    }
+
+    private func beginVoiceReply(language override: Language?, style: VoiceStyle = .neutral) -> UUID? {
+        guard enabled, !isMuted else {
+            if !isBusy { setState(busy: false, key: enabled ? "speechMuted" : "speechDisabled") }
+            emitPlayback(.failed, source: .voiceCall)
+            return nil
+        }
+        let endpoint: URL
+        let preferred = SpeechVoice.voice(forReplyLanguage: defaults.string(forKey: "replyLanguage")) ?? language.rawValue
+        do {
+            endpoint = try serviceEndpoint()
+            _ = try modelID(for: override ?? Language(rawValue: preferred) ?? .mandarin)
+        } catch {
+            if !isBusy { setState(busy: false, error: error) }
+            emitPlayback(.failed, source: .voiceCall)
+            return nil
+        }
+        cancelCurrentPlayback()
+        playbackSource = .voiceCall
+        let token = generation
+        voiceReply = VoiceReply(
+            token: token,
+            endpoint: endpoint,
+            configuredModel: configuredModelID,
+            preferredLanguage: preferred,
+            languageOverride: override
+        )
+        voiceReply?.style = style
+        setState(busy: true, key: "speechGenerating")
+        return voiceReply?.token == token ? token : nil
+    }
+
+    func setVoiceReplyStyle(_ style: VoiceStyle, token: UUID) {
+        guard let reply = voiceReply, reply.token == token, !reply.finished else { return }
+        reply.style = style
+    }
+
+    /// Each append is a complete sentence; the caller retains the unfinished LLM fragment.
+    func appendVoiceReply(_ text: String, token: UUID) {
+        guard let reply = voiceReply, reply.token == token, !reply.finished else { return }
+        guard enabled, !isMuted else { stop(); return }
+        guard text.count <= Self.maximumTextLength else {
+            failVoiceReply(token: token, error: SpeechError.textTooLong)
+            return
+        }
+        let cleaned = Self.sanitized(text)
+        guard !cleaned.isEmpty else { return }
+        guard cleaned.count <= Self.maximumTextLength,
+              reply.characters + cleaned.count <= Self.maximumVoiceReplyCharacters,
+              reply.segments < Self.maximumVoiceReplySegments else {
+            failVoiceReply(token: token, error: SpeechError.textTooLong)
+            return
+        }
+        let resolved = reply.languageOverride ?? Language(rawValue: SpeechVoice.voice(for: cleaned, preferred: reply.preferredLanguage)) ?? .mandarin
+        do {
+            let model = try modelID(for: resolved, configured: reply.configuredModel)
+            reply.pending.append(VoiceReplySegment(text: cleaned, language: resolved, model: model))
+            reply.characters += cleaned.count
+            reply.segments += 1
+            pumpVoiceReply(token: token)
+        } catch {
+            failVoiceReply(token: token, error: error)
+        }
+    }
+
+    func finishVoiceReply(token: UUID) {
+        guard let reply = voiceReply, reply.token == token, !reply.finished else { return }
+        reply.finished = true
+        pumpVoiceReply(token: token)
+    }
+
+    private func pumpVoiceReply(token: UUID) {
+        guard let reply = voiceReply, reply.token == token, generation == token else { return }
+        guard enabled, !isMuted else { stop(); return }
+        if reply.playing == nil, let (segment, audio) = reply.ready {
+            reply.ready = nil
+            let playback = UUID()
+            reply.playing = playback
+            reply.playingText = segment.text
+            do {
+                guard MikuSpeechWire.validWAV(audio) else { throw SpeechError.invalidAudio }
+                let duration = try voiceReplyOutput.play(audio) { [weak self] success in
+                    Task { @MainActor [weak self] in
+                        self?.voiceReplyPlaybackFinished(success, token: token, playback: playback)
+                    }
+                }
+                guard duration.isFinite, duration > 0, duration <= 180 else { throw SpeechError.invalidAudio }
+                guard voiceReply?.token == token, generation == token else { return }
+                setState(busy: true, key: "speechSpeaking")
+                guard voiceReply?.token == token, generation == token else { return }
+                emitPlayback(.started(text: segment.text, duration: duration), source: .voiceCall)
+            } catch {
+                failVoiceReply(token: token, error: error)
+                return
+            }
+        }
+        guard voiceReply?.token == token, generation == token else { return }
+        if reply.ready == nil, voiceReplyGenerationTask == nil, !reply.pending.isEmpty {
+            let segment = reply.pending.removeFirst()
+            voiceReplyGenerationTask = Task { [weak self] in
+                guard let self else { return }
+                do {
+                    let audio = try await generateVoiceReplySegment(segment, reply: reply)
+                    try Task.checkCancellation()
+                    guard voiceReply?.token == token, generation == token else { return }
+                    voiceReplyGenerationTask = nil
+                    if let audio { reply.ready = (segment, audio) }
+                    pumpVoiceReply(token: token)
+                } catch is CancellationError {
+                    return
+                } catch {
+                    guard voiceReply?.token == token, generation == token else { return }
+                    diagnose("failed", error: error, attempt: 1, began: nil, language: segment.language, text: segment.text, userInitiated: true)
+                    failVoiceReply(token: token, error: error)
+                }
+            }
+        } else if reply.finished, reply.pending.isEmpty, reply.ready == nil,
+                  reply.playing == nil, voiceReplyGenerationTask == nil {
+            voiceReply = nil
+            setState(busy: false, key: idleStatusKey)
+            emitPlayback(.ended, source: .voiceCall)
+        }
+    }
+
+    private func voiceReplyPlaybackFinished(_ success: Bool, token: UUID, playback: UUID) {
+        guard let reply = voiceReply, reply.token == token, reply.playing == playback, generation == token else { return }
+        guard !reply.streaming || reply.streamEndReceived else {
+            failVoiceReply(token: token, error: SpeechError.invalidAudio)
+            return
+        }
+        let text = reply.playingText
+        reply.playing = nil
+        reply.playingText = nil
+        reply.streaming = false
+        if reply.streamAudible {
+            reply.streamAudible = false
+            emitPlayback(.streamingStopped, source: .voiceCall)
+        }
+        guard voiceReply?.token == token, generation == token else { return }
+        guard success else { failVoiceReply(token: token, error: SpeechError.invalidAudio); return }
+        if let text { onVoiceSegmentFinished?(text) }
+        guard voiceReply?.token == token, generation == token else { return }
+        let waiter = reply.playbackWaiter; reply.playbackWaiter = nil; waiter?.resume()
+        pumpVoiceReply(token: token)
+    }
+
+    private func failVoiceReply(token: UUID, error: Error) {
+        guard voiceReply?.token == token else { return }
+        clearVoiceReply()
+        generation = UUID()
+        let displayedError = Self.isConnectionError(error) ? SpeechError.connectionUnavailable : error
+        setState(busy: false, error: displayedError)
+        emitPlayback(.failed, source: .voiceCall)
+    }
+
+    private func clearVoiceReply() {
+        let waiter = voiceReply?.playbackWaiter
+        voiceReply?.playbackWaiter = nil
+        voiceReply = nil
+        voiceReplyGenerationTask?.cancel()
+        voiceReplyGenerationTask = nil
+        waiter?.resume(throwing: CancellationError())
+        voiceReplyOutput.stop()
+    }
+
+    private func generateVoiceReplySegment(_ segment: VoiceReplySegment, reply: VoiceReply) async throws -> Data? {
+        let capabilities = try await voiceCapabilities(model: segment.model, reply: reply)
+        try Task.checkCancellation()
+        guard voiceReply?.token == reply.token, generation == reply.token else { throw CancellationError() }
+        let style = capabilities?.languages.contains(segment.language.rawValue) == true ? capabilities?.style(reply.style) : nil
+        if let capabilities, capabilities.canStream(language: segment.language.rawValue), let driver = voiceReplyOutput.pcm {
+            while reply.playing != nil {
+                try await withCheckedThrowingContinuation { continuation in reply.playbackWaiter = continuation }
+                try Task.checkCancellation()
+                guard voiceReply?.token == reply.token, generation == reply.token else { throw CancellationError() }
+            }
+            try await streamVoiceReplyAudio(segment, reply: reply, style: style, driver: driver)
+            return nil
+        }
+        return try await generateVoiceReplyAudio(segment, endpoint: reply.endpoint, style: style)
+    }
+
+    private func voiceCapabilities(model: String, reply: VoiceReply) async throws -> VoiceAudioCapabilities? {
+        if let cached = reply.capabilities[model] { return cached }
+        if reply.unavailableCapabilities.contains(model) { return nil }
+        let value = try await fetchVoiceCapabilities(model: model, endpoint: reply.endpoint)
+        if let value { reply.capabilities[model] = value }
+        else { reply.unavailableCapabilities.insert(model) }
+        return value
+    }
+
+    private func fetchVoiceCapabilities(model: String, endpoint: URL) async throws -> VoiceAudioCapabilities? {
+        do {
+            var request = try MikuSpeechAuthorization.capabilitiesRequest(model: model, endpoint: endpoint)
+            guard let url = request.url else { throw SpeechError.invalidEndpoint }
+            request.httpMethod = "GET"
+            request.timeoutInterval = 2
+            let (bytes, response) = try await session.bytes(for: request)
+            defer { bytes.task.cancel() }
+            guard let response = response as? HTTPURLResponse, response.url == url, response.statusCode == 200,
+                  response.expectedContentLength <= 32_768,
+                  response.value(forHTTPHeaderField: "Content-Type")?.lowercased().hasPrefix("application/json") == true else {
+                return nil
+            }
+            var data = Data()
+            for try await byte in bytes {
+                try Task.checkCancellation()
+                guard data.count < 32_768 else { throw SpeechError.invalidResponse }
+                data.append(byte)
+            }
+            let value = try VoiceAudioCapabilities.decode(data, model: model)
+            return value
+        } catch {
+            try Task.checkCancellation()
+            return nil
+        }
+    }
+
+    private func streamVoiceReplyAudio(_ segment: VoiceReplySegment, reply: VoiceReply, style: String?,
+                                      driver: VoiceReplyOutput.PCMDriver) async throws {
+        let token = reply.token
+        let url = reply.endpoint.appendingPathComponent("audio/speech")
+        var request = try localRequest(url: url, endpoint: reply.endpoint)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/vnd.qimake.miku-pcm", forHTTPHeaderField: "Accept")
+        request.httpBody = try MikuSpeechWire.speechBody(model: segment.model, input: segment.text,
+                                                       language: segment.language.rawValue, style: style, streaming: true)
+        let (bytes, response) = try await generationSession.bytes(for: request)
+        defer { bytes.task.cancel() }
+        guard let response = response as? HTTPURLResponse, response.url == url else { throw SpeechError.invalidResponse }
+        guard response.statusCode == 200 else { throw SpeechError.serverResponse(response.statusCode) }
+        let maximumWireBytes = VoicePCMStreamParser.maximumTotalBytes + 2 * 1_024 * 1_024
+        guard response.value(forHTTPHeaderField: "Content-Type")?.lowercased().split(separator: ";").first?.trimmingCharacters(in: .whitespaces) == "application/vnd.qimake.miku-pcm",
+              response.expectedContentLength <= Int64(maximumWireBytes) else { throw SpeechError.invalidAudio }
+        var parser = VoicePCMStreamParser(language: segment.language.rawValue)
+        var pending = Data()
+        var wireBytes = 0
+        let playback = UUID()
+        var started = false
+        func consume(_ data: Data) async throws {
+            let frames = try parser.append(data)
+            for frame in frames where frame.kind == .audio {
+                try Task.checkCancellation()
+                guard voiceReply?.token == token, generation == token else { throw CancellationError() }
+                if !started {
+                    reply.playing = playback
+                    reply.playingText = segment.text
+                    reply.streaming = true
+                    reply.streamEndReceived = false
+                    try driver.begin(frame.sampleRate, { [weak self] active in
+                        guard let self, self.voiceReply?.token == token, self.generation == token,
+                              reply.playing == playback, reply.streamAudible != active else { return }
+                        reply.streamAudible = active
+                        if active {
+                            self.setState(busy: true, key: "speechSpeaking")
+                            guard self.voiceReply?.token == token, self.generation == token else { return }
+                            self.emitPlayback(.streamingStarted(text: segment.text), source: .voiceCall)
+                        } else { self.emitPlayback(.streamingStopped, source: .voiceCall) }
+                    }, { [weak self] success in
+                        Task { @MainActor in self?.voiceReplyPlaybackFinished(success, token: token, playback: playback) }
+                    })
+                    started = true
+                }
+                // Suspend the transport while playback capacity is awaited, not just the
+                // iterator, so a fast server cannot fill an entire sentence in memory.
+                bytes.task.suspend()
+                defer { bytes.task.resume() }
+                try await driver.append(frame.payload)
+            }
+        }
+        for try await byte in bytes {
+            try Task.checkCancellation()
+            guard wireBytes < maximumWireBytes else { throw SpeechError.invalidAudio }
+            wireBytes += 1
+            pending.append(byte)
+            if pending.count >= min(4_096, parser.bytesNeeded) {
+                try await consume(pending)
+                pending.removeAll(keepingCapacity: true)
+            }
+        }
+        if !pending.isEmpty { try await consume(pending) }
+        try parser.finish()
+        try Task.checkCancellation()
+        guard started, voiceReply?.token == token, generation == token else { throw CancellationError() }
+        reply.streamEndReceived = true
+        try await driver.finish()
+    }
+
+    private func generateVoiceReplyAudio(_ segment: VoiceReplySegment, endpoint: URL, style: String? = nil) async throws -> Data {
+        let url = endpoint.appendingPathComponent("audio/speech")
+        var request = try localRequest(url: url, endpoint: endpoint)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("audio/wav", forHTTPHeaderField: "Accept")
+        request.setValue("MikuDesktop/0.2.0", forHTTPHeaderField: "User-Agent")
+        request.httpBody = try MikuSpeechWire.speechBody(model: segment.model, input: segment.text, language: segment.language.rawValue, style: style)
+        let (bytes, response) = try await generationSession.bytes(for: request)
+        defer { bytes.task.cancel() }
+        guard let response = response as? HTTPURLResponse, response.url == url else { throw SpeechError.invalidResponse }
+        guard response.statusCode == 200 else { throw SpeechError.serverResponse(response.statusCode) }
+        guard MikuSpeechWire.isAudioContentType(response.value(forHTTPHeaderField: "Content-Type")),
+              response.expectedContentLength <= Int64(Self.maximumVoiceReplyAudioBytes) else { throw SpeechError.invalidAudio }
+        var audio = Data()
+        for try await byte in bytes {
+            try Task.checkCancellation()
+            guard audio.count < Self.maximumVoiceReplyAudioBytes else { throw SpeechError.invalidAudio }
+            audio.append(byte)
+        }
+        guard !audio.isEmpty, MikuSpeechWire.validWAV(audio) else { throw SpeechError.invalidAudio }
+        return audio
     }
 
     func stop() {
@@ -465,8 +869,11 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
             sample = "こんばんは。今日はもう休んでいいよ。ここでゆっくり話そうね。"
         case .english:
             sample = "It is okay to rest. We do not have to hurry."
+        case .korean:
+            sample = "오늘도 수고했어. 서두르지 않아도 괜찮아. 천천히 이야기하자."
         }
         cancelCurrentPlayback()
+        playbackSource = .standard
         guard enabled else {
             setState(busy: false, key: "speechDisabled")
             return
@@ -474,7 +881,7 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
         start(text: sample, language: resolved, userInitiated: true)
     }
 
-    private func start(text: String, language: Language, userInitiated: Bool) {
+    private func start(text: String, language: Language, userInitiated: Bool, style: VoiceStyle = .neutral) {
         let currentGeneration = generation
         setState(busy: true, key: "speechConnecting")
         operationTask = Task { [weak self] in
@@ -482,8 +889,10 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
             do {
                 let endpoint = try serviceEndpoint()
                 let model = try modelID(for: language)
+                let capabilities = try await fetchVoiceCapabilities(model: model, endpoint: endpoint)
                 try Task.checkCancellation()
                 guard generation == currentGeneration else { return }
+                let selectedStyle = capabilities?.languages.contains(language.rawValue) == true ? capabilities?.style(style) : nil
                 setState(busy: true, key: "speechGenerating")
                 let began = Date()
                 var attempt = 1
@@ -494,7 +903,8 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
                             text: text,
                             language: language,
                             model: model,
-                            endpoint: endpoint
+                            endpoint: endpoint,
+                            style: selectedStyle
                         )
                         break
                     } catch is CancellationError {
@@ -520,7 +930,7 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
                 if let blockedStatus = automaticSpeechBlockStatus(userInitiated: userInitiated) {
                     operationTask = nil
                     setState(busy: false, key: blockedStatus)
-                    onPlayback?(.failed)
+                    emitPlayback(.failed)
                     return
                 }
                 try play(audio, text: text)
@@ -542,7 +952,7 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
                 let displayedError = Self.isConnectionError(underlying) ? SpeechError.connectionUnavailable : underlying
                 setState(busy: false, error: displayedError)
                 operationTask = nil
-                onPlayback?(.failed)
+                emitPlayback(.failed)
             }
         }
     }
@@ -570,6 +980,10 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
 
     /// A short, text-free name for an error in diagnostics.log.
     nonisolated static func diagnosticCode(_ error: Error) -> String {
+        if let stream = error as? VoicePCMStreamError {
+            if case .serverError = stream { return "pcm-server-error" }
+            return "invalid-pcm-stream"
+        }
         if let speech = error as? SpeechError {
             switch speech {
             case let .serverResponse(status): return "http-\(status)"
@@ -582,6 +996,7 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
             case .textTooLong: return "text-too-long"
             case .generationFailed: return "generation-failed"
             case .invalidAudio: return "invalid-audio"
+            case .koreanModelRequired: return "korean-model-required"
             }
         }
         let value = error as NSError
@@ -621,20 +1036,25 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
 
     private func cancelCurrentPlayback() {
         generation = UUID()
+        let hadVoiceReply = voiceReply != nil
+        if hadVoiceReply { clearVoiceReply() }
+        let wasGeneratingCall = operationTask != nil && playbackSource == .voiceCall
+        let interruptedSource = playbackSource
         operationTask?.cancel()
         operationTask = nil
         let wasPlaying = audioPlayer != nil
         audioPlayer?.stop()
         audioPlayer?.delegate = nil
         audioPlayer = nil
-        if wasPlaying { onPlayback?(.interrupted) }
+        if hadVoiceReply || wasPlaying || wasGeneratingCall { emitPlayback(.interrupted, source: interruptedSource) }
     }
 
     private func generateAudio(
         text: String,
         language: Language,
         model: String,
-        endpoint: URL
+        endpoint: URL,
+        style: String? = nil
     ) async throws -> Data {
         let url = endpoint.appendingPathComponent("audio/speech")
         var request = try localRequest(url: url, endpoint: endpoint)
@@ -643,7 +1063,8 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
         request.httpBody = try MikuSpeechWire.speechBody(
             model: model,
             input: text,
-            language: language.rawValue
+            language: language.rawValue,
+            style: style
         )
         let (audio, response) = try await self.data(for: request, accept: "audio/wav", using: generationSession)
         guard let response = response as? HTTPURLResponse, response.url == url else {
@@ -672,13 +1093,13 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
         audioPlayer = player
         operationTask = nil
         setState(busy: true, key: "speechSpeaking")
-        onPlayback?(.started(text: text, duration: player.duration))
+        emitPlayback(.started(text: text, duration: player.duration))
     }
 
     func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
         guard player === audioPlayer else { return }
         audioPlayer = nil
-        onPlayback?(.ended)
+        emitPlayback(flag ? .ended : .failed)
         if flag {
             setState(busy: false, key: idleStatusKey)
         } else {
@@ -689,7 +1110,7 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
     func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {
         guard player === audioPlayer else { return }
         audioPlayer = nil
-        onPlayback?(.ended)
+        emitPlayback(.failed)
         setState(busy: false, error: SpeechError.invalidAudio)
     }
 
@@ -745,15 +1166,19 @@ final class MikuSpeech: NSObject, AVAudioPlayerDelegate {
         return url
     }
 
-    private func modelID(for language: Language) throws -> String {
-        let configured = configuredModelID
+    private func modelID(for language: Language, configured: String? = nil) throws -> String {
+        let configured = configured ?? configuredModelID
         guard configured != Self.automaticModelID else {
             switch language {
             case .cantonese: return "miku-gpt-sovits-yue"
             case .mandarin, .automatic: return "miku-gpt-sovits-zh"
             case .japanese: return "miku-gpt-sovits-ja"
             case .english: return "miku-gpt-sovits-en"
+            case .korean: throw SpeechError.koreanModelRequired
             }
+        }
+        if language == .korean, configured == "miku-gpt-sovits" || Self.ownerModelIDs.contains(configured) {
+            throw SpeechError.koreanModelRequired
         }
         guard MikuSpeechWire.validModelID(configured) else { throw SpeechError.missingModel }
         return configured

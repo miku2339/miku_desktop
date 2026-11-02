@@ -13,7 +13,9 @@ swiftc \
   "$project_root/Sources/MikuDesktop/Localization.swift" \
   "$project_root/Sources/MikuDesktop/MemoryPhotoCapture.swift" \
   "$project_root/Sources/MikuDesktop/MemoryAlbumWindowController.swift" \
+  "$project_root/Sources/MikuDesktop/NotebookWindowController.swift" \
   "$project_root/Tests/MemoryAlbumTests.swift" \
+  "$project_root/Tests/NotebookTests.swift" \
   -o "$temporary_dir/memory-album-tests"
 
 "$temporary_dir/memory-album-tests"

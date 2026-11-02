@@ -68,6 +68,10 @@ enum VocaDBChecks {
             ("Who wrote Melt?", "Melt"),
             ("メルトって知ってる？", "メルト"),
             ("你知道這首歌嗎", nil),
+            ("메ルト 알아?", "메ルト"),
+            ("Tell Your World라는 노래 알아요?", "Tell Your World"),
+            ("メルト를 들어 봤어?", "メルト"),
+            ("이 노래 알아?", nil),
             ("今天天氣很好", nil)
         ]
         for (text, title) in asked {

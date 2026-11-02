@@ -3,7 +3,7 @@ import Foundation
 /// Spotting a hum in her reply ("啦啦啦～♪", "ふんふ～ん", "la la la~"). A plain "♪" at the end
 /// of a line is not a hum: she uses it all the time.
 enum HumText {
-    private static let pattern = #"(?:啦\s*){3,}|(?<![a-z])(?:la[\s~～\-]*){3,}(?![a-z])|(?:ら\s*){3,}|(?:ラ\s*){3,}|(?:哼\s*){2,}|哼[～~]+|(?:ふん\s*){2,}|ふ[ー～~]+ん|(?:フン\s*){2,}|(?:嗯\s*){2,}[～~]*\s*♪|(?:hm+\s*){2,}|(?:mm+\s*){2,}♪|♪\s*[～~]+\s*♪"#
+    private static let pattern = #"(?:啦\s*){3,}|(?<![a-z])(?:la[\s~～\-]*){3,}(?![a-z])|(?:ら\s*){3,}|(?:ラ\s*){3,}|(?<![가-힣])(?:라[\s~～\-]*){3,}(?![가-힣])|(?:哼\s*){2,}|哼[～~]+|(?:ふん\s*){2,}|ふ[ー～~]+ん|(?:フン\s*){2,}|(?:嗯\s*){2,}[～~]*\s*♪|(?:hm+\s*){2,}|(?:mm+\s*){2,}♪|♪\s*[～~]+\s*♪"#
 
     static func containsHum(_ text: String) -> Bool {
         text.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil

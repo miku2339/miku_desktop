@@ -41,7 +41,10 @@ struct RelationshipPolicyTests {
             ("中日混合強烈告白", "我真的大好き"),
             ("日文多句直接告白", "好きです。付き合ってください。"),
             ("日文交往請求", "ミク、私と付き合ってください"),
-            ("日文交往邀請", "付き合ってください")
+            ("日文交往邀請", "付き合ってください"),
+            ("韓語交往邀請", "미쿠야, 나랑 사귀어 줄래?"),
+            ("韓語女朋友邀請", "내 여자친구가 되어 줄래?"),
+            ("韓語表達愛意", "미쿠야 사랑해")
         ]
 
         for (name, text) in directConfessions {
@@ -54,6 +57,9 @@ struct RelationshipPolicyTests {
 
         let nonConfessions: [(String, String)] = [
             ("普通對話", "今日天氣幾好"),
+            ("韓語喜歡歌曲", "이 노래 사랑해"),
+            ("韓語引述告白", "친구가 사랑해라고 말했어"),
+            ("韓語否定告白", "사귀고 싶지 않아"),
             ("只表達自己想交往", "我想交往"),
             ("沒有對象的交往意願", "想交往"),
             ("請求協助追求別人", "你可以幫我追女朋友嗎？"),
@@ -157,8 +163,8 @@ struct RelationshipPolicyTests {
         )
         expectEqual(
             ConfessionPolicy.evaluate("我喜歡你", friendship: 100, status: .dating, offended: false, justForgiven: true),
-            .recovering,
-            "剛原諒時暫不接受"
+            .alreadyDating,
+            "和好後維持已建立的交往關係"
         )
         expectEqual(
             ConfessionPolicy.evaluate("我喜歡你", friendship: 10, status: .dating, offended: false, justForgiven: false),

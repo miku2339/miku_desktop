@@ -1,6 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { MAX_VOICE_SECONDS, shouldFallBack, talkFrame, textTalk, voiceTalk } from '../Wallpaper/companion/talking.js';
+import { MAX_VOICE_SECONDS, shouldFallBack, streamTalk, talkFrame, textTalk, voiceTalk } from '../Wallpaper/companion/talking.js';
+
+test('a stream has no assumed utterance duration and stays active while audio arrives', () => {
+  const talk = streamTalk('你好', 10);
+  assert.equal(talk.streaming, true);
+  assert.equal(talk.voiced, true);
+  assert.ok(talkFrame(talk, 25));
+  assert.equal(talkFrame(talk, 10 + MAX_VOICE_SECONDS + 1), null);
+});
+
+test('stream timing rejects missing text and an invalid clock', () => {
+  assert.equal(streamTalk('', 0), null);
+  assert.equal(streamTalk('hello', NaN), null);
+  assert.deepEqual(talkFrame(streamTalk('，', 0), 2), { vowel: null, open: 0 });
+});
 
 test('a voiced line lasts exactly as long as its audio', () => {
   const talk = voiceTalk('辛苦晒～我陪你', 10, 3.2);

@@ -4,6 +4,13 @@
 <dict>
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
+    <key>CFBundleLocalizations</key>
+    <array>
+        <string>zh-Hant</string>
+        <string>en</string>
+        <string>ja</string>
+        <string>ko</string>
+    </array>
     <key>CFBundleDisplayName</key>
     <string>Miku Desktop</string>
     <key>CFBundleExecutable</key>
@@ -41,6 +48,10 @@
     <true/>
     <key>NSAppleEventsUsageDescription</key>
     <string>Miku reads the song playing in Music or Spotify, and the video title of a YouTube or Niconico tab in your browser, so she can chat about it (only when you turn this on in Settings). When you ask her to play a song, she plays it from your Music library.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Miku listens while you use voice conversation. Speech is recognized on this Mac, and microphone audio is not saved.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>Miku turns your speech into text during voice conversation using on-device recognition. Audio is not saved or sent to a speech-recognition server.</string>
     <key>NSHumanReadableCopyright</key>
     <string>Unofficial fan project. Hatsune Miku © Crypton Future Media, INC.</string>
 </dict>

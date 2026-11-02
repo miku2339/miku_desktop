@@ -1,5 +1,6 @@
 import Foundation
 import Security
+import CryptoKit
 
 struct AIMCPKeychainStore {
     typealias CopyMatching = ([String: Any]) -> (OSStatus, Any?)
@@ -169,6 +170,40 @@ enum SongKnowledgeSourceStatus: String, Codable, Sendable {
     case bundled
     case remote
     case manual
+    case online
+}
+
+struct SongKnowledgeReference: Decodable, Equatable, Sendable {
+    let label: String
+    let url: String
+}
+
+struct SongKnowledgeSearchResult: Sendable {
+    let entries: [SongKnowledgeEntry]
+    let searchedOnline: Bool
+    let sources: [String: [SongKnowledgeReference]]
+}
+
+private struct AIMCPKnowledgeSearch: Decodable {
+    struct Item: Decodable {
+        struct Fact: Decodable {
+            let label: String
+            let value: String
+        }
+
+        let slug: String
+        let type: String
+        let title: String
+        let originalTitle: String?
+        let summary: String
+        let content: String
+        let facts: [Fact]
+        let sources: [SongKnowledgeReference]
+        let url: String
+    }
+
+    let version: Int
+    let items: [Item]
 }
 
 struct SongKnowledgeText: Codable, Equatable, Sendable {
@@ -195,7 +230,7 @@ struct SongKnowledgeText: Codable, Equatable, Sendable {
         switch language {
         case "en": return english
         case "ja": return japanese
-        case "ko": return korean ?? traditionalChinese
+        case "ko": return korean.flatMap { $0.isEmpty ? nil : $0 } ?? english
         default: return traditionalChinese
         }
     }
@@ -271,6 +306,11 @@ actor SongKnowledgeStore {
     typealias Downloader = @Sendable (URLRequest) async throws -> (Data, URLResponse)
     typealias APIKeyLoader = @Sendable () throws -> String?
     typealias EndpointLoader = @Sendable () throws -> URL
+
+    enum SearchMatch {
+        case library
+        case title
+    }
 
     enum UpdateSource: Equatable, Sendable {
         case aimcp
@@ -358,6 +398,92 @@ actor SongKnowledgeStore {
         }
     }
 
+    func search(matching query: String, language: String = "zh-Hant", match: SearchMatch = .library) async throws -> SongKnowledgeSearchResult {
+        let title = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty, title.count <= 200 else {
+            return SongKnowledgeSearchResult(entries: [], searchedOnline: false, sources: [:])
+        }
+        let local = allEntries().filter { entry in
+            if match == .title {
+                return entry.aliases.contains { VocaDB.folded($0) == VocaDB.folded(title) }
+            }
+            return ([entry.id, entry.content.traditionalChinese, entry.content.english, entry.content.japanese]
+                + [entry.content.korean].compactMap { $0 } + entry.aliases + entry.creators)
+                .contains { $0.localizedCaseInsensitiveContains(title) }
+        }
+        if !local.isEmpty {
+            return SongKnowledgeSearchResult(entries: local, searchedOnline: false, sources: [:])
+        }
+        guard let apiKey = try apiKeyLoader() else {
+            return SongKnowledgeSearchResult(entries: [], searchedOnline: false, sources: [:])
+        }
+        try Task.checkCancellation()
+        var components = URLComponents(url: AIMCPKnowledgeConfiguration.endpoint, resolvingAgainstBaseURL: false)!
+        components.path = "/api/v1/knowledge"
+        components.queryItems = [
+            URLQueryItem(name: "q", value: title),
+            URLQueryItem(name: "type", value: "song"),
+            URLQueryItem(name: "lang", value: language == "zh-Hant" ? "zh-TW" : language),
+            URLQueryItem(name: "limit", value: "5"),
+        ]
+        guard let url = components.url else { throw SongKnowledgeError.invalidResponse }
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 8)
+        request.httpMethod = "GET"
+        request.httpShouldHandleCookies = false
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        let (data, response) = try await downloader(request)
+        try Task.checkCancellation()
+        guard data.count <= Self.maximumDocumentSize else { throw SongKnowledgeError.tooLarge }
+        guard let http = response as? HTTPURLResponse else { throw SongKnowledgeError.invalidResponse }
+        guard (200..<300).contains(http.statusCode) else { throw SongKnowledgeError.httpStatus(http.statusCode) }
+        guard response.url == request.url else { throw SongKnowledgeError.invalidResponse }
+        let result: AIMCPKnowledgeSearch
+        do { result = try JSONDecoder().decode(AIMCPKnowledgeSearch.self, from: data) }
+        catch { throw SongKnowledgeError.invalidJSON }
+        guard result.version == 1, result.items.count <= 5 else { throw SongKnowledgeError.invalidResponse }
+        var entries: [SongKnowledgeEntry] = []
+        var sources: [String: [SongKnowledgeReference]] = [:]
+        var seen = Set<String>()
+        let creatorLabels = ["creator", "producer", "produced by", "production credits", "創作者", "製作者", "制作者", "參與製作", "製作參與", "制作参加", "プロデューサー", "제작자", "프로듀서", "제작 참여"]
+        for item in result.items {
+            guard item.type == "song", item.slug.count <= 100, item.slug.range(of: #"^[a-z0-9]+(?:-[a-z0-9]+)*$"#, options: .regularExpression) != nil,
+                  let source = URL(string: item.url), source.scheme == "https", source.host == "mikuwiki.qimake.com",
+                  source.port == nil, source.user == nil, source.password == nil, source.path == "/wiki/\(item.slug)",
+                  item.facts.count <= 50, item.sources.count <= 50 else {
+                throw SongKnowledgeError.invalidResponse
+            }
+            let simpleID = "song.\(item.slug)"
+            let digest = SHA256.hash(data: Data(item.slug.utf8)).map { String(format: "%02x", $0) }.joined()
+            let id = simpleID.count <= 64 ? simpleID : "song.wiki.\(digest.prefix(32))"
+            guard seen.insert(id).inserted else { throw SongKnowledgeError.duplicateID(id) }
+            let clean: (String, Int) -> String = { text, maximum in
+                let scalars = text.unicodeScalars.filter { $0.value >= 0x20 || $0 == "\n" }
+                return String(String.UnicodeScalarView(scalars)).trimmingCharacters(in: .whitespacesAndNewlines).prefix(maximum).description
+            }
+            var aliases: [String] = []
+            for name in [item.title, item.originalTitle ?? "", item.slug] {
+                let value = clean(name, 120)
+                if !value.isEmpty, !aliases.contains(value) { aliases.append(value) }
+            }
+            let content = clean([item.summary, item.content].joined(separator: "\n\n"), 1_000)
+            guard !aliases.isEmpty, !content.isEmpty else { throw SongKnowledgeError.invalidResponse }
+            let creators = item.facts.filter { creatorLabels.contains($0.label.lowercased()) }
+                .map { clean($0.value, 120) }.filter { !$0.isEmpty }
+            let references = item.sources.filter { reference in
+                guard let url = URL(string: reference.url) else { return false }
+                return url.scheme == "https" && url.host != nil && url.user == nil && url.password == nil
+            }
+            entries.append(SongKnowledgeEntry(
+                id: id, aliases: aliases, creators: Array(creators.prefix(16)), kind: .song,
+                content: SongKnowledgeText(traditionalChinese: content, english: content, japanese: content),
+                sourceURL: source.absoluteString, featured: false, sourceStatus: .online
+            ))
+            sources[id] = references
+        }
+        return SongKnowledgeSearchResult(entries: entries, searchedOnline: true, sources: sources)
+    }
+
     func entries(matching query: String, previousUserMessages: [String] = []) -> [SongKnowledgeEntry] {
         let resolved = resolvedQuery(query, previousUserMessages: previousUserMessages)
         var matches = titleMatches(in: resolved)
@@ -437,6 +563,7 @@ actor SongKnowledgeStore {
             let endpoint = try endpointLoader()
             var request = URLRequest(url: endpoint)
             request.httpMethod = "GET"
+            request.httpShouldHandleCookies = false
             request.setValue("application/json", forHTTPHeaderField: "Accept")
             request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
             do {
@@ -529,7 +656,8 @@ actor SongKnowledgeStore {
             throw SongKnowledgeError.invalidResponse
         }
         var items = components.queryItems ?? []
-        items.removeAll { $0.name == "pageSize" || $0.name == "cursor" }
+        items.removeAll { $0.name == "pageSize" || $0.name == "cursor" || $0.name == "collection" }
+        items.append(URLQueryItem(name: "collection", value: "popular"))
         items.append(URLQueryItem(name: "pageSize", value: "250"))
         if let cursor { items.append(URLQueryItem(name: "cursor", value: cursor)) }
         components.queryItems = items

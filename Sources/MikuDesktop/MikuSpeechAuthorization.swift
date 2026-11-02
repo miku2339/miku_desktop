@@ -17,6 +17,17 @@ enum MikuSpeechAuthorization {
         return URLRequest(url: url)
     }
 
+    static func capabilitiesRequest(model: String, endpoint: URL) throws -> URLRequest {
+        guard MikuSpeechWire.validModelID(model) else { throw AuthorizationError.untrustedServiceURL }
+        let base = endpoint.appendingPathComponent("audio/capabilities")
+        var request = try localRequest(url: base, endpoint: endpoint)
+        var components = URLComponents(url: base, resolvingAgainstBaseURL: false)
+        components?.queryItems = [URLQueryItem(name: "model", value: model)]
+        guard let url = components?.url else { throw AuthorizationError.untrustedServiceURL }
+        request.url = url
+        return request
+    }
+
     static func validateServiceEndpoint(_ url: URL) throws {
         guard isLoopbackServiceURL(url), url.path == "/v1" else {
             throw AuthorizationError.untrustedServiceURL
@@ -48,12 +59,15 @@ enum MikuSpeechWire {
         let model: String
         let input: String
         let language: String
-        let responseFormat = "wav"
+        let responseFormat: String
+        let stream: Bool?
+        let style: String?
 
         enum CodingKeys: String, CodingKey {
             case model
             case input
             case language
+            case stream, style
             case responseFormat = "response_format"
         }
     }
@@ -83,8 +97,10 @@ enum MikuSpeechWire {
         let id: String
     }
 
-    static func speechBody(model: String, input: String, language: String) throws -> Data {
-        try JSONEncoder().encode(SpeechBody(model: model, input: input, language: language))
+    static func speechBody(model: String, input: String, language: String, style: String? = nil, streaming: Bool = false) throws -> Data {
+        try JSONEncoder().encode(SpeechBody(model: model, input: input, language: language,
+                                           responseFormat: streaming ? "pcm_s16le" : "wav",
+                                           stream: streaming ? true : nil, style: style))
     }
 
     static func audioModelIDs(from data: Data) throws -> [String] {

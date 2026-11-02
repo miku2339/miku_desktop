@@ -52,7 +52,7 @@ struct MemoryContext: Sendable {
     var level: Int
     var offended: Bool
     var justForgiven: Bool
-    /// She was forgiving it as an accident (a quick apology, or you said you didn't mean to).
+    /// The user explicitly clarified that the touch was accidental.
     var forgaveAccident: Bool = false
     var boundaryStrikesToday: Int
     /// Where she was touched last time ("chest" or "skirt").
@@ -251,17 +251,22 @@ final class CompanionMemory {
         if store.firstMet == nil { store.firstMet = Date() }
         if isOffended, Self.isApology(text) || Self.isAccidentExplanation(text) {
             let relationship = store.relationship
-            let accident = Self.isAccident(
-                text: text,
-                since: relationship.lastBoundary,
-                firstStrike: (relationship.lastBoundaryPenalty ?? 8) <= Self.boundaryPenalty
-                    && touchCounts(for: Self.dayKey(Date()))["boundary", default: 0] <= 1
-            )
+            let accident = Self.isAccidentExplanation(text)
             if accident || Self.isApology(text) {
                 store.relationship.offendedSince = nil
-                // An accident she believes: most of what it cost comes back.
-                let regained = accident ? Self.accidentRefund : 2
+                let regained = accident ? (relationship.lastBoundaryPenalty ?? Self.boundaryPenalty) : 2
                 store.relationship.friendship = min(100, store.relationship.friendship + regained)
+                if accident {
+                    store.relationship.boundaryStrikes = max(0, store.relationship.boundaryStrikes - 1)
+                    if let touched = relationship.lastBoundary,
+                       let index = store.touchDays.firstIndex(where: { $0.day == Self.dayKey(touched) }) {
+                        let remaining = store.touchDays[index].counts["boundary", default: 0] - 1
+                        if remaining > 0 { store.touchDays[index].counts["boundary"] = remaining }
+                        else { store.touchDays[index].counts.removeValue(forKey: "boundary") }
+                    }
+                    store.relationship.lastBoundary = nil
+                    store.relationship.lastBoundaryPenalty = nil
+                }
                 justForgiven = true
                 forgaveAccident = accident
             }
@@ -744,39 +749,27 @@ final class CompanionMemory {
     /// What touching her chest or lifting her skirt costs (again while she's still upset: more).
     static let boundaryPenalty: Double = 8
     static let boundaryRepeatPenalty: Double = 12
-    /// Given back when she believes it was an accident (net −3 instead of −6 with a normal apology).
-    static let accidentRefund: Double = 5
-    /// Apologising this soon after the first touch counts as "it was an accident".
-    static let quickApology: TimeInterval = 2 * 60
-    /// Saying you didn't mean to still counts as an accident within this time.
-    static let explainedAccident: TimeInterval = 30 * 60
-
     /// "I didn't mean to", "唔小心", "わざとじゃない"…
     static func isAccidentExplanation(_ text: String) -> Bool {
         let lowered = text.lowercased()
+        if lowered.range(of: #"(?:不是|並非|并非|唔係)(?:不小心|誤觸|误触|手滑|意外)|(?:not|wasn't|isn't)\s+(?:an?\s+)?accident|わざと(?:です|だ|やった)|일부러\s*(?:했|그랬)"#, options: .regularExpression) != nil { return false }
         let words = [
             "唔小心", "不小心", "唔係有心", "不是有心", "唔係故意", "不是故意", "唔係特登", "非故意", "意外", "手滑", "撳錯", "按錯", "點錯", "誤觸",
             "accident", "didn't mean", "did not mean", "didnt mean", "by mistake", "misclick", "slipped",
-            "わざとじゃ", "わざとではない", "うっかり", "間違えて", "事故"
+            "わざとじゃ", "わざとではない", "うっかり", "間違えて", "事故",
+            "실수였어", "실수했어", "잘못 눌렀", "잘못눌렀", "일부러 그런 게 아니", "일부러 한 게 아니"
         ]
         return words.contains { lowered.contains($0) }
     }
 
-    /// The first touch today, and an apology right away (or saying it was an accident soon after).
-    static func isAccident(text: String, since touched: Date?, firstStrike: Bool, now: Date = Date()) -> Bool {
-        guard firstStrike, let touched else { return false }
-        let elapsed = now.timeIntervalSince(touched)
-        guard elapsed >= 0 else { return false }
-        if elapsed <= quickApology, isApology(text) || isAccidentExplanation(text) { return true }
-        return elapsed <= explainedAccident && isAccidentExplanation(text)
-    }
-
     static func isApology(_ text: String) -> Bool {
         let lowered = text.lowercased()
+        if lowered.range(of: #"(?:미안|죄송)(?:하지\s*않|한\s*(?:게|것이)\s*아니)|사과(?:하지\s*않|할\s*생각\s*없)|안\s*(?:미안|죄송)"#, options: .regularExpression) != nil { return false }
         let words = [
             "對不起", "对不起", "對唔住", "对唔住", "唔好意思", "不好意思", "抱歉", "道歉", "我錯", "我错",
             "sorry", "apologi", "my bad", "forgive me",
-            "ごめん", "すみません", "すいません", "申し訳", "許して"
+            "ごめん", "すみません", "すいません", "申し訳", "許して",
+            "미안", "죄송", "사과할게", "사과해", "용서해", "잘못했어"
         ]
         return words.contains { lowered.contains($0) }
     }
@@ -795,7 +788,7 @@ final class CompanionMemory {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard (3...120).contains(text.count) else { return nil }
         let lowered = text.lowercased()
-        let secrets = ["password", "passcode", "密碼", "密码", "パスワード", "credit card", "信用卡", "api key", "token"]
+        let secrets = ["password", "passcode", "密碼", "密码", "パスワード", "credit card", "信用卡", "api key", "token", "비밀번호", "암호", "신용카드", "주민등록", "계좌번호", "건강", "진단", "복용", "토큰"]
         if secrets.contains(where: { lowered.contains($0) }) { return nil }
         // Long digit runs: card, phone, ID or account numbers.
         if text.range(of: "[0-9][0-9 -]{7,}[0-9]", options: .regularExpression) != nil { return nil }

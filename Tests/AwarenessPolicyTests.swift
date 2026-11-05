@@ -79,6 +79,23 @@ struct AwarenessPolicyTests {
         expectTrue(AwarenessPolicy.canSpeak(lastSpoke: now.addingTimeInterval(-180), now: now, urgent: true), "緊急提醒滿三分鐘可發送")
         expectFalse(AwarenessPolicy.canSpeak(lastSpoke: now.addingTimeInterval(-179), now: now, urgent: true), "緊急提醒未滿三分鐘不可發送")
 
+        // 沒人回應時不要洗版（人格規則第 7 節）
+        expectFalse(AwarenessPolicy.canSpeak(lastSpoke: now.addingTimeInterval(-600), now: now, urgent: true, unanswered: 1), "上一句沒人回應時，歡迎回來也要等一般間隔")
+        expectTrue(AwarenessPolicy.canSpeak(lastSpoke: now.addingTimeInterval(-1_200), now: now, urgent: true, unanswered: 1), "上一句沒人回應，滿二十分鐘後仍可說")
+        expectFalse(AwarenessPolicy.canSpeak(lastSpoke: now.addingTimeInterval(-7_200), now: now, urgent: true, unanswered: 2), "連續兩句沒人回應就等對方開口")
+        expectFalse(AwarenessPolicy.canSpeak(lastSpoke: now.addingTimeInterval(-7_200), now: now, urgent: false, unanswered: 2), "連續兩句沒人回應，一般訊息也不說")
+        expectTrue(AwarenessPolicy.canSpeak(lastSpoke: now.addingTimeInterval(-7_200), now: now, urgent: false, unanswered: 0), "對方回應後恢復正常")
+
+        // 不重複同一句或同樣的開頭（截圖裡的三句）
+        let said = ["回來啦？剛剛去哪裡了呀？", "看你一直打字，是在跟誰聊天呀？"]
+        expectTrue(AwarenessPolicy.isRepeat("回來啦！剛剛去哪裡了呀？", of: said), "只差標點也算重複")
+        expectTrue(AwarenessPolicy.isRepeat("歡迎回來～剛剛去哪裡了呀？", of: said), "包含舊句子也算重複")
+        expectTrue(AwarenessPolicy.isRepeat("回來啦剛剛去買東西嗎？", of: said), "同樣的開頭算重複")
+        expectFalse(AwarenessPolicy.isRepeat("嘿，我在想如果去旅行，最想去哪裡呢？", of: said), "不同的話題不算重複")
+        expectFalse(AwarenessPolicy.isRepeat("好", of: said), "太短的句子不判斷")
+        expectFalse(AwarenessPolicy.isRepeat("看到天氣變冷了，要不要一起喝杯熱可可？", of: ["今天要不要一起聽首歌？"]), "只共用短短幾個字不算重複")
+        expectFalse(AwarenessPolicy.isRepeat("回來啦？剛剛去哪裡了呀？", of: []), "沒有說過的話就不算重複")
+
         if failures.isEmpty {
             print("PASS: \(checks) checks")
             return

@@ -87,7 +87,7 @@ private enum AIMCPChatTests {
         defer { try? FileManager.default.removeItem(at: folder) }
         let fixture = folder.appendingPathComponent("empty.json")
         let localMention: [String: Any] = [
-            "id": "song.mention", "kind": "song", "aliases": ["Offline Mention"], "creators": [],
+            "id": "song.mention", "kind": "song", "aliases": ["Offline Mention"], "creators": ["LocalFixtureArtist"],
             "content": ["zh-Hant": "Mentions Online Fixture Song", "en": "Mentions Online Fixture Song", "ja": "Mentions Online Fixture Song"],
             "sourceURL": "https://vocadb.net/S/9876", "featured": false, "sourceStatus": "bundled",
         ]
@@ -177,6 +177,24 @@ private enum AIMCPChatTests {
         let voiceEventPrompt = AIMCPChatModelProtocol.recordedPrompt()
         try check(voiceEventPrompt.contains("Fixture London Hall") && voiceEventPrompt.contains("https://mikuexpo.com/europe2026/"), "voice replies receive the same verified event facts and source")
         try check(!voiceEventPrompt.contains("Fixture Paris Hall"), "voice replies keep the requested event year")
+
+        let lookupCount = await probe.knowledgeRequests
+        AIMCPChatModelProtocol.reset()
+        _ = try await ai.reply(
+            to: "What am I listening to?", history: [],
+            listening: ListeningContext(song: "Unlisted track — LocalFixtureArtist", video: #"A "quoted" title"#, videoIsRecent: true)
+        )
+        let mediaPrompt = AIMCPChatModelProtocol.recordedPrompt()
+        try check(mediaPrompt.contains(#""recentVideo":"A \"quoted\" title""#), "cached video titles are encoded as recent, escaped data")
+        try check(!mediaPrompt.contains("Mentions Online Fixture Song"), "the playing song does not inherit another song's facts based on artist")
+        try check(await probe.knowledgeRequests == lookupCount, "observed media does not trigger a Wiki lookup")
+
+        AIMCPChatModelProtocol.reset()
+        _ = try await ai.reply(
+            to: "What am I listening to?", history: [],
+            listening: ListeningContext(song: "Offline Mention — LocalFixtureArtist")
+        )
+        try check(AIMCPChatModelProtocol.recordedPrompt().contains("Mentions Online Fixture Song"), "a matching playing title can include offline credits")
         print("AIMCP chat: \(checks) checks passed")
     }
 

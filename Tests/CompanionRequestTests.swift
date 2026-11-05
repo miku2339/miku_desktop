@@ -105,6 +105,17 @@ enum MusicRequestChecks {
         precondition(MusicRequestParser.lastTitle(in: "Miku 推薦你聽「Hand in Hand」！", knownTitles: titles) == "Hand in Hand", "聽「」 is a title")
         count += 4
 
+        // The screenshot: she asked which song, and "你看看！？" was a question back, not a title.
+        let whichOne = "好呀，我準備好了～♪ 是哪一首呢？"
+        reject("你看看！？", after: whichOne)
+        reject("你看看", after: whichOne)
+        reject("猜猜看？", after: whichOne)
+        reject("你說呢？", after: whichOne)
+        reject("Tell Your World?", after: whichOne)
+        reject("guess", after: "Which song would you like to hear?")
+        reject("当ててみて", after: "どの曲？")
+        expect("Tell Your World", "Tell Your World", nil, after: whichOne)
+
         // Not requests to play music.
         reject("放心啦")
         reject("開心！")

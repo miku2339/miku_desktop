@@ -938,6 +938,8 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
         }
         let sleepRevision = sleep.revision
         if appendUser, CompanionRequest.isComeOver(text) { onCallOver?() }
+        // You answered: she may speak up on her own again later.
+        if appendUser { AwarenessService.shared.userSpoke() }
         // Her last lines, for "what would you like to hear?" — "Tell Your World", and for
         // "open it on YouTube" about a song she named a moment ago.
         let recentAssistant = appendUser
@@ -991,11 +993,15 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
                 } else {
                     voiceTextHandler = nil
                 }
+                // What you're listening to or watching, so "what am I listening to?" has an answer.
+                let listening = await AwarenessService.shared.listeningForChat()
+                guard !Task.isCancelled, generation == conversationGeneration else { return }
                 var reply = try await ai.reply(
                     to: prompt, image: image, history: history, memory: context,
                     rememberSongPreferences: rememberSongPreferences,
                     relationshipIntent: relationshipIntent,
                     music: musicPlan,
+                    listening: listening,
                     mode: voiceOrigin ? .voice : .text,
                     onVoiceText: voiceTextHandler
                 )

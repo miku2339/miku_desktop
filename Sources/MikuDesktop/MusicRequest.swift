@@ -103,8 +103,9 @@ enum MusicRequestParser {
         // "你想聽哪一首？" — "tell your world": a song name given as the answer.
         if let previousAssistant, asksWhatToPlay(previousAssistant) {
             let query = cleaned(rest)
+            // "你看看！？" / "猜猜看？": a question back, not a title (cleaning drops the "？").
             guard !query.isEmpty, query.count <= 60, !isExcluded(query), !isPointer(query), !isNonAnswer(query),
-                  !query.contains("?"), !query.contains("？") else { return nil }
+                  !rest.contains("?"), !rest.contains("？") else { return nil }
             return MusicRequest(query: query, platform: platform)
         }
         return nil
@@ -254,7 +255,10 @@ enum MusicRequestParser {
         let lower = query.lowercased()
         return ["隨便", "随便", "都可以", "都得", "是但", "你推薦", "你推荐", "你揀", "你拣", "你決定", "你决定", "你選", "你选",
                 "不知道", "唔知", "whatever", "anything", "you choose", "you pick", "なんでも", "任せる", "まかせる", "わからない",
-                "好", "好啊", "好呀", "好的", "嗯", "ok", "okay", "yes", "no", "うん", "はい", "아무거나", "상관없어", "모르겠어", "추천해", "골라줘", "좋아", "응", "네", "아니"]
+                "好", "好啊", "好呀", "好的", "嗯", "ok", "okay", "yes", "no", "うん", "はい", "아무거나", "상관없어", "모르겠어", "추천해", "골라줘", "좋아", "응", "네", "아니",
+                // Asking her to look or guess ("what am I listening to? — you look!").
+                "你看看", "看看", "你看", "你猜", "猜猜", "猜猜看", "你說呢", "你说呢", "你覺得呢", "你觉得呢", "你自己看", "你睇下", "你估",
+                "guess", "you guess", "you tell me", "take a look", "look", "当てて", "当ててみて", "見て", "みて", "맞혀봐", "봐봐"]
             .contains { lower == $0 || lower.hasPrefix($0) && lower.count <= $0.count + 2 }
     }
 

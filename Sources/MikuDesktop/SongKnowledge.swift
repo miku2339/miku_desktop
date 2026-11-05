@@ -484,7 +484,11 @@ actor SongKnowledgeStore {
         return SongKnowledgeSearchResult(entries: entries, searchedOnline: true, sources: sources)
     }
 
-    func entries(matching query: String, previousUserMessages: [String] = []) -> [SongKnowledgeEntry] {
+    func entries(
+        matching query: String,
+        previousUserMessages: [String] = [],
+        includeCreatorMatches: Bool = true
+    ) -> [SongKnowledgeEntry] {
         let resolved = resolvedQuery(query, previousUserMessages: previousUserMessages)
         var matches = titleMatches(in: resolved)
         if resolved.localizedCaseInsensitiveContains("ハローセカイ") {
@@ -499,6 +503,7 @@ actor SongKnowledgeStore {
             matches.append(song39)
         }
         if !matches.isEmpty { return unique(matches) }
+        guard includeCreatorMatches else { return [] }
         return unique(effectiveEntries().filter { entry in
             entry.creators.contains { containsTerm($0, in: resolved) }
         })

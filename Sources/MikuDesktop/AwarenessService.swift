@@ -1,4 +1,5 @@
 import AppKit
+import CoreServices
 import ScreenCaptureKit
 
 /// Lets Miku notice what you're up to and, now and then, say something about it.
@@ -101,10 +102,20 @@ final class AwarenessService {
     private var collecting = false
     private var thinking = false
     private var collectionToken: AwarenessCancellationToken?
+    private var chatWorkTokens: [UUID: AwarenessCancellationToken] = [:]
     private var responseTask: Task<Void, Never>?
 
     private var lastSpoke = Date()
     private var frontApp: (name: String, bundle: String, since: Date)?
+    /// The supported browser you used last, so a chat message can still look at its tab.
+    private var lastBrowserBundle: String?
+    /// The last song and video the regular checks saw, in case a fresh read fails.
+    private var recentSong: (title: String, at: Date)?
+    private var recentVideo: (title: String, at: Date, browserBundle: String)?
+    /// Her own recent lines (newest last), so she doesn't say the same thing again.
+    private var recentLines: [String] = []
+    /// Her lines in a row without a reply from you.
+    private var unansweredLines = 0
     private var appComments: [String: Date] = [:]
     private var workStart: Date?
     private var awaySince: Date?
@@ -117,12 +128,12 @@ final class AwarenessService {
     private var nextRandomEvent = Date().addingTimeInterval(AwarenessService.nextRandomEventGap())
     private var lastRandomEvent: String?
 
-    private static let browsers: [String: String] = [
-        "com.apple.Safari": "Safari",
-        "com.google.Chrome": "Google Chrome",
-        "com.microsoft.edgemac": "Microsoft Edge",
-        "com.brave.Browser": "Brave Browser",
-        "company.thebrowser.Browser": "Arc"
+    nonisolated private static let browsers: Set<String> = [
+        "com.apple.Safari",
+        "com.google.Chrome",
+        "com.microsoft.edgemac",
+        "com.brave.Browser",
+        "company.thebrowser.Browser"
     ]
     /// Never glance at the screen while these are in front.
     private static let privateApps: Set<String> = [
@@ -148,7 +159,11 @@ final class AwarenessService {
                 object: nil,
                 queue: .main
             ) { [weak self] _ in
-                MainActor.assumeIsolated { self?.invalidatePendingWork() }
+                MainActor.assumeIsolated {
+                    self?.recentLines.removeAll()
+                    self?.unansweredLines = 0
+                    self?.invalidatePendingWork()
+                }
             })
         }
         sleepObserver = NotificationCenter.default.addObserver(
@@ -167,7 +182,14 @@ final class AwarenessService {
         lastScreenLook = Date()
         screenGap = Self.nextScreenGap()
         if source == .random { nextRandomEvent = Date().addingTimeInterval(Self.nextRandomEventGap()) }
-        if source == .media, !enabled { reportMusic(nil) }
+        if source == .media, !enabled {
+            recentSong = nil
+            reportMusic(nil)
+        }
+        if source == .video, !enabled {
+            recentVideo = nil
+            lastBrowserBundle = nil
+        }
         lastTrack = nil
         lastVideo = nil
         if source == .activity {
@@ -181,6 +203,8 @@ final class AwarenessService {
         generation += 1
         collectionToken?.cancel()
         collectionToken = nil
+        chatWorkTokens.values.forEach { $0.cancel() }
+        chatWorkTokens.removeAll()
         responseTask?.cancel()
         responseTask = nil
         collecting = false
@@ -228,6 +252,7 @@ final class AwarenessService {
     private func appActivated(name: String, bundle: String) {
         guard bundle != Bundle.main.bundleIdentifier, !name.isEmpty else { return }
         if frontApp?.bundle != bundle { frontApp = (name, bundle, Date()) }
+        if Self.isEnabled(.video), Self.browsers.contains(bundle) { lastBrowserBundle = bundle }
     }
 
     private var frontmostApplicationIsPrivate: Bool {
@@ -274,12 +299,15 @@ final class AwarenessService {
                 heard.song = Self.nowPlaying(token: token)
             }
         }
-        if enabled.contains(.video), present, let app = frontApp, let browser = Self.browsers[app.bundle] {
+        let videoBrowser: String? = enabled.contains(.video) && present
+            ? frontApp.flatMap { Self.browsers.contains($0.bundle) ? $0.bundle : nil }
+            : nil
+        if let videoBrowser {
             group.enter()
             scriptQueue.async {
                 defer { group.leave() }
                 guard !token.isCancelled, Self.isEnabled(.video) else { return }
-                heard.video = Self.videoTitle(in: browser, token: token)
+                heard.video = Self.videoTitle(in: videoBrowser, token: token)
             }
         }
         let noticed = observations
@@ -293,12 +321,18 @@ final class AwarenessService {
                 var found = noticed
                 let song = heard.song
                 let video = heard.video
-                if Self.isEnabled(.media) { self.reportMusic(song) }
+                if Self.isEnabled(.media) {
+                    self.recentSong = song.map { ($0, now) }
+                    self.reportMusic(song)
+                }
                 if Self.isEnabled(.media), let song, song != self.lastTrack {
                     found.append(Observation(kind: .song, detail: song, source: .media))
                 }
-                if Self.isEnabled(.video), let video, video != self.lastVideo {
-                    found.append(Observation(kind: .video, detail: video, source: .video))
+                if Self.isEnabled(.video), let videoBrowser, videoBrowser == self.lastBrowserBundle {
+                    self.recentVideo = video.map { ($0, now, videoBrowser) }
+                    if let video, video != self.lastVideo {
+                        found.append(Observation(kind: .video, detail: video, source: .video))
+                    }
                 }
                 self.finishTick(found, screen: screen, now: now, generation: requestGeneration)
             }
@@ -308,11 +342,11 @@ final class AwarenessService {
     private func finishTick(_ observations: [Observation], screen: Bool, now: Date, generation: Int) {
         guard !(isChatting?() ?? false) else { return }
         if let urgent = observations.first(where: \.urgent),
-           AwarenessPolicy.canSpeak(lastSpoke: lastSpoke, now: now, urgent: true) {
+           AwarenessPolicy.canSpeak(lastSpoke: lastSpoke, now: now, urgent: true, casualGap: casualGap, unanswered: unansweredLines) {
             speak(about: urgent, generation: generation)
             return
         }
-        guard AwarenessPolicy.canSpeak(lastSpoke: lastSpoke, now: now, urgent: false, casualGap: casualGap) else { return }
+        guard AwarenessPolicy.canSpeak(lastSpoke: lastSpoke, now: now, urgent: false, casualGap: casualGap, unanswered: unansweredLines) else { return }
         // Prefer what's new (a song, a video) over the general "what are you doing".
         if let casual = observations.first(where: { $0.kind == .video })
             ?? observations.first(where: { $0.kind == .song })
@@ -346,7 +380,7 @@ final class AwarenessService {
         if let app = frontApp, now.timeIntervalSince(app.since) >= 5 * 60,
            now.timeIntervalSince(appComments[app.bundle] ?? .distantPast) >= 3 * 3600,
            !Self.privateApps.contains(app.bundle),
-           Self.browsers[app.bundle] == nil {
+           !Self.browsers.contains(app.bundle) {
             found.append(Observation(kind: .app, detail: app.name, source: .activity, throttleKey: app.bundle))
         }
         return found
@@ -396,15 +430,23 @@ final class AwarenessService {
         context.confessionDecision = nil
         let history = Array(memory.recentHistory(from: memory.storedMessages).suffix(6))
         let app = frontmostApplicationIsPrivate ? nil : frontApp?.name
-        let instruction = Self.instruction(for: observation, app: app)
+        let instruction = Self.instruction(for: observation, app: app) + Self.avoidRepeating(recentLines)
         let reply = try? await ai.reply(to: instruction, image: observation.image, history: history, memory: context)
         guard !Task.isCancelled, canDeliver(source: observation.source, generation: generation),
               let reply, !reply.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               let onSpeak else { return }
+        // Still the same thing as a line she said lately: better to say nothing this time.
+        if AwarenessPolicy.isRepeat(reply.text, of: recentLines) {
+            lastSpoke = Date()
+            casualGap = Self.nextCasualGap()
+            return
+        }
         onSpeak(reply)
         let deliveredAt = Date()
         lastSpoke = deliveredAt
         casualGap = Self.nextCasualGap()
+        unansweredLines += 1
+        recentLines = Array((recentLines + [reply.text]).suffix(5))
         switch observation.kind {
         case .app:
             if let key = observation.throttleKey { appComments[key] = deliveredAt }
@@ -566,16 +608,170 @@ final class AwarenessService {
         }
     }
 
+    /// You said something to her: she may speak up on her own again.
+    func userSpoke() {
+        unansweredLines = 0
+    }
+
+    /// Her last few lines, so the next one is about something else.
+    private static func avoidRepeating(_ lines: [String]) -> String {
+        let quoted = lines.suffix(3).map { "「\(String($0.prefix(40)))」" }.joined(separator: " ")
+        guard !quoted.isEmpty else { return "" }
+        switch language {
+        case "en": return "\nYou recently said \(quoted). Say something different this time: don't repeat those lines or start the same way."
+        case "ja": return "\n最近こう言いました：\(quoted)。今回は別のことを話し、同じ言い回しや出だしを繰り返さないでください。"
+        case "ko": return "\n최근에 이렇게 말했어: \(quoted). 이번엔 다른 이야기를 하고, 같은 문장이나 시작을 반복하지 마."
+        default: return "\n你最近主動說過：\(quoted)。這次換別的話題，不要重複這些句子或用同樣的開頭。"
+        }
+    }
+
+    // MARK: - For a chat reply
+
+    /// What you're listening to and watching, read right now for a chat reply: the song in
+    /// Music or Spotify, and the YouTube or Niconico tab of the browser you used last. Nil when
+    /// both "Music" and "Video" are off. Falls back to what the regular checks saw lately.
+    func listeningForChat() async -> ListeningContext? {
+        let media = Self.isEnabled(.media)
+        let video = Self.isEnabled(.video)
+        guard media || video else { return nil }
+        let browser = video ? lastBrowserBundle : nil
+        let started = Date()
+        let requestGeneration = generation
+        let readID = UUID()
+        let token = AwarenessCancellationToken()
+        chatWorkTokens[readID] = token
+        defer { chatWorkTokens.removeValue(forKey: readID) }
+        let queue = scriptQueue
+        // Keep any completed read even if the other app takes longer than the deadline.
+        let read: PendingChatRead.Snapshot = await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                let pending = PendingChatRead()
+                queue.async {
+                    if media, !token.isCancelled {
+                        let song = Self.nowPlaying(token: token, recordPermission: pending.recordPermission)
+                        if !token.isCancelled { pending.recordSong(song) }
+                    }
+                    if let browser, !token.isCancelled {
+                        let title = Self.videoTitle(in: browser, token: token, recordPermission: pending.recordPermission)
+                        if !token.isCancelled { pending.recordVideo(title) }
+                    }
+                    if let snapshot = pending.take() { continuation.resume(returning: snapshot) }
+                }
+                DispatchQueue.global().asyncAfter(deadline: .now() + 2) {
+                    token.cancel()
+                    if let snapshot = pending.take() { continuation.resume(returning: snapshot) }
+                }
+            }
+        } onCancel: {
+            token.cancel()
+        }
+        guard !Task.isCancelled, requestGeneration == generation else { return nil }
+
+        let now = Date()
+        var result = ListeningContext()
+        if media, Self.isEnabled(.media) {
+            switch read.song {
+            case .completed(let title):
+                recentSong = title.map { ($0, now) }
+                result.song = title
+            case .unfinished:
+                result.song = recentSong.flatMap { now.timeIntervalSince($0.at) < 180 ? $0.title : nil }
+                result.songIsRecent = result.song != nil
+            }
+        }
+        if Self.isEnabled(.video), let browser, browser == lastBrowserBundle, Self.isRunningBrowser(browser) {
+            switch read.video {
+            case .completed(let title):
+                recentVideo = title.map { ($0, now, browser) }
+                result.video = title
+            case .unfinished:
+                if let recentVideo, recentVideo.browserBundle == browser, now.timeIntervalSince(recentVideo.at) < 600 {
+                    result.video = recentVideo.title
+                    result.videoIsRecent = true
+                }
+            }
+        }
+        requestAutomationConsent(for: read.permissions, generation: requestGeneration)
+        logListening(media: media, video: video, browser: browser, read: read, started: started)
+        return result.isEmpty ? nil : result
+    }
+
+    /// Apps already asked to approve Automation this session (one prompt each, not one per message).
+    private var consentRequested: Set<String> = []
+
+    /// Ask after the chat read completes so the system prompt cannot occupy the read queue.
+    private func requestAutomationConsent(for permissions: [String: Int], generation: Int) {
+        guard generation == self.generation else { return }
+        for (bundle, status) in permissions where status == Int(errAEEventWouldRequireUserConsent) {
+            let source: Source = Self.browsers.contains(bundle) ? .video : .media
+            guard Self.isEnabled(source), source != .video || bundle == lastBrowserBundle,
+                  Self.isRunningTarget(bundle), consentRequested.insert(bundle).inserted else { continue }
+
+            let requestID = UUID()
+            let token = AwarenessCancellationToken()
+            chatWorkTokens[requestID] = token
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                let shouldAsk = !token.isCancelled && Self.isEnabled(source) && Self.isRunningTarget(bundle)
+                if shouldAsk { _ = Self.automationPermission(for: bundle, ask: true) }
+                Task { @MainActor [weak self] in
+                    self?.chatWorkTokens.removeValue(forKey: requestID)
+                    if !shouldAsk { self?.consentRequested.remove(bundle) }
+                }
+            }
+        }
+    }
+
+    /// Sending Apple Events to `bundle`: noErr, -1743 (not allowed), -1744 (needs your OK) or
+    /// -600 (not running).
+    nonisolated static func automationPermission(for bundle: String, ask: Bool) -> OSStatus {
+        var target = AEAddressDesc()
+        let created = bundle.withCString { AECreateDesc(typeApplicationBundleID, $0, strlen($0), &target) }
+        guard created == noErr else { return OSStatus(created) }
+        defer { AEDisposeDesc(&target) }
+        return AEDeterminePermissionToAutomateTarget(&target, typeWildCard, typeWildCard, ask)
+    }
+
+    /// One line in diagnostics.log per chat read: what was tried and how it went, never titles.
+    private func logListening(
+        media: Bool,
+        video: Bool,
+        browser: String?,
+        read: PendingChatRead.Snapshot,
+        started: Date
+    ) {
+        func outcome(_ title: PendingChatRead.Snapshot.Title, on: Bool) -> String {
+            guard on else { return "off" }
+            switch title {
+            case .unfinished: return "timeout"
+            case .completed(let value): return value == nil ? "none" : "found"
+            }
+        }
+        var payload: [String: Any] = [
+            "type": "listening",
+            "song": outcome(read.song, on: media),
+            "video": video ? (browser == nil ? "noBrowser" : outcome(read.video, on: true)) : "off",
+            "elapsedMs": Int(Date().timeIntervalSince(started) * 1000)
+        ]
+        if let browser { payload["browser"] = browser }
+        if !read.permissions.isEmpty { payload["permissions"] = read.permissions }
+        CompanionMemory.shared.logDiagnostic(payload)
+    }
+
     // MARK: - Sources
 
     /// "Title — Artist" from Music or Spotify, if one of them is open and playing.
-    nonisolated private static func nowPlaying(token: AwarenessCancellationToken) -> String? {
-        let players: [(bundle: String, name: String)] = [("com.apple.Music", "Music"), ("com.spotify.client", "Spotify")]
-        for player in players {
+    nonisolated private static func nowPlaying(
+        token: AwarenessCancellationToken,
+        recordPermission: (String, OSStatus) -> Void = { _, _ in }
+    ) -> String? {
+        for bundle in ["com.apple.Music", "com.spotify.client"] {
             guard !token.isCancelled, isEnabled(.media) else { return nil }
-            guard !NSRunningApplication.runningApplications(withBundleIdentifier: player.bundle).isEmpty else { continue }
+            guard isRunningTarget(bundle) else { continue }
+            let status = automationPermission(for: bundle, ask: false)
+            recordPermission(bundle, status)
+            guard status == noErr, isEnabled(.media), isRunningTarget(bundle) else { continue }
             let script = """
-            tell application "\(player.name)"
+            tell application id "\(bundle)"
               if player state is playing then return (name of current track) & " — " & (artist of current track)
             end tell
             return ""
@@ -585,31 +781,48 @@ final class AwarenessService {
         return nil
     }
 
-    /// The video title, but only when the browser's current tab is YouTube or Niconico.
-    nonisolated private static func videoTitle(in browser: String, token: AwarenessCancellationToken) -> String? {
-        let tab = browser == "Safari" ? "current tab of front window" : "active tab of front window"
+    nonisolated private static func isRunningBrowser(_ bundle: String) -> Bool {
+        browsers.contains(bundle) && isRunningTarget(bundle)
+    }
+
+    nonisolated private static func isRunningTarget(_ bundle: String) -> Bool {
+        !NSRunningApplication.runningApplications(withBundleIdentifier: bundle).isEmpty
+    }
+
+    /// The video title, but only when the running browser's current tab is YouTube or Niconico.
+    nonisolated private static func videoTitle(
+        in browser: String,
+        token: AwarenessCancellationToken,
+        recordPermission: (String, OSStatus) -> Void = { _, _ in }
+    ) -> String? {
+        guard !token.isCancelled, isEnabled(.video), isRunningBrowser(browser) else { return nil }
+        let status = automationPermission(for: browser, ask: false)
+        recordPermission(browser, status)
+        guard status == noErr else { return nil }
+        let safari = browser == "com.apple.Safari"
+        let tab = safari ? "current tab of front window" : "active tab of front window"
         let urlScript = """
-        tell application "\(browser)"
+        tell application id "\(browser)"
           if (count of windows) is 0 then return ""
           set targetTab to \(tab)
           return URL of targetTab
         end tell
         """
-        guard !token.isCancelled, isEnabled(.video),
+        guard !token.isCancelled, isEnabled(.video), isRunningBrowser(browser),
               let firstURL = run(urlScript, token: token), let url = URL(string: firstURL),
               let site = AwarenessPolicy.videoSite(for: url),
               let firstURLLiteral = AwarenessPolicy.appleScriptStringLiteral(firstURL) else { return nil }
 
-        let titleProperty = browser == "Safari" ? "name" : "title"
+        let titleProperty = safari ? "name" : "title"
         let titleScript = """
-        tell application "\(browser)"
+        tell application id "\(browser)"
           if (count of windows) is 0 then return ""
           set targetTab to \(tab)
           if (URL of targetTab) is not \(firstURLLiteral) then return ""
           return (URL of targetTab) & "\\n" & (\(titleProperty) of targetTab)
         end tell
         """
-        guard !token.isCancelled, isEnabled(.video),
+        guard !token.isCancelled, isEnabled(.video), isRunningBrowser(browser),
               let result = run(titleScript, token: token) else { return nil }
         let parts = result.split(separator: "\n", maxSplits: 1).map(String.init)
         guard parts.count == 2, parts[0] == firstURL else { return nil }
@@ -653,5 +866,47 @@ final class AwarenessService {
         } catch {
             return nil
         }
+    }
+}
+
+/// Collects completed reads until the script queue finishes or the deadline wins.
+private final class PendingChatRead: @unchecked Sendable {
+    struct Snapshot: Sendable {
+        enum Title: Sendable {
+            case unfinished
+            case completed(String?)
+        }
+
+        var song = Title.unfinished
+        var video = Title.unfinished
+        var permissions: [String: Int] = [:]
+    }
+
+    private let lock = NSLock()
+    private var snapshot: Snapshot? = Snapshot()
+
+    func recordSong(_ title: String?) {
+        lock.lock()
+        defer { lock.unlock() }
+        snapshot?.song = .completed(title)
+    }
+
+    func recordVideo(_ title: String?) {
+        lock.lock()
+        defer { lock.unlock() }
+        snapshot?.video = .completed(title)
+    }
+
+    func recordPermission(_ bundle: String, _ status: OSStatus) {
+        lock.lock()
+        defer { lock.unlock() }
+        snapshot?.permissions[bundle] = Int(status)
+    }
+
+    func take() -> Snapshot? {
+        lock.lock()
+        defer { lock.unlock() }
+        defer { snapshot = nil }
+        return snapshot
     }
 }

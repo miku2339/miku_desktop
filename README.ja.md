@@ -72,17 +72,24 @@ macOS のデスクトップに住む初音ミク。動く東京の街並みを�
 ```sh
 git clone https://github.com/miku2339/miku_desktop.git
 cd miku_desktop
-./scripts/fetch-model.sh
-./scripts/build-app.sh
+./scripts/install-app.sh
 ```
 
-`fetch-model.sh` はキャラクターモデルをダウンロードし、チェックサムを照合します。使用前にモデルに付属する利用規約をお読みください。
+`install-app.sh` は[作者の配布ページ](https://bowlroll.net/file/16344)から Tda v1.1 のオリジナル ZIP を取得し、チェックサムの照合とモデルのインポートを行ってから、App をビルド・インストール・起動します。`/Applications` に書き込める場合はそこへ、書き込めない場合は `~/Applications` へインストールします。モデルの使用前に作者の利用規約をお読みください。
 
-ビルド結果は**プロジェクトの 1 つ上の階層**にある `outputs/` フォルダーに出力されます。
+作者サイトでログインや認証が必要な場合、またはダウンロードできない場合はインストールを停止します。オリジナル ZIP を入手してから、次のコマンドで続行できます。
+
+```sh
+./scripts/install-app.sh --tda-archive "/path/to/Tda式デフォ服ミク_ver1.1.zip"
+```
+
+`--app-dir DIR` でインストール先フォルダーを指定でき、`--no-open` でインストール後の起動を省略できます。Tda の取得とインポートを省略したい場合のみ `--skip-tda` を指定してください。すでにインポートしたモデルは保持されます。
+
+**プロジェクトの 1 つ上の階層**にある `outputs/` フォルダーにも次のファイルが生成されます。
 
 | ファイル | 用途 |
 | --- | --- |
-| `Miku Desktop.zip` | 展開して、App を「アプリケーション」フォルダーに移動して起動します |
+| `Miku Desktop (Public).zip` | 共有用パッケージ。Tda モデルは各利用者が入手します |
 | `Miku Desktop.app` | ローカルで最新のビルドへのショートカット |
 
 起動後は、デスクトップの **チャット／手帳** ボタンか、メニューバーの **♪** から操作します。ローカルの壁紙サーバーを内蔵しているため、Plash は不要です。シーンとキャラクターはオフラインでも動作します。チャットにはローカル AI サービスが、天気にはインターネット接続が必要です。
@@ -95,9 +102,9 @@ cd miku_desktop
 
 任意の Tda モデルを除いた `../outputs/Miku Desktop (Public).zip` が生成されます。各素材にはそれぞれのライセンスが適用されます。
 
-### 任意：Tda クラシック衣装モデル
+### Tda デフォルト衣装モデル
 
-公開版の App から、Tda／金子卵黄によるデフォルト衣装モデルをインポートできます。
+インストーラーは Tda／金子卵黄によるデフォルト衣装モデルと作者の利用規約を `~/Library/Application Support/MikuDesktop/CharacterModels/tda/` に保存し、App を更新しても引き継ぎます。公開版の App をダウンロード済みの場合は、手動でもインポートできます。
 
 1. [作者の配布ページ](https://bowlroll.net/file/16344)から `Tda式デフォ服ミク_ver1.1.zip` を入手し、同梱の利用規約を読んでください。ZIP は元のまま保存します。
 2. **手帳 → 設定 → キャラクター** を開き、**Tda ZIP をインポート…** から ZIP を選択します。
@@ -151,7 +158,7 @@ Tda モデルを含むローカルビルドは個人利用に限ります。モ�
 | `Sources/MikuDesktop/` | Swift のネイティブアプリ：ウインドウ、チャット、設定、記憶、生活リズム、記念日、ミニゲーム |
 | `Wallpaper/companion/` | キャラクター（three.js／MMD）、動く背景、人の流れと車、ふれあい |
 | `Wallpaper/assets/scenes/` | シーン画像とレイアウトデータ |
-| `Tests/` | JavaScript と Swift のテスト |
+| `Tests/` | JavaScript、Swift、インストーラーのテスト |
 | `scripts/` | ビルド、モデルのダウンロード、テスト用スクリプト |
 | `website/`、`deploy/website/` | Web サイトのソースとデプロイ設定 |
 
@@ -161,6 +168,7 @@ Tda モデルを含むローカルビルドは個人利用に限ります。モ�
 
 ```sh
 node --test Tests/*.test.mjs
+python3 -m unittest discover -s Tests -p 'test_tda_setup.py'
 ./scripts/test-memory.sh
 ./scripts/test-relationship.sh
 ./scripts/test-awareness.sh

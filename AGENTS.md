@@ -1,5 +1,13 @@
 # 給在此專案工作的代理（Codex、Claude）
 
+## 替使用者安裝 App
+
+- clone 後統一執行 `./scripts/install-app.sh`，完成 Tda 原始 ZIP 取得、校驗、匯入、建置、安裝與開啟。不要只執行 `fetch-model.sh` 和 `build-app.sh` 就回報安裝完成。
+- 若已持有作者原始 ZIP，使用 `./scripts/install-app.sh --tda-archive "/path/to/Tda式デフォ服ミク_ver1.1.zip"`。若命令列下載被原站拒絕，可先用可用的瀏覽器工具，從作者頁面正常下載至 Downloads，再重跑安裝。只有遇到需要本人登入或驗證的步驟才請使用者完成；不要使用其他人重新上傳的模型鏡像。
+- 只有使用者明確選擇略過 Tda 時才加 `--skip-tda`，並保留既有匯入模型。`--app-dir DIR` 可指定安裝資料夾，`--no-open` 可暫不開啟。
+- 交付前確認實際安裝位置及載入的角色模型。Tda 尚未就緒時，明確回報待完成的步驟。
+- Tda 模型保存在使用者的 `~/Library/Application Support/MikuDesktop/CharacterModels/tda/`，作者規約一併保留。GitHub 與公開安裝包不附原始 Tda 模型及貼圖。
+
 ## Miku 語音（TTS）：只限擁有者自己使用
 
 擁有者已決定（2026-10-25）：GPT-SoVITS 四語 Miku 語音只給自己用，不提供給其他人，也不散布。原因是訓練素材以初音ミク V6 產生，對外提供可能違反 Crypton 的使用條款；在確認授權前一律視為私人用途。

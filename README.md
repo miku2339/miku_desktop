@@ -72,17 +72,24 @@
 ```sh
 git clone https://github.com/miku2339/miku_desktop.git
 cd miku_desktop
-./scripts/fetch-model.sh
-./scripts/build-app.sh
+./scripts/install-app.sh
 ```
 
-`fetch-model.sh` 會下載角色模型並核對校驗碼，使用前請先閱讀模型附帶的使用規約。
+`install-app.sh` 預設從[作者配布頁](https://bowlroll.net/file/16344)取得 Tda v1.1 原始 ZIP、核對校驗碼並匯入模型，再建置、安裝及開啟 App。可寫入 `/Applications` 時會安裝到該處，否則使用 `~/Applications`。使用模型前請閱讀原作者規約。
 
-建置結果會放在**專案上一層**的 `outputs/` 資料夾：
+若作者網站要求登入、驗證或無法下載，安裝會停止。自行取得原始 ZIP 後可接續安裝：
+
+```sh
+./scripts/install-app.sh --tda-archive "/path/to/Tda式デフォ服ミク_ver1.1.zip"
+```
+
+可用 `--app-dir DIR` 指定安裝資料夾，或以 `--no-open` 完成安裝後暫不開啟。只有希望略過 Tda 取得與匯入時才使用 `--skip-tda`；已匯入的模型會保留。
+
+安裝時也會在**專案上一層**的 `outputs/` 資料夾產生：
 
 | 檔案 | 用途 |
 | --- | --- |
-| `Miku Desktop.zip` | 解壓縮後，把 App 拖進「應用程式」資料夾執行 |
+| `Miku Desktop (Public).zip` | 可分享的安裝包，Tda 模型由各使用者自行取得 |
 | `Miku Desktop.app` | 指向本機最新建置的捷徑 |
 
 開啟後，用桌面上的 **聊天／手帳** 按鈕或選單列的 **♪** 操作。程式內建本機桌布伺服器，不需要 Plash。場景與角色可以離線運作；聊天需要本機 AI 服務，天氣需要網路。
@@ -95,9 +102,9 @@ cd miku_desktop
 
 會產生 `../outputs/Miku Desktop (Public).zip`，並排除選用的 Tda 模型。各項素材仍適用各自的授權條款。
 
-### 選用：Tda 經典服裝模型
+### Tda 經典服裝模型
 
-公開版可在 App 內匯入 Tda／金子卵黄的經典服裝模型：
+安裝程式會把 Tda／金子卵黄的經典服裝模型與原作者規約存入 `~/Library/Application Support/MikuDesktop/CharacterModels/tda/`，更新 App 後仍會保留。已下載公開版 App 的使用者也可手動匯入：
 
 1. 從[作者的配布頁](https://bowlroll.net/file/16344)下載 `Tda式デフォ服ミク_ver1.1.zip`，閱讀包內的使用規約，保留原始 ZIP。
 2. 開啟 **手帳 → 設定 → 角色**，按 **匯入 Tda ZIP…**，選取該壓縮檔。
@@ -151,7 +158,7 @@ python3 scripts/import-tda-model.py /path/to/Tda式デフォ服ミク_ver1.1.zip
 | `Sources/MikuDesktop/` | Swift 原生 App：視窗、聊天、設定、記憶、作息、節日、小遊戲 |
 | `Wallpaper/companion/` | 角色（three.js／MMD）、背景動態、路人與車流、互動 |
 | `Wallpaper/assets/scenes/` | 場景圖片與座標資料 |
-| `Tests/` | JavaScript 與 Swift 測試 |
+| `Tests/` | JavaScript、Swift 與安裝工具測試 |
 | `scripts/` | 建置、下載模型與測試腳本 |
 | `website/`、`deploy/website/` | 官方網站原始碼與部署設定 |
 
@@ -161,6 +168,7 @@ python3 scripts/import-tda-model.py /path/to/Tda式デフォ服ミク_ver1.1.zip
 
 ```sh
 node --test Tests/*.test.mjs
+python3 -m unittest discover -s Tests -p 'test_tda_setup.py'
 ./scripts/test-memory.sh
 ./scripts/test-relationship.sh
 ./scripts/test-awareness.sh

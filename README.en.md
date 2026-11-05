@@ -72,17 +72,24 @@ Separate floating **Chat / Notebook** buttons, menu bar controls under **♪**, 
 ```sh
 git clone https://github.com/miku2339/miku_desktop.git
 cd miku_desktop
-./scripts/fetch-model.sh
-./scripts/build-app.sh
+./scripts/install-app.sh
 ```
 
-`fetch-model.sh` downloads the character model and verifies its checksums. Please read the model's terms of use before using it.
+`install-app.sh` obtains the original Tda v1.1 ZIP from the [author's distribution page](https://bowlroll.net/file/16344), verifies its checksum, imports the model, then builds, installs and opens the app. It installs into `/Applications` when writable, otherwise `~/Applications`. Read the authors' terms before using the model.
 
-The build lands in the `outputs/` folder **one level above the project**:
+If the author's site requires login or verification, or the download is unavailable, installation stops. Obtain the original ZIP yourself, then continue:
+
+```sh
+./scripts/install-app.sh --tda-archive "/path/to/Tda式デフォ服ミク_ver1.1.zip"
+```
+
+Use `--app-dir DIR` to choose the installation folder or `--no-open` to install without opening the app. Use `--skip-tda` only when you want to skip obtaining and importing Tda. Any previously imported model is retained.
+
+Installation also produces these files in `outputs/`, **one level above the project**:
 
 | File | Purpose |
 | --- | --- |
-| `Miku Desktop.zip` | Unzip it and move the app into Applications |
+| `Miku Desktop (Public).zip` | Shareable package; each user obtains the Tda model themselves |
 | `Miku Desktop.app` | A shortcut to the latest local build |
 
 Once it's open, use the **Chat / Notebook** buttons on the desktop or **♪** in the menu bar. A local wallpaper server is built in, so Plash isn't needed. Scenes and the character work offline; chat needs the local AI service, and weather needs an internet connection.
@@ -95,9 +102,9 @@ Once it's open, use the **Chat / Notebook** buttons on the desktop or **♪** in
 
 This creates `../outputs/Miku Desktop (Public).zip` without the optional Tda model. Every asset remains subject to its own license.
 
-### Optional: Tda classic outfit model
+### Tda classic outfit model
 
-The public app can import the classic outfit model by Tda / 金子卵黄:
+The installer stores the classic outfit model by Tda / 金子卵黄 and its authors' terms in `~/Library/Application Support/MikuDesktop/CharacterModels/tda/`, where they survive app updates. Users who already downloaded the public app can also import it manually:
 
 1. Download `Tda式デフォ服ミク_ver1.1.zip` from the [author's distribution page](https://bowlroll.net/file/16344), read the included terms, and keep the original ZIP intact.
 2. Open **Notebook → Settings → Character**, click **Import Tda ZIP…**, and select the archive.
@@ -151,7 +158,7 @@ For safety, only loopback (local) endpoints are accepted. When the settings matc
 | `Sources/MikuDesktop/` | The native Swift app: windows, chat, settings, memory, sleep schedule, special days, mini games |
 | `Wallpaper/companion/` | The character (three.js / MMD), animated backgrounds, crowds and traffic, interactions |
 | `Wallpaper/assets/scenes/` | Scene images and their layout data |
-| `Tests/` | JavaScript and Swift tests |
+| `Tests/` | JavaScript, Swift, and installer tests |
 | `scripts/` | Build, model download, and test scripts |
 | `website/`, `deploy/website/` | The website's source and deployment settings |
 
@@ -161,6 +168,7 @@ After making changes, run these checks (the JavaScript tests need Node.js):
 
 ```sh
 node --test Tests/*.test.mjs
+python3 -m unittest discover -s Tests -p 'test_tda_setup.py'
 ./scripts/test-memory.sh
 ./scripts/test-relationship.sh
 ./scripts/test-awareness.sh

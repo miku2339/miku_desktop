@@ -51,6 +51,7 @@ final class WallpaperWindowController: NSObject, WKNavigationDelegate, WKScriptM
     private var memoryObserver: NSObjectProtocol?
     private var sleepObserver: NSObjectProtocol?
     private var eventsObserver: NSObjectProtocol?
+    private var characterModelObserver: NSObjectProtocol?
     private var specialDayTimer: Timer?
 
     // Pixel-accurate mouse pass-through state.
@@ -110,6 +111,13 @@ final class WallpaperWindowController: NSObject, WKNavigationDelegate, WKScriptM
 
         backgroundWebView.load(URLRequest(url: backgroundURL, cachePolicy: .reloadIgnoringLocalCacheData))
         webView.load(URLRequest(url: characterURL, cachePolicy: .reloadIgnoringLocalCacheData))
+        characterModelObserver = NotificationCenter.default.addObserver(
+            forName: .mikuCharacterModelChanged, object: nil, queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            self.pageReady = false
+            self.webView.load(URLRequest(url: self.characterURL, cachePolicy: .reloadIgnoringLocalCacheData))
+        }
         startPointerPolling()
         sleepObserver = NotificationCenter.default.addObserver(
             forName: .mikuSleepChanged,
@@ -157,6 +165,7 @@ final class WallpaperWindowController: NSObject, WKNavigationDelegate, WKScriptM
     deinit {
         specialDayTimer?.invalidate()
         if let memoryObserver { NotificationCenter.default.removeObserver(memoryObserver) }
+        if let characterModelObserver { NotificationCenter.default.removeObserver(characterModelObserver) }
         pointerTimer?.invalidate()
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
         if let wakeObserver { NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver) }

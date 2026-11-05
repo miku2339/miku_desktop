@@ -1,4 +1,5 @@
 import AppKit
+import UniformTypeIdentifiers
 
 extension Notification.Name {
     static let mikuSettingsChanged = Notification.Name("com.qimake.MikuDesktop.settingsChanged")
@@ -48,6 +49,10 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
     private let personalitySegment = NSSegmentedControl()
     private let customField = NSTextField()
     private let nicknameField = NSTextField()
+    private let characterModelStatus = NSTextField.mikuLabel("", size: 12.5, color: MikuTheme.secondaryText)
+    private let characterModelImportButton = MikuPillButton(frame: .zero)
+    private let characterModelDownloadButton = MikuPillButton(frame: .zero)
+    private var importingCharacterModel = false
     private let replyLanguagePopup = NSPopUpButton()
     private let interfaceLanguagePopup = NSPopUpButton()
     private let endpointField = NSTextField()
@@ -160,6 +165,9 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         }
         customField.placeholderString = L10n.text("customPlaceholder")
         nicknameField.placeholderString = L10n.text("nicknamePlaceholder")
+        characterModelImportButton.title = L10n.text("characterModelImport")
+        characterModelDownloadButton.title = L10n.text("characterModelDownload")
+        refreshCharacterModel()
         resetPositionButton.title = L10n.text("resetPosition")
         testButton.title = L10n.text("testConnection")
         speechPreviewButton.title = L10n.text("speechPreview")
@@ -434,6 +442,23 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
             field.action = #selector(textFieldCommitted)
         }
 
+        characterModelStatus.lineBreakMode = .byWordWrapping
+        characterModelStatus.maximumNumberOfLines = 2
+        characterModelStatus.preferredMaxLayoutWidth = 280
+        characterModelStatus.setAccessibilityIdentifier("character-model-status")
+        characterModelStatus.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        characterModelImportButton.setAccessibilityIdentifier("character-model-import")
+        for button in [characterModelImportButton, characterModelDownloadButton] {
+            button.style = .soft
+            button.controlHeight = 26
+            button.font = MikuTheme.font(12, .semibold)
+            button.target = self
+        }
+        characterModelImportButton.symbolName = "square.and.arrow.down"
+        characterModelImportButton.action = #selector(importCharacterModel)
+        characterModelDownloadButton.symbolName = "arrow.up.right"
+        characterModelDownloadButton.action = #selector(openCharacterModelDownload)
+
         resetPositionButton.style = .soft
         resetPositionButton.symbolName = "figure.walk"
         resetPositionButton.controlHeight = 26
@@ -542,7 +567,16 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
             row("position", positionStack)
         ])
 
+        let characterModelButtons = NSStackView(views: [characterModelImportButton, characterModelDownloadButton])
+        characterModelButtons.orientation = .horizontal
+        characterModelButtons.alignment = .centerY
+        characterModelButtons.spacing = 6
+        let characterModelStack = NSStackView(views: [characterModelStatus, characterModelButtons])
+        characterModelStack.orientation = .vertical
+        characterModelStack.alignment = .leading
+        characterModelStack.spacing = 6
         let characterCard = card("sectionCharacter", symbol: "music.note", rows: [
+            row("characterModel", characterModelStack),
             row("personality", personalitySegment),
             row("customPersonality", customField),
             row("nickname", nicknameField)
@@ -817,6 +851,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         personalitySegment.selectedSegment = personalityKeys.firstIndex(of: configuration.personalityPreset) ?? 0
         customField.stringValue = configuration.customPersonality
         nicknameField.stringValue = configuration.nickname
+        refreshCharacterModel()
         select(configuration.replyLanguage, in: replyLanguagePopup)
         select(configuration.interfaceLanguage, in: interfaceLanguagePopup)
         endpointField.stringValue = configuration.endpoint
@@ -835,6 +870,60 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
     }
 
     // MARK: - Actions
+
+    private func refreshCharacterModel() {
+        characterModelStatus.stringValue = importingCharacterModel
+            ? L10n.text("characterModelImporting")
+            : CharacterModelStore.currentModelName
+        characterModelImportButton.isEnabled = !importingCharacterModel
+    }
+
+    @objc private func openCharacterModelDownload() {
+        NSWorkspace.shared.open(CharacterModelStore.authorURL)
+    }
+
+    @objc private func importCharacterModel() {
+        guard !importingCharacterModel, let window = characterModelImportButton.window ?? window else { return }
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.zip]
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.message = L10n.text("characterModelImportTerms")
+        panel.beginSheetModal(for: window) { [weak self] response in
+            MainActor.assumeIsolated {
+                guard response == .OK, let self, let url = panel.url else { return }
+                self.importingCharacterModel = true
+                self.refreshCharacterModel()
+                Task {
+                    do {
+                        try await Task.detached(priority: .userInitiated) {
+                            try CharacterModelStore.importArchive(from: url)
+                        }.value
+                        self.importingCharacterModel = false
+                        self.refreshCharacterModel()
+                        NotificationCenter.default.post(name: .mikuCharacterModelChanged, object: nil)
+                    } catch {
+                        self.importingCharacterModel = false
+                        self.refreshCharacterModel()
+                        let alert = NSAlert()
+                        alert.messageText = L10n.text("characterModelImportFailed")
+                        switch error as? CharacterModelStore.ImportError {
+                        case .invalidArchive, .invalidContents:
+                            alert.informativeText = L10n.text("characterModelWrongArchive")
+                        default:
+                            alert.informativeText = L10n.text("characterModelImportRetry")
+                        }
+                        alert.addButton(withTitle: L10n.text("characterModelDismiss"))
+                        if let window = self.characterModelImportButton.window ?? self.window {
+                            alert.beginSheetModal(for: window, completionHandler: nil)
+                        } else {
+                            alert.runModal()
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     @objc private func personalityChanged() {
         let index = personalitySegment.selectedSegment

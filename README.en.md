@@ -97,14 +97,22 @@ This creates `../outputs/Miku Desktop (Public).zip` without the optional Tda mod
 
 ### Optional: Tda classic outfit model
 
-To use the classic outfit model by Tda / 金子卵黄, download `Tda式デフォ服ミク_ver1.1.zip` from the [author's distribution page](https://bowlroll.net/file/16344), read the included terms, then import it with Python 3:
+The public app can import the classic outfit model by Tda / 金子卵黄:
+
+1. Download `Tda式デフォ服ミク_ver1.1.zip` from the [author's distribution page](https://bowlroll.net/file/16344), read the included terms, and keep the original ZIP intact.
+2. Open **Notebook → Settings → Character**, click **Import Tda ZIP…**, and select the archive.
+3. The desktop character switches to Tda immediately. The model and its authors' terms are stored on this Mac and retained when you update the app.
+
+The bundled Animasa model is used before import. Public packages do not include the Tda model or its textures.
+
+When building from source, you can also import with Python 3 before building:
 
 ```sh
 python3 scripts/import-tda-model.py /path/to/Tda式デフォ服ミク_ver1.1.zip
 ./scripts/build-app.sh
 ```
 
-Without it, the Animasa model is used. A build that includes the Tda model is for your own use only; the model and its textures are not distributed with the source code.
+A local build that includes the Tda model is for your own use only. The model and its textures are not distributed with the source code.
 
 ## Setting up the local AI
 
@@ -161,6 +169,7 @@ node --test Tests/*.test.mjs
 ./scripts/test-mini-games.sh
 ./scripts/test-companion-requests.sh
 ./scripts/test-song-knowledge.sh
+./scripts/test-character-model.sh
 ./scripts/test-memory-album.sh
 ```
 

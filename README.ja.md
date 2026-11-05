@@ -97,14 +97,22 @@ cd miku_desktop
 
 ### 任意：Tda クラシック衣装モデル
 
-Tda／金子卵黄によるクラシック衣装モデルを使う場合は、[作者の配布ページ](https://bowlroll.net/file/16344)から `Tda式デフォ服ミク_ver1.1.zip` を入手し、同梱の規約を読んだうえで Python 3 でインポートしてください。
+公開版の App から、Tda／金子卵黄によるデフォルト衣装モデルをインポートできます。
+
+1. [作者の配布ページ](https://bowlroll.net/file/16344)から `Tda式デフォ服ミク_ver1.1.zip` を入手し、同梱の利用規約を読んでください。ZIP は元のまま保存します。
+2. **手帳 → 設定 → キャラクター** を開き、**Tda ZIP をインポート…** から ZIP を選択します。
+3. インポート後、デスクトップのキャラクターがすぐに Tda に切り替わります。モデルと作者の利用規約はこの Mac に保存され、App を更新しても引き継がれます。
+
+インポート前は同梱の Animasa モデルを使用します。公開パッケージには Tda モデルとテクスチャは含まれません。
+
+ソースコードからビルドする場合は、Python 3 でインポートしてからビルドすることもできます。
 
 ```sh
 python3 scripts/import-tda-model.py /path/to/Tda式デフォ服ミク_ver1.1.zip
 ./scripts/build-app.sh
 ```
 
-インポートしない場合は Animasa モデルを使用します。Tda モデルを含むビルドは個人利用に限ります。モデルとテクスチャはソースコードと一緒には配布されません。
+Tda モデルを含むローカルビルドは個人利用に限ります。モデルとテクスチャはソースコードと一緒には配布されません。
 
 ## ローカル AI の設定
 
@@ -161,6 +169,7 @@ node --test Tests/*.test.mjs
 ./scripts/test-mini-games.sh
 ./scripts/test-companion-requests.sh
 ./scripts/test-song-knowledge.sh
+./scripts/test-character-model.sh
 ./scripts/test-memory-album.sh
 ```
 

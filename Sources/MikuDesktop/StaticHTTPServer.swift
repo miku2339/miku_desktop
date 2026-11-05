@@ -8,11 +8,13 @@ final class StaticHTTPServer {
     }
 
     private let rootURL: URL
+    private let importedModelURL: URL?
     private let queue = DispatchQueue(label: "com.qimake.MikuDesktop.StaticHTTPServer")
     private var listener: NWListener?
 
-    init(rootURL: URL) {
+    init(rootURL: URL, importedModelURL: URL? = nil) {
         self.rootURL = rootURL.standardizedFileURL.resolvingSymlinksInPath()
+        self.importedModelURL = importedModelURL?.standardizedFileURL.resolvingSymlinksInPath()
     }
 
     func start(completion: @escaping (Result<URL, Error>) -> Void) {
@@ -117,17 +119,25 @@ final class StaticHTTPServer {
         send(status: "200 OK", body: body, mime: mimeType(for: fileURL), headOnly: method == "HEAD", on: connection)
     }
 
-    private func safeFileURL(for requestPath: String) -> URL? {
+    func safeFileURL(for requestPath: String) -> URL? {
         guard !requestPath.contains("\0") else { return nil }
         let relative = requestPath.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         let components = relative.split(separator: "/", omittingEmptySubsequences: true)
         guard !components.contains("..") else { return nil }
 
-        let requested = components.reduce(rootURL) { url, component in
+        var base = rootURL
+        var fileComponents = Array(components)
+        if fileComponents.prefix(3) == ["assets", "companion-model", "tda"],
+           let importedModelURL,
+           FileManager.default.fileExists(atPath: importedModelURL.appendingPathComponent("miku.pmx").path) {
+            base = importedModelURL
+            fileComponents.removeFirst(3)
+        }
+        let requested = fileComponents.reduce(base) { url, component in
             url.appendingPathComponent(String(component), isDirectory: false)
         }.standardizedFileURL.resolvingSymlinksInPath()
-        let rootPath = rootURL.path.hasSuffix("/") ? rootURL.path : rootURL.path + "/"
-        guard requested.path == rootURL.path || requested.path.hasPrefix(rootPath) else { return nil }
+        let rootPath = base.path.hasSuffix("/") ? base.path : base.path + "/"
+        guard requested.path == base.path || requested.path.hasPrefix(rootPath) else { return nil }
         var isDirectory: ObjCBool = false
         if FileManager.default.fileExists(atPath: requested.path, isDirectory: &isDirectory), isDirectory.boolValue {
             return requested.appendingPathComponent("index.html")

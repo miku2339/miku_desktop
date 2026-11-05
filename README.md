@@ -97,14 +97,22 @@ cd miku_desktop
 
 ### 選用：Tda 經典服裝模型
 
-如果想使用 Tda／金子卵黄的經典服裝模型，請從[作者的配布頁](https://bowlroll.net/file/16344)下載 `Tda式デフォ服ミク_ver1.1.zip`，閱讀包內的規約後，用 Python 3 匯入：
+公開版可在 App 內匯入 Tda／金子卵黄的經典服裝模型：
+
+1. 從[作者的配布頁](https://bowlroll.net/file/16344)下載 `Tda式デフォ服ミク_ver1.1.zip`，閱讀包內的使用規約，保留原始 ZIP。
+2. 開啟 **手帳 → 設定 → 角色**，按 **匯入 Tda ZIP…**，選取該壓縮檔。
+3. 匯入完成後，桌面角色會立即切換成 Tda。模型與原作者的規約保存在這部 Mac，更新 App 後仍會保留。
+
+匯入前會使用內附的 Animasa 模型。公開安裝包不包含 Tda 模型與貼圖。
+
+從原始碼建置時，也可用 Python 3 匯入後再建置：
 
 ```sh
 python3 scripts/import-tda-model.py /path/to/Tda式デフォ服ミク_ver1.1.zip
 ./scripts/build-app.sh
 ```
 
-沒有匯入時會使用 Animasa 模型。包含 Tda 模型的安裝包只限自己使用；模型與貼圖不會隨原始碼散布。
+這種包含 Tda 模型的本機建置只限自己使用。模型與貼圖不會隨原始碼散布。
 
 ## 設定本機 AI
 
@@ -161,6 +169,7 @@ node --test Tests/*.test.mjs
 ./scripts/test-mini-games.sh
 ./scripts/test-companion-requests.sh
 ./scripts/test-song-knowledge.sh
+./scripts/test-character-model.sh
 ./scripts/test-memory-album.sh
 ```
 

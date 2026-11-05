@@ -102,7 +102,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             presentStartupError()
             return
         }
-        let server = StaticHTTPServer(rootURL: resourceURL)
+        let server = StaticHTTPServer(rootURL: resourceURL, importedModelURL: CharacterModelStore.directory)
         self.server = server
         server.start { [weak self] result in
             DispatchQueue.main.async {

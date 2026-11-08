@@ -94,6 +94,14 @@ cd miku_desktop
 
 開啟後，用桌面上的 **聊天／手帳** 按鈕或選單列的 **♪** 操作。程式內建本機桌布伺服器，不需要 Plash。場景與角色可以離線運作；聊天需要本機 AI 服務，天氣需要網路。
 
+### 更新與保留資料
+
+App 每天自動向 GitHub 檢查一次正式版本；有新版時，選單列會顯示 **♪ •**，點 **有新版本…** 可前往下載。也可隨時按 **檢查 App 更新…**，或在 **手帳 → 設定 → 一般** 關閉自動檢查。更新提示以附 macOS 安裝包的 GitHub Release 為準。
+
+下載後先結束 Miku Desktop，再替換原本的 App。聊天、記憶、好感度、日記、相簿、自訂曲庫、收藏、設定與已匯入模型都會保留；這些資料位於使用者的 Application Support、macOS 偏好設定與鑰匙圈。保留 `~/Library/Application Support/MikuDesktop/`，無須重設或重新匯入模型。macOS 可能要求重新批准自動化或鑰匙圈存取。
+
+從原始碼更新時，使用 `git pull --ff-only` 後執行 `./scripts/install-app.sh --skip-tda`，保留本機已配置的角色。舊版若只有 App 內附的 Tda，請先從作者 ZIP 匯入一次，再改用公開版。
+
 ### 公開分享用的打包
 
 ```sh
@@ -101,6 +109,8 @@ cd miku_desktop
 ```
 
 會產生 `../outputs/Miku Desktop (Public).zip`，並排除選用的 Tda 模型。各項素材仍適用各自的授權條款。
+
+發布 GitHub Release 時，tag 使用 `v` 加上 `Info.plist` 的版本號，並上傳此公開 ZIP（可命名為 `MikuDesktop-macOS.zip`）。正式發布且安裝包上傳完成後，更新提示才會顯示該版本。
 
 ### Tda 經典服裝模型
 
@@ -145,6 +155,7 @@ python3 scripts/import-tda-model.py /path/to/Tda式デフォ服ミク_ver1.1.zip
 | 連線對象 | 用途 | 頻率 |
 | --- | --- | --- |
 | Open-Meteo | 用所選城市的座標查詢天氣 | 定期 |
+| api.github.com、github.com | 檢查本專案正式版本、開啟使用者選擇的下載頁；不傳送對話或個人紀錄 | 自動每日一次或手動檢查；可在設定關閉自動檢查 |
 | magicalmirai.com、snowmiku.com、mikuexpo.com、www.scla.com.cn | 讀取活動官方公開頁面，確認日期、城市與場地；不傳送聊天內容 | 每 3 天或手動查詢，結果快取在本機 |
 | mikuwiki.qimake.com | 透過 `/api/v1/song-knowledge` 更新曲庫、以 `/api/v1/knowledge` 查歌；只送出歌名或曲庫查詢文字，使用你自行產生並存於鑰匙圈的 key | 設定 key 後，手動更新、曲庫按 Enter 查詢，或聊天問到離線曲庫沒有的歌曲時 |
 | raw.githubusercontent.com | 沒有 AIMCP key，或 AIMCP 發生連線、服務端、端點或資料驗證錯誤時，下載此專案維護的歌曲知識資料；key、權限或額度錯誤不會回退 | 僅手動按「檢查更新」時 |
@@ -178,6 +189,7 @@ python3 -m unittest discover -s Tests -p 'test_tda_setup.py'
 ./scripts/test-companion-requests.sh
 ./scripts/test-song-knowledge.sh
 ./scripts/test-character-model.sh
+./scripts/test-app-update.sh
 ./scripts/test-memory-album.sh
 ```
 

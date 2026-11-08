@@ -82,6 +82,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
     private var lastWeatherError = false
     private let interactionHint = NSTextField.mikuLabel("", size: 11.5, color: MikuTheme.secondaryText)
     private let launchSwitch = NSSwitch()
+    private let appUpdatesSwitch = NSSwitch()
     private let loginStatusLabel = NSTextField.mikuLabel("", size: 11.5, color: MikuTheme.pink)
     private let openLoginSettingsButton = MikuPillButton(frame: .zero)
 
@@ -519,6 +520,8 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         interactionSwitch.action = #selector(interactionChanged)
         launchSwitch.target = self
         launchSwitch.action = #selector(launchAtLoginChanged)
+        appUpdatesSwitch.target = self
+        appUpdatesSwitch.action = #selector(appUpdatesChanged)
         loginStatusLabel.isHidden = true
         loginStatusLabel.lineBreakMode = .byWordWrapping
         loginStatusLabel.maximumNumberOfLines = 2
@@ -718,7 +721,8 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
 
         let generalCard = card("sectionGeneral", symbol: "slider.horizontal.3", rows: [
             row("interaction", interactionStack),
-            row("launchAtLogin", loginStack)
+            row("launchAtLogin", loginStack),
+            row("appUpdateAutomatic", appUpdatesSwitch)
         ])
 
         footerLabel.alignment = .center
@@ -861,6 +865,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         updateSpeechModels([])
         refreshSpeech()
         refreshLoginState()
+        appUpdatesSwitch.state = (UserDefaults.standard.object(forKey: AppUpdateSchedule.enabledKey) as? Bool ?? true) ? .on : .off
     }
 
     private func select(_ value: String, in popup: NSPopUpButton) {
@@ -1132,6 +1137,11 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
                 connectionLabel.textColor = MikuTheme.deepTeal
             }
         }
+    }
+
+    @objc private func appUpdatesChanged() {
+        UserDefaults.standard.set(appUpdatesSwitch.state == .on, forKey: AppUpdateSchedule.enabledKey)
+        saveAndNotify()
     }
 
     @objc private func launchAtLoginChanged() {

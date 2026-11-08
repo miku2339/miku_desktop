@@ -94,6 +94,14 @@ cd miku_desktop
 
 起動後は、デスクトップの **チャット／手帳** ボタンか、メニューバーの **♪** から操作します。ローカルの壁紙サーバーを内蔵しているため、Plash は不要です。シーンとキャラクターはオフラインでも動作します。チャットにはローカル AI サービスが、天気にはインターネット接続が必要です。
 
+### 更新とデータの引き継ぎ
+
+macOS 用パッケージのある正式な GitHub Release を毎日 1 回確認します。新版があると **♪ •** とメニューのダウンロード項目で知らせます。**アプリの更新を確認…** から手動確認でき、**手帳 → 設定 → 一般** で自動確認をオフにできます。
+
+Miku Desktop を終了してからアプリを置き換えてください。会話、記憶、好感度、日記、アルバム、自作の曲庫、お気に入り、設定、読み込み済みモデルは Application Support、macOS の環境設定、キーチェーンに保持されます。`~/Library/Application Support/MikuDesktop/` を残せば、初期化やモデルの再読み込みは不要です。macOS がオートメーションやキーチェーンの許可を再度求める場合があります。
+
+ソースから更新する場合は `git pull --ff-only` の後に `./scripts/install-app.sh --skip-tda` を実行し、設定済みのキャラクターを引き継ぎます。旧版のアプリ内だけに Tda がある場合は、公開版へ切り替える前に作者の ZIP を一度読み込んでください。
+
 ### 公開用パッケージ
 
 ```sh
@@ -101,6 +109,8 @@ cd miku_desktop
 ```
 
 任意の Tda モデルを除いた `../outputs/Miku Desktop (Public).zip` が生成されます。各素材にはそれぞれのライセンスが適用されます。
+
+GitHub Release のタグは `v` と `Info.plist` のバージョン番号を組み合わせ、公開 ZIP を添付します（`MikuDesktop-macOS.zip` という名前も使用できます）。正式版とアプリのアップロードが完了すると、更新通知に表示されます。
 
 ### Tda デフォルト衣装モデル
 
@@ -145,6 +155,7 @@ Tda モデルを含むローカルビルドは個人利用に限ります。モ�
 | 接続先 | 目的 | 頻度 |
 | --- | --- | --- |
 | Open-Meteo | 選択した都市の座標で天気を取得 | 定期的 |
+| api.github.com、github.com | 本プロジェクトの正式版確認と、選択したダウンロードページの表示。会話や個人の記録は送信しません | 毎日 1 回の自動確認または手動確認。自動確認は設定で無効にできます |
 | magicalmirai.com、snowmiku.com、mikuexpo.com、www.scla.com.cn | 公式公開ページで日程・都市・会場を確認。会話内容は送信しません | 3 日ごと、または手動検索時（ローカルにキャッシュ） |
 | mikuwiki.qimake.com | `/api/v1/song-knowledge` で曲庫更新、`/api/v1/knowledge` で楽曲検索。曲名や検索語のみを送信し、key はキーチェーンに保存 | key 設定後の手動更新、楽曲ナレッジでの Enter 検索、オフライン曲庫にない曲の質問時 |
 | raw.githubusercontent.com | AIMCP key がない場合、または AIMCP の接続・サーバー・エンドポイント・データ検証エラー時に、このリポジトリの楽曲データを取得。key・権限・利用上限のエラーではフォールバックしません | 「更新を確認」を押したときのみ |
@@ -178,6 +189,7 @@ python3 -m unittest discover -s Tests -p 'test_tda_setup.py'
 ./scripts/test-companion-requests.sh
 ./scripts/test-song-knowledge.sh
 ./scripts/test-character-model.sh
+./scripts/test-app-update.sh
 ./scripts/test-memory-album.sh
 ```
 

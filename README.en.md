@@ -94,6 +94,14 @@ Installation also produces these files in `outputs/`, **one level above the proj
 
 Once it's open, use the **Chat / Notebook** buttons on the desktop or **♪** in the menu bar. A local wallpaper server is built in, so Plash isn't needed. Scenes and the character work offline; chat needs the local AI service, and weather needs an internet connection.
 
+### Updates and saved data
+
+The app checks GitHub once a day for a stable release with a macOS package. A new version adds a dot to **♪ •** and a download entry in the menu. You can also choose **Check for App Updates…**, or turn automatic checks off in **Notebook → Settings → General**.
+
+Quit Miku Desktop before replacing the app. Chats, memories, affection, diary, album, custom knowledge, favorites, settings and imported models are kept in Application Support, macOS preferences and Keychain. Keep `~/Library/Application Support/MikuDesktop/`; no reset or model reimport is needed. macOS may ask you to approve Automation or Keychain access again.
+
+For source updates, run `git pull --ff-only` followed by `./scripts/install-app.sh --skip-tda` to keep the configured character. If an older app has Tda only inside its bundle, import the author's ZIP once before switching to a public build.
+
 ### Shareable build
 
 ```sh
@@ -101,6 +109,8 @@ Once it's open, use the **Chat / Notebook** buttons on the desktop or **♪** in
 ```
 
 This creates `../outputs/Miku Desktop (Public).zip` without the optional Tda model. Every asset remains subject to its own license.
+
+For a GitHub Release, use `v` followed by the version in `Info.plist` as its tag and upload this public ZIP (it may be named `MikuDesktop-macOS.zip`). Update notices appear once the stable release and its app package are published.
 
 ### Tda classic outfit model
 
@@ -145,6 +155,7 @@ For safety, only loopback (local) endpoints are accepted. When the settings matc
 | Connects to | Why | How often |
 | --- | --- | --- |
 | Open-Meteo | Weather for the selected city's coordinates | Periodically |
+| api.github.com, github.com | Check this project's stable releases and open the download page you choose; no conversations or personal records are sent | Once a day automatically or on request; automatic checks can be disabled |
 | magicalmirai.com, snowmiku.com, mikuexpo.com, www.scla.com.cn | Reads official public event dates, cities and venues; no chat content is sent | Every three days or on manual search, cached locally |
 | mikuwiki.qimake.com | Updates the catalog through `/api/v1/song-knowledge` and looks up songs through `/api/v1/knowledge`; sends only song titles or catalog search text, using your key stored in Keychain | With a key configured: manual updates, Enter searches in Song Knowledge, or chat about songs missing from the offline catalog |
 | raw.githubusercontent.com | Downloads this repository's song knowledge when no AIMCP key is configured, or after an AIMCP connection, server, endpoint, or data-validation error; key, permission, and quota errors do not fall back | Only when you click Check for Updates |
@@ -178,6 +189,7 @@ python3 -m unittest discover -s Tests -p 'test_tda_setup.py'
 ./scripts/test-companion-requests.sh
 ./scripts/test-song-knowledge.sh
 ./scripts/test-character-model.sh
+./scripts/test-app-update.sh
 ./scripts/test-memory-album.sh
 ```
 

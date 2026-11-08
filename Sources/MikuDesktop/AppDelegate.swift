@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settingsObserver: NSObjectProtocol?
     private var speechMuteObserver: NSObjectProtocol?
     private let weatherService = WeatherService()
+    private let appUpdates = AppUpdateController()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         replaceOtherInstances()
@@ -24,7 +25,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
         statusItem.button?.title = "♪"
         statusItem.button?.toolTip = "Miku Desktop"
+        appUpdates.onChange = { [weak self] in self?.rebuildMenu() }
         rebuildMenu()
+        appUpdates.start()
 
         MikuSpeech.shared.onPlayback = { [weak self] event in
             self?.wallpaperController?.speechPlayback(event)
@@ -95,6 +98,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.notebookWindow?.refreshLocalization()
                 self?.settingsController?.refreshInteraction()
                 self?.wallpaperController?.setLanguage(AppLanguage.resolved.rawValue)
+                self?.appUpdates.checkAutomaticallyIfDue()
             }
         }
 
@@ -149,6 +153,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        appUpdates.stop()
         chatController?.endVoiceCall()
         MikuSpeech.shared.stop()
         server?.stop()
@@ -176,6 +181,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func rebuildMenu() {
         let menu = NSMenu()
+        statusItem.button?.title = appUpdates.availableRelease == nil ? "♪" : "♪ •"
+        statusItem.button?.toolTip = appUpdates.availableRelease.map {
+            L10n.format("appUpdateAvailable", $0.version)
+        } ?? "Miku Desktop"
 
         let chat = NSMenuItem(title: L10n.text("chat"), action: #selector(openChat(_:)), keyEquivalent: "")
         chat.target = self
@@ -271,6 +280,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let settings = NSMenuItem(title: L10n.text("settings"), action: #selector(openSettings(_:)), keyEquivalent: ",")
         settings.target = self
         menu.addItem(settings)
+        let update = NSMenuItem(title: appUpdates.menuTitle, action: #selector(checkForAppUpdates(_:)), keyEquivalent: "")
+        update.target = self
+        update.isEnabled = !appUpdates.isChecking
+        menu.addItem(update)
         menu.addItem(.separator())
 
         let quit = NSMenuItem(title: L10n.text("quit"), action: #selector(quit(_:)), keyEquivalent: "q")
@@ -287,6 +300,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let mainSettings = NSMenuItem(title: L10n.text("settings"), action: #selector(openSettings(_:)), keyEquivalent: ",")
         mainSettings.target = self
         appMenu.addItem(mainSettings)
+        let mainUpdate = NSMenuItem(title: appUpdates.menuTitle, action: #selector(checkForAppUpdates(_:)), keyEquivalent: "")
+        mainUpdate.target = self
+        mainUpdate.isEnabled = !appUpdates.isChecking
+        appMenu.addItem(mainUpdate)
         appMenu.addItem(.separator())
         let mainQuit = NSMenuItem(title: L10n.text("quit"), action: #selector(quit(_:)), keyEquivalent: "q")
         mainQuit.target = self
@@ -604,6 +621,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         wallpaperController?.setScene(scene)
         settingsController?.refreshSceneSelection()
         rebuildMenu()
+    }
+
+    @objc private func checkForAppUpdates(_ sender: Any?) {
+        appUpdates.checkManually()
     }
 
     @objc private func openSettings(_ sender: Any?) {

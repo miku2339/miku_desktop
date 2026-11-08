@@ -14,6 +14,7 @@ import { shouldFallBack, streamTalk, talkFrame, textTalk, voiceTalk } from './ta
 import { checkLoop, shouldReportError } from './loop-health.js';
 import { canUseRoomBed, DEFAULT_ROOM_LAYOUT, loadRoomLayout, roomViewportGeometry } from './room-layout.js';
 import { createSleepCycle, isAsleep, normalizeOverride, scheduledAsleep } from './sleep.js';
+import { createSleepPoser, stirEnvelope } from './sleep-pose.js';
 import { createNativeBridge } from './bridge.js';
 import { OutlineEffect } from './vendor/effects/OutlineEffect.js';
 import { chooseHandProp, createProps, hatFor, isTeaTime } from './props.js';
@@ -3211,12 +3212,14 @@ function updateSleep(elapsed, hour) {
   const busy = showsCharacter && Boolean(state.pointer || carry.status().phase !== 'idle'
     || ['boundary', 'snub', 'dizzy', 'ouch'].includes(state.reaction?.type));
   const previous = sleepState.phase;
+  const wasLying = sleepState.lying;
   sleepState = sleepCycle.step({
     time: elapsed,
     wantAsleep,
     busy,
     canLie: canUseRoomBed(roomLayout, state.loadedScenes.includes('room'), roomBlanketsReady)
   });
+  if (showsCharacter && !wasLying && sleepState.lying) sleepPoser.reset(elapsed);
   if (!showsCharacter || previous === sleepState.phase) return;
   if (sleepState.phase === 'windingDown') {
     if (!reducedMotion.matches) startReaction('yawn', { variant: { ...chooseVariant('yawn'), said: 0, talk: false } });
@@ -3288,22 +3291,27 @@ function updateSleepingModel(elapsed) {
   model.position.y = camera.position.y + CAMERA_HEIGHT * (0.5 - roomGeometry.bedSurfaceY) + height * SLEEP_BODY_HALF;
   model.position.z = 0;
 
-  const breath = Math.sin(elapsed * Math.PI * 2 / 4.2);
-  // Curled up a little: knees drawn up, hands together in front of her chest.
+  // Breathing you can see, a change of position now and then, a nuzzle into the pillow
+  // (sleep-pose.js). Only her upper body moves; the legs stay as calibrated under the blanket.
+  const body = sleepPoser.step(elapsed);
+  const { pose, breath, nuzzle } = body;
   for (const [index, side] of ['左', '右'].entries()) {
     const s = index === 0 ? 1 : -1;
+    // Curled up a little: knees drawn up.
     rotateBone(`${side}足`, -0.45, 0, 0);
     rotateBone(`${side}ひざ`, 0.75, 0, 0);
     rotateBone(`${side}足首`, 0.2, 0, 0);
-    rotateBone(`${side}腕`, 0, -s * 0.85, s * 0.2);
-    rotateBone(`${side}ひじ`, 0, -s * 1.7, 0);
-    rotateBone(`${side}手首`, 0, 0, s * 0.3);
+    rotateBone(`${side}腕`, ...pose.arms[side].腕);
+    rotateBone(`${side}ひじ`, ...pose.arms[side].ひじ);
+    rotateBone(`${side}手首`, ...pose.arms[side].手首);
+    // The shoulders rise and settle with each breath.
+    rotateBone(`${side}肩`, 0, 0, s * 0.03 * breath);
   }
-  rotateBone('上半身', 0.12 + 0.015 * breath, 0, 0);
+  rotateBone('上半身', pose.spine + 0.035 * breath, 0, 0);
   // Legs angled a touch down into the bed, so they stay under the blanket.
   rotateBone('下半身', 0, 0, SLEEP_HIP_TILT);
-  rotateBone('首', 0.08, 0, 0.05);
-  rotateBone('頭', 0.06, 0.05, 0.12);
+  rotateBone('首', pose.neck[0] - 0.012 * breath, pose.neck[1], pose.neck[2]);
+  rotateBone('頭', pose.head[0] + 0.04 * nuzzle, pose.head[1] + 0.07 * nuzzle, pose.head[2] + 0.05 * nuzzle);
   // Twintails fall onto the bed behind her instead of standing out sideways.
   // (A hanging tail swings outwards with +z on her left, so inwards is -z there.)
   for (const [side, sign] of [['左', 1], ['右', -1]]) {
@@ -3311,8 +3319,9 @@ function updateSleepingModel(elapsed) {
     rotateBone(`${side}髪２`, 0, 0, -sign * 0.15);
   }
 
-  // Stirring when you touch her: a frown, a little turn of the head, a mumble.
-  const stir = Math.max(0, 1 - (elapsed - sleepTouch.stirStart) / 1.6);
+  // Stirring when you touch her: a frown, a little turn of the head, a mumble. It eases in
+  // rather than snapping to a turned head.
+  const stir = stirEnvelope(elapsed - sleepTouch.stirStart);
   if (stir > 0) {
     rotateBone('頭', 0, sleepTouch.stirSide * 0.12 * stir, -0.06 * stir);
     rotateBone('上半身', 0, 0, 0.03 * stir);
@@ -3322,7 +3331,7 @@ function updateSleepingModel(elapsed) {
   setMorph('まばたき', 1);
   setMorph('なごみ', 0.35 * (1 - stir));
   setMorph('お', 0.06 + 0.06 * Math.max(0, breath));
-  if (Math.floor(elapsed / 1.7) !== Math.floor((elapsed - 0.05) / 1.7) && sleepState.visibility > 0.9) {
+  if (body.z && sleepState.visibility > 0.9) {
     floatSymbol(variety.chance(0.3) ? 'Z' : 'z', 'sleep', 0, 0.02);
   }
   state.model.updateMatrixWorld(true);
@@ -3336,6 +3345,7 @@ const SLEEP_SCALE = 0.75;
 const SLEEP_HIP_TILT = 0.2;
 const MODEL_SCALE = 0.93;
 const SLEEP_TAIL_SWING = 0.45;
+const sleepPoser = createSleepPoser();
 
 function applyStandingDoze(elapsed) {
   // No bed in this scene: she nods off on her feet.

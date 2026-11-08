@@ -5,6 +5,7 @@ import vm from 'node:vm';
 
 import * as THREE from '../Wallpaper/companion/vendor/three.module.js';
 import { createProps } from '../Wallpaper/companion/props.js';
+import { createSleepPoser, stirEnvelope } from '../Wallpaper/companion/sleep-pose.js';
 
 const companionSource = readFileSync(
   new URL('../Wallpaper/companion/companion.js', import.meta.url),
@@ -102,7 +103,9 @@ function createHarness() {
     rotateBone() {},
     screenAnchorToWorld: value => value,
     setMorph() {},
+    sleepPoser: createSleepPoser(() => 0.5),
     sleepState,
+    stirEnvelope,
     sleepTouch: { stirSide: 1, stirStart: -Infinity },
     state,
     turning: { yaw: { v: 0, x: 0 } },

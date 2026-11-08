@@ -87,6 +87,14 @@ final class AwarenessService {
         var throttleKey: String? = nil
         var image: Data? = nil
 
+        /// Says what the user is doing on this Mac (an app, the screen, a song or video).
+        var revealsActivity: Bool {
+            switch kind {
+            case .app, .song, .video, .screen: return true
+            case .welcomeBack, .breakTime, .randomEvent: return false
+            }
+        }
+
         /// Things worth saying soon even if she spoke a little while ago.
         var urgent: Bool { kind == .welcomeBack || kind == .breakTime }
     }
@@ -97,6 +105,8 @@ final class AwarenessService {
     private var activationObserver: NSObjectProtocol?
     private var memoryObservers: [NSObjectProtocol] = []
     private var sleepObserver: NSObjectProtocol?
+    private var aiSettingsObserver: NSObjectProtocol?
+    private var aiPrivacySettings: (cloud: Bool, shares: Bool)?
     private var started = false
     private var generation = 0
     private var collecting = false
@@ -173,7 +183,23 @@ final class AwarenessService {
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.invalidatePendingWork() }
         }
+        aiPrivacySettings = (AIConfiguration.shared.usesCloud, AIConfiguration.shared.cloudSharesAwareness)
+        aiSettingsObserver = NotificationCenter.default.addObserver(
+            forName: .mikuSettingsChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.aiPrivacySettingsChanged() }
+        }
         refreshMonitoring(resetFrontApp: true)
+    }
+
+    private func aiPrivacySettingsChanged() {
+        let current = (cloud: AIConfiguration.shared.usesCloud, shares: AIConfiguration.shared.cloudSharesAwareness)
+        guard aiPrivacySettings?.cloud != current.cloud || aiPrivacySettings?.shares != current.shares else { return }
+        aiPrivacySettings = current
+        recentLines.removeAll()
+        invalidatePendingWork()
     }
 
     private func sourcesChanged(_ source: Source, enabled: Bool) {
@@ -388,6 +414,7 @@ final class AwarenessService {
 
     private func glanceAtScreen(generation: Int) {
         guard #available(macOS 14.0, *), CGPreflightScreenCaptureAccess(),
+              AIConfiguration.shared.sharesAwarenessWithAI,
               canDeliver(source: .screen, generation: generation), !thinking,
               !frontmostApplicationIsPrivate else { return }
         lastScreenLook = Date()
@@ -398,10 +425,12 @@ final class AwarenessService {
             let image = await Self.captureScreen { [weak self] in
                 guard let self else { return false }
                 return !Task.isCancelled
+                    && AIConfiguration.shared.sharesAwarenessWithAI
                     && self.canDeliver(source: .screen, generation: generation)
                     && !self.frontmostApplicationIsPrivate
             }
             guard let self, !Task.isCancelled, let image,
+                  AIConfiguration.shared.sharesAwarenessWithAI,
                   self.canDeliver(source: .screen, generation: generation),
                   !self.frontmostApplicationIsPrivate else { return }
             await self.generateAndDeliver(
@@ -425,13 +454,24 @@ final class AwarenessService {
 
     private func generateAndDeliver(_ observation: Observation, generation: Int) async {
         guard !Task.isCancelled, canDeliver(source: observation.source, generation: generation) else { return }
+        // With a cloud AI, the screen, apps and media stay on this Mac unless the user shares
+        // them: she still says welcome back or suggests a break, just without the details.
+        let shares = AIConfiguration.shared.sharesAwarenessWithAI
+        guard shares || !observation.revealsActivity else { return }
         let memory = CompanionMemory.shared
         var context = memory.context()
         context.confessionDecision = nil
         let history = Array(memory.recentHistory(from: memory.storedMessages).suffix(6))
-        let app = frontmostApplicationIsPrivate ? nil : frontApp?.name
-        let instruction = Self.instruction(for: observation, app: app) + Self.avoidRepeating(recentLines)
-        let reply = try? await ai.reply(to: instruction, image: observation.image, history: history, memory: context)
+        let app = frontmostApplicationIsPrivate || !shares ? nil : frontApp?.name
+        let instruction = Self.instruction(for: observation, app: app)
+            + (shares ? Self.avoidRepeating(recentLines) : "")
+        let reply = try? await ai.reply(
+            to: instruction,
+            image: observation.image,
+            history: history,
+            memory: context,
+            requiresAwarenessSharing: shares
+        )
         guard !Task.isCancelled, canDeliver(source: observation.source, generation: generation),
               let reply, !reply.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               let onSpeak else { return }
@@ -631,6 +671,8 @@ final class AwarenessService {
     /// Music or Spotify, and the YouTube or Niconico tab of the browser you used last. Nil when
     /// both "Music" and "Video" are off. Falls back to what the regular checks saw lately.
     func listeningForChat() async -> ListeningContext? {
+        // With a cloud AI, what's playing stays on this Mac unless the user shares it.
+        guard AIConfiguration.shared.sharesAwarenessWithAI else { return nil }
         let media = Self.isEnabled(.media)
         let video = Self.isEnabled(.video)
         guard media || video else { return nil }

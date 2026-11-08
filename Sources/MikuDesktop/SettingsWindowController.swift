@@ -55,8 +55,16 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
     private var importingCharacterModel = false
     private let replyLanguagePopup = NSPopUpButton()
     private let interfaceLanguagePopup = NSPopUpButton()
+    private let providerSegment = NSSegmentedControl()
     private let endpointField = NSTextField()
     private let modelField = NSTextField()
+    private let apiKeyField = NSSecureTextField()
+    private let apiKeyClearButton = MikuPillButton(frame: .zero)
+    private let apiKeyStatus = NSTextField.mikuLabel("", size: 11.5, color: MikuTheme.pink)
+    private let cloudPrivacyNote = NSTextField.mikuLabel("", size: 11.5, color: MikuTheme.secondaryText)
+    private let cloudShareSwitch = NSSwitch()
+    private let cloudShareLabel = NSTextField.mikuLabel("", size: 12, color: MikuTheme.primaryText)
+    private var cloudRowViews: [NSView] = []
     private let testButton = MikuPillButton(frame: .zero)
     private let connectionDot = StatusDotView()
     private let connectionLabel = NSTextField.mikuLabel("", size: 12, color: MikuTheme.secondaryText)
@@ -171,6 +179,12 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         refreshCharacterModel()
         resetPositionButton.title = L10n.text("resetPosition")
         testButton.title = L10n.text("testConnection")
+        providerSegment.setLabel(L10n.text("aiProviderLocal"), forSegment: 0)
+        providerSegment.setLabel(L10n.text("aiProviderCloud"), forSegment: 1)
+        apiKeyClearButton.title = L10n.text("aiAPIKeyClear")
+        cloudPrivacyNote.stringValue = L10n.text("cloudPrivacyNote")
+        cloudShareLabel.stringValue = L10n.text("cloudShareAwareness")
+        refreshCloudKey()
         speechPreviewButton.title = L10n.text("speechPreview")
         speechStopButton.title = L10n.text("speechStop")
         humFolderButton.title = L10n.text("humOpenFolder")
@@ -435,7 +449,26 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
             personalitySegment.setWidth(0, forSegment: index)
         }
 
-        for field in [customField, nicknameField, endpointField, modelField] {
+        providerSegment.segmentCount = 2
+        providerSegment.trackingMode = .selectOne
+        providerSegment.segmentStyle = .rounded
+        providerSegment.selectedSegmentBezelColor = MikuTheme.teal
+        providerSegment.target = self
+        providerSegment.action = #selector(providerChanged)
+        apiKeyClearButton.controlHeight = 26
+        apiKeyClearButton.target = self
+        apiKeyClearButton.action = #selector(clearCloudKey)
+        apiKeyStatus.isHidden = true
+        cloudPrivacyNote.lineBreakMode = .byWordWrapping
+        cloudPrivacyNote.maximumNumberOfLines = 4
+        cloudPrivacyNote.preferredMaxLayoutWidth = 300
+        cloudShareSwitch.target = self
+        cloudShareSwitch.action = #selector(cloudShareToggled)
+        cloudShareLabel.lineBreakMode = .byWordWrapping
+        cloudShareLabel.maximumNumberOfLines = 2
+        cloudShareLabel.preferredMaxLayoutWidth = 260
+
+        for field in [customField, nicknameField, endpointField, modelField, apiKeyField] {
             field.bezelStyle = .roundedBezel
             field.font = MikuTheme.font(13)
             field.delegate = self
@@ -603,9 +636,29 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         vocadbStack.orientation = .horizontal
         vocadbStack.alignment = .centerY
         vocadbStack.spacing = 10
+        let apiKeyStack = NSStackView(views: [apiKeyField, apiKeyClearButton])
+        apiKeyStack.orientation = .horizontal
+        apiKeyStack.alignment = .centerY
+        apiKeyStack.spacing = 8
+        let apiKeyColumn = NSStackView(views: [apiKeyStack, apiKeyStatus])
+        apiKeyColumn.orientation = .vertical
+        apiKeyColumn.alignment = .leading
+        apiKeyColumn.spacing = 4
+        let cloudShareStack = NSStackView(views: [cloudShareSwitch, cloudShareLabel])
+        cloudShareStack.orientation = .horizontal
+        cloudShareStack.alignment = .centerY
+        cloudShareStack.spacing = 10
+        let cloudNoteRow: [NSView] = [NSGridCell.emptyContentView, cloudPrivacyNote]
+        let cloudShareRow: [NSView] = [NSGridCell.emptyContentView, cloudShareStack]
+        let apiKeyRow = row("aiAPIKey", apiKeyColumn)
+        cloudRowViews = [apiKeyColumn, cloudPrivacyNote, cloudShareStack]
         let aiCard = card("sectionAI", symbol: "cpu", rows: [
+            row("aiProvider", providerSegment),
             row("aiEndpoint", endpointField),
             row("aiModel", modelField),
+            apiKeyRow,
+            cloudNoteRow,
+            cloudShareRow,
             [NSGridCell.emptyContentView, connectionRow],
             row("vocadbLookup", vocadbStack)
         ])
@@ -761,6 +814,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
             footerLabel.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -44),
             customField.widthAnchor.constraint(greaterThanOrEqualToConstant: 280),
             endpointField.widthAnchor.constraint(greaterThanOrEqualToConstant: 280),
+            apiKeyField.widthAnchor.constraint(equalToConstant: 200),
             speechEndpointField.widthAnchor.constraint(greaterThanOrEqualToConstant: 280),
             speechModelCombo.widthAnchor.constraint(greaterThanOrEqualToConstant: 280),
             connectionDot.widthAnchor.constraint(equalToConstant: 8),
@@ -858,8 +912,8 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         refreshCharacterModel()
         select(configuration.replyLanguage, in: replyLanguagePopup)
         select(configuration.interfaceLanguage, in: interfaceLanguagePopup)
-        endpointField.stringValue = configuration.endpoint
-        modelField.stringValue = configuration.model
+        providerSegment.selectedSegment = configuration.usesCloud ? 1 : 0
+        loadProviderFields()
         speechEndpointField.stringValue = MikuSpeech.shared.endpoint
         speechModelCombo.stringValue = displayedSpeechModel(MikuSpeech.shared.configuredModelID)
         updateSpeechModels([])
@@ -1174,8 +1228,75 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
     private func saveTextValues() {
         configuration.customPersonality = customField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         configuration.nickname = nicknameField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        configuration.endpoint = endpointField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        configuration.model = modelField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        let endpoint = endpointField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        let model = modelField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        if configuration.usesCloud {
+            configuration.cloudEndpoint = endpoint
+            configuration.cloudModel = model
+        } else {
+            configuration.endpoint = endpoint
+            configuration.model = model
+        }
+        saveCloudKey()
+        saveAndNotify()
+    }
+
+    // MARK: - Local or cloud AI
+
+    /// The endpoint and model fields show whichever AI is chosen; each keeps its own values.
+    private func loadProviderFields() {
+        let cloud = configuration.usesCloud
+        endpointField.stringValue = cloud ? configuration.cloudEndpoint : configuration.endpoint
+        modelField.stringValue = cloud ? configuration.cloudModel : configuration.model
+        endpointField.placeholderString = cloud ? L10n.text("cloudEndpointPlaceholder") : "http://127.0.0.1:8000/v1"
+        cloudShareSwitch.state = configuration.cloudSharesAwareness ? .on : .off
+        for view in cloudRowViews {
+            (view.superview as? NSGridView)?.cell(for: view)?.row?.isHidden = !cloud
+        }
+        refreshCloudKey()
+    }
+
+    @objc private func providerChanged() {
+        saveTextValues()
+        configuration.provider = providerSegment.selectedSegment == 1 ? "cloud" : "local"
+        loadProviderFields()
+        connectionTask?.cancel()
+        testButton.isEnabled = true
+        connectionDot.isHidden = true
+        connectionLabel.stringValue = ""
+        saveAndNotify()
+    }
+
+    /// A key typed in goes straight to the Keychain and the field is emptied again.
+    private func saveCloudKey() {
+        let typed = apiKeyField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !typed.isEmpty else { return }
+        do {
+            try CloudAIKey.save(typed)
+            apiKeyField.stringValue = ""
+            apiKeyStatus.isHidden = true
+        } catch {
+            apiKeyStatus.stringValue = L10n.text("aiAPIKeyError")
+            apiKeyStatus.isHidden = false
+        }
+        refreshCloudKey()
+    }
+
+    private func refreshCloudKey() {
+        let saved = CloudAIKey.hasKey()
+        apiKeyField.placeholderString = L10n.text(saved ? "aiAPIKeySaved" : "aiAPIKeyEmpty")
+        apiKeyClearButton.isHidden = !saved
+    }
+
+    @objc private func clearCloudKey() {
+        try? CloudAIKey.clear()
+        apiKeyField.stringValue = ""
+        refreshCloudKey()
+        saveAndNotify()
+    }
+
+    @objc private func cloudShareToggled() {
+        configuration.cloudSharesAwareness = cloudShareSwitch.state == .on
         saveAndNotify()
     }
 

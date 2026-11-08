@@ -249,6 +249,10 @@ actor LocalAI {
     private struct ConfigurationSnapshot: Sendable {
         let endpoint: String
         let model: String
+        /// A cloud service the user set up, with their own key (CloudAIKey).
+        let cloud: Bool
+        let cloudAPIKey: String?
+        let sharesAwareness: Bool
         let personalityPreset: String
         let customPersonality: String
         let nickname: String
@@ -325,6 +329,7 @@ actor LocalAI {
         case emptyReply
         case unsupportedReply
         case imageUnsupported
+        case missingAPIKey
 
         var errorDescription: String? {
             switch self {
@@ -342,6 +347,8 @@ actor LocalAI {
                 return "The local AI returned an unsupported emotion or action."
             case .imageUnsupported:
                 return "The local AI could not read the picture."
+            case .missingAPIKey:
+                return "The cloud AI has no API key yet."
             }
         }
     }
@@ -354,6 +361,7 @@ actor LocalAI {
     private let configuration: AIConfiguration?
     private let session: URLSession
     private let loadsLocalAPIKey: Bool
+    private let cloudAPIKey: @Sendable () -> String?
     private let songKnowledge: SongKnowledgeStore
     private let vocaDB: VocaDBLookup
 
@@ -361,9 +369,11 @@ actor LocalAI {
         configuration: AIConfiguration? = nil,
         songKnowledge: SongKnowledgeStore = .shared,
         vocaDB: VocaDBLookup = .shared,
-        session: URLSession? = nil
+        session: URLSession? = nil,
+        cloudAPIKey: @escaping @Sendable () -> String? = { CloudAIKey.load() }
     ) {
         self.configuration = configuration
+        self.cloudAPIKey = cloudAPIKey
         self.songKnowledge = songKnowledge
         self.vocaDB = vocaDB
         if let session {
@@ -391,15 +401,18 @@ actor LocalAI {
         relationshipIntent: RelationshipIntent? = nil,
         music: MusicPlan? = nil,
         listening: ListeningContext? = nil,
+        requiresAwarenessSharing: Bool = false,
         mode: ReplyMode = .text,
         onVoiceText: (@Sendable (String) async -> Void)? = nil
     ) async throws -> CompanionReply {
         let snapshot = await configurationSnapshot()
+        // Observations may have been collected before the user switched AI providers.
+        guard !requiresAwarenessSharing || snapshot.sharesAwareness else { throw CancellationError() }
         let language = await resolvedReplyLanguage(snapshot, text: text, history: history)
         let cantonese = usesCantonese(snapshot, text: text, language: language)
         let endpoint: URL
         do {
-            endpoint = try chatCompletionsURL(from: snapshot.endpoint)
+            endpoint = try endpointURL(snapshot)
         } catch {
             if let decision = memory.confessionDecision {
                 return confessionReply(
@@ -431,7 +444,7 @@ actor LocalAI {
                 : eventQuery,
             Self.diaryInstruction(memory.diary, language: language),
             Self.songHonesty(language),
-            await listeningInstruction(listening, language: language),
+            await listeningInstruction(snapshot.sharesAwareness ? listening : nil, language: language),
             HumText.hasClips() ? Self.humInstruction(language) : "",
             music.map { Self.musicInstruction($0, language: language) }
                 ?? (MusicRequestParser.detectPlatform(in: text.lowercased()) != nil
@@ -509,7 +522,7 @@ actor LocalAI {
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let apiKey = authorizationAPIKey(matching: endpoint), !apiKey.isEmpty {
+        if let apiKey = authorizationAPIKey(matching: endpoint, snapshot), !apiKey.isEmpty {
             request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         }
         var emittedVoiceText = ""
@@ -537,7 +550,7 @@ actor LocalAI {
                     ]
                     attemptBody["messages"] = [plainSystem] + messages
                 }
-                request.httpBody = try JSONSerialization.data(withJSONObject: attemptBody)
+                request.httpBody = try encodedBody(attemptBody, for: snapshot)
 
                 let content: String
                 if streamsVoice, let onVoiceText {
@@ -555,6 +568,8 @@ actor LocalAI {
                         if let error = error as? LocalAIError {
                             switch error {
                             case .invalidReply, .emptyReply, .unsupportedReply:
+                                continue
+                            case .serverResponse(let status) where snapshot.cloud && (status == 400 || status == 422):
                                 continue
                             case .serverResponse(let status) where image != nil && status != 401 && status != 403 && status != 404:
                                 continue
@@ -576,6 +591,8 @@ actor LocalAI {
                             if attempt == 0, attempts > 1 { continue }
                             throw LocalAIError.imageUnsupported
                         }
+                        // Not every cloud service takes a JSON schema: ask once more without it.
+                        if snapshot.cloud, status == 400 || status == 422, attempt == 0, attempts > 1 { continue }
                         throw LocalAIError.serverResponse(status)
                     }
 
@@ -703,7 +720,7 @@ actor LocalAI {
         let snapshot = await configurationSnapshot()
         let endpoint: URL
         do {
-            endpoint = try chatCompletionsURL(from: snapshot.endpoint)
+            endpoint = try endpointURL(snapshot)
         } catch {
             try Task.checkCancellation()
             return nil
@@ -761,12 +778,12 @@ actor LocalAI {
         request.httpMethod = "POST"
         request.timeoutInterval = 15
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let apiKey = authorizationAPIKey(matching: endpoint), !apiKey.isEmpty {
+        if let apiKey = authorizationAPIKey(matching: endpoint, snapshot), !apiKey.isEmpty {
             request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         }
 
         do {
-            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+            request.httpBody = try encodedBody(body, for: snapshot)
             let (data, response) = try await session.data(for: request)
             try Task.checkCancellation()
             guard let httpResponse = response as? HTTPURLResponse,
@@ -875,12 +892,12 @@ actor LocalAI {
         request.httpMethod = "POST"
         request.timeoutInterval = 12
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let apiKey = authorizationAPIKey(matching: endpoint), !apiKey.isEmpty {
+        if let apiKey = authorizationAPIKey(matching: endpoint, snapshot), !apiKey.isEmpty {
             request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         }
 
         do {
-            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+            request.httpBody = try encodedBody(body, for: snapshot)
             let (data, response) = try await session.data(for: request)
             try Task.checkCancellation()
             guard let httpResponse = response as? HTTPURLResponse,
@@ -1139,7 +1156,7 @@ actor LocalAI {
         maxTokens: Int,
         schema: (name: String, schema: [String: Any])?
     ) async throws -> String {
-        let endpoint = try chatCompletionsURL(from: snapshot.endpoint)
+        let endpoint = try endpointURL(snapshot)
         var body: [String: Any] = [
             "model": snapshot.model,
             "messages": messages,
@@ -1156,10 +1173,10 @@ actor LocalAI {
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let apiKey = authorizationAPIKey(matching: endpoint), !apiKey.isEmpty {
+        if let apiKey = authorizationAPIKey(matching: endpoint, snapshot), !apiKey.isEmpty {
             request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         }
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        request.httpBody = try encodedBody(body, for: snapshot)
         let (data, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else { throw LocalAIError.invalidResponse }
         guard (200..<300).contains(httpResponse.statusCode) else { throw LocalAIError.serverResponse(httpResponse.statusCode) }
@@ -1693,20 +1710,20 @@ actor LocalAI {
         let snapshot = await configurationSnapshot()
         let base: URL
         do {
-            base = try chatCompletionsURL(from: snapshot.endpoint)
+            base = try endpointURL(snapshot)
                 .deletingLastPathComponent()
                 .deletingLastPathComponent()
         } catch {
             return ConnectionCheck(
                 reachable: false,
                 modelAvailable: nil,
-                message: Self.message(for: error, endpoint: snapshot.endpoint, model: snapshot.model)
+                message: Self.message(for: error, endpoint: snapshot.endpoint, model: snapshot.model, cloud: snapshot.cloud)
             )
         }
 
         var request = URLRequest(url: base.appendingPathComponent("models"))
         request.timeoutInterval = 5
-        if let apiKey = authorizationAPIKey(matching: base), !apiKey.isEmpty {
+        if let apiKey = authorizationAPIKey(matching: base, snapshot), !apiKey.isEmpty {
             request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         }
         do {
@@ -1735,19 +1752,22 @@ actor LocalAI {
             return ConnectionCheck(
                 reachable: false,
                 modelAvailable: nil,
-                message: Self.message(for: error, endpoint: snapshot.endpoint, model: snapshot.model)
+                message: Self.message(for: error, endpoint: snapshot.endpoint, model: snapshot.model, cloud: snapshot.cloud)
             )
         }
     }
 
     /// Human-readable, localised reason for a failed request.
-    static func message(for error: Error, endpoint: String, model: String) -> String {
+    static func message(for error: Error, endpoint: String, model: String, cloud: Bool = false) -> String {
         if let error = error as? LocalAIError {
             switch error {
             case .invalidEndpoint:
-                return L10n.text("errorEndpoint")
+                return L10n.text(cloud ? "errorEndpointCloud" : "errorEndpoint")
+            case .missingAPIKey:
+                return L10n.text("errorCloudKeyMissing")
             case let .serverResponse(status):
-                if status == 401 || status == 403 { return L10n.text("errorAuth") }
+                if status == 401 || status == 403 { return L10n.text(cloud ? "errorAuthCloud" : "errorAuth") }
+                if status == 429 { return L10n.text("errorRateLimited") }
                 if status == 404 { return L10n.format("errorNotFound", model) }
                 return L10n.format("errorHTTP", String(status))
             case .invalidResponse, .invalidReply, .emptyReply, .unsupportedReply:
@@ -1761,7 +1781,7 @@ actor LocalAI {
             case .timedOut:
                 return L10n.text("errorTimeout")
             case .cannotConnectToHost, .cannotFindHost, .networkConnectionLost, .notConnectedToInternet, .dnsLookupFailed:
-                return L10n.format("errorConnect", endpoint)
+                return L10n.format(cloud ? "errorConnectCloud" : "errorConnect", endpoint)
             default:
                 break
             }
@@ -1840,11 +1860,15 @@ actor LocalAI {
 
     private func configurationSnapshot() async -> ConfigurationSnapshot {
         let configured = configuration
+        let loadCloudKey = cloudAPIKey
         return await MainActor.run {
             let source = configured ?? AIConfiguration.shared
             return ConfigurationSnapshot(
-                endpoint: source.endpoint,
-                model: source.model,
+                endpoint: source.activeEndpoint,
+                model: source.activeModel,
+                cloud: source.usesCloud,
+                cloudAPIKey: source.usesCloud ? loadCloudKey() : nil,
+                sharesAwareness: source.sharesAwarenessWithAI,
                 personalityPreset: source.personalityPreset,
                 customPersonality: source.customPersonality,
                 nickname: source.nickname,
@@ -1855,13 +1879,32 @@ actor LocalAI {
         }
     }
 
-    private func chatCompletionsURL(from value: String) throws -> URL {
+    /// Where chat requests go, and whether they can go there: a cloud service needs the
+    /// user's key first.
+    private func endpointURL(_ snapshot: ConfigurationSnapshot) throws -> URL {
+        let url = try chatCompletionsURL(from: snapshot.endpoint, cloud: snapshot.cloud)
+        if snapshot.cloud, (snapshot.cloudAPIKey ?? "").isEmpty { throw LocalAIError.missingAPIKey }
+        return url
+    }
+
+    /// The request body as this service expects it. Cloud services refuse options only local
+    /// model servers understand.
+    private func encodedBody(_ body: [String: Any], for snapshot: ConfigurationSnapshot) throws -> Data {
+        var body = body
+        if snapshot.cloud { body.removeValue(forKey: "chat_template_kwargs") }
+        return try JSONSerialization.data(withJSONObject: body)
+    }
+
+    /// Local: this Mac only. Cloud: HTTPS anywhere (or a proxy on this Mac), so the key never
+    /// travels unencrypted.
+    private func chatCompletionsURL(from value: String, cloud: Bool = false) throws -> URL {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard var components = URLComponents(string: trimmed),
               let scheme = components.scheme?.lowercased(),
               scheme == "http" || scheme == "https",
               let host = components.host?.lowercased(),
-              isLoopback(host),
+              !host.isEmpty,
+              isLoopback(host) || (cloud && scheme == "https"),
               components.user == nil,
               components.password == nil,
               components.query == nil,
@@ -1882,7 +1925,8 @@ actor LocalAI {
         host == "127.0.0.1" || host == "localhost" || host == "::1"
     }
 
-    private func authorizationAPIKey(matching endpoint: URL) -> String? {
+    private func authorizationAPIKey(matching endpoint: URL, _ snapshot: ConfigurationSnapshot) -> String? {
+        if snapshot.cloud { return snapshot.cloudAPIKey }
         guard loadsLocalAPIKey else { return nil }
         return omlxAPIKey(matching: endpoint)
     }

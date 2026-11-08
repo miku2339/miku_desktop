@@ -732,7 +732,7 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
 
     private func applyConnection(_ result: LocalAI.ConnectionCheck) {
         if result.reachable {
-            let model = AIConfiguration.shared.model
+            let model = AIConfiguration.shared.activeModel
             let verified = result.modelAvailable == true
             let color = verified ? MikuTheme.online : MikuTheme.checking
             let text = verified ? "\(L10n.text("statusOnline")) · \(model)" : result.message
@@ -1116,7 +1116,12 @@ final class ChatWindowController: NSWindowController, NSWindowDelegate, NSTextFi
                 // She couldn't answer, but the song you asked for still opens.
                 if let musicPlan { onPlayMusic?(musicPlan) }
                 let configuration = AIConfiguration.shared
-                showError(LocalAI.message(for: error, endpoint: configuration.endpoint, model: configuration.model))
+                showError(LocalAI.message(
+                    for: error,
+                    endpoint: configuration.activeEndpoint,
+                    model: configuration.activeModel,
+                    cloud: configuration.usesCloud
+                ))
                 refreshConnectionStatus()
             }
         }

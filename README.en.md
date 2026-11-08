@@ -2,7 +2,7 @@
 
 [繁體中文](README.md) · [日本語](README.ja.md) · **English**
 
-Hatsune Miku, living on your macOS desktop. She walks around animated Tokyo street scenes, reacts to your pointer, and chats with you through an AI running on your own Mac, remembering the time you spend together.
+Hatsune Miku, living on your macOS desktop. She walks around animated Tokyo street scenes, reacts to your pointer, and chats with you through a local AI or a cloud AI service you choose, remembering the time you spend together.
 
 **Website**: [desktop.mikutool.com](https://desktop.mikutool.com/) (overview and live background demo)
 
@@ -30,7 +30,7 @@ Hatsune Miku, living on your macOS desktop. She walks around animated Tokyo stre
 - **Voice calls**: Press the phone button in chat for on-device recognition in Mandarin, Cantonese, Japanese, English, or Korean. Switch in the call card or under “⋯ → Conversation language.” An offline language download may be needed on first use; speech input and TTS voice support are separate. On supported audio devices, listening continues while Miku thinks or speaks, so you can interrupt by talking; “My turn” remains available for manual interruption. Replies are generated and played sentence by sentence, preparing the next sentence during playback. Includes live captions, microphone mute, and end-call controls. Microphone input pauses before opening requested music. Enable and configure your own local TTS first.
 - **Local speech and lip sync**: Connect your own local TTS service and voice model; the app does not provide or download the owner's private Miku voice. Korean speech requires your own Korean-capable local model; the owner's existing private four-language model does not support Korean. Her mouth starts when audio playback starts and follows its actual duration. A temporary service or connection failure is retried once. Speech diagnostics record only the error category, language, character count, timing, and attempt count—not the text being spoken.
 - **Humming clips**: In Settings → Speech, click “Open Humming Folder” and add original hums you made yourself (wav, m4a, aiff…, up to 10 seconds each). When she hums in a reply, one plays at random after she finishes speaking, and her mouth follows the audio; nothing plays while muted, on a call or in full screen. These private original clips stay on your Mac and are not distributed with the app; with the folder empty, humming stays as text. Do not add existing songs.
-- **Understands images**: Select, drag, or paste an image into the chat window (requires a local model with image input).
+- **Understands images**: Select, drag, or paste an image into the chat window (requires a model with image input).
 - **Updatable song knowledge**: Open Song Knowledge in the notebook or from Companion tools in chat to search songs, creators, characters, and events, view sources, mark favorite songs, and export, edit, or import JSON. With memory enabled, clearly saying that you like a recognized song also adds it to favorites. It includes 200 verified Hatsune Miku songs (creators, years, and original uploads from VocaDB); for songs it doesn't have, she says she isn't sure instead of pretending. You can also enable the optional “Look up songs on VocaDB” under Local AI in Settings (off by default) to make an additional creator and official-video lookup with VocaDB attribution.
 - **MikuWiki and AIMCP**: [MikuWiki](https://mikuwiki.qimake.com/) provides the online song catalog. In Song Knowledge → AIMCP Settings, enter a key you generate for yourself on the [MikuWiki AIMCP account page](https://mikuwiki.qimake.com/knowledge?lang=en). The app uses the fixed `https://mikuwiki.qimake.com/api/v1/song-knowledge` endpoint for catalog updates and `/api/v1/knowledge` for song lookup, storing the key only in this Mac's Keychain. With a key configured, an unknown song in chat or an Enter search in Song Knowledge sends the identified title or entered search text, never the full conversation. A manual update prefers AIMCP when a key is present and tries GitHub only after a connection failure, server error, missing endpoint, or failed data validation. Key, permission, and quota errors are reported directly instead of silently falling back; existing data is kept if GitHub also cannot be reached. AIMCP and GitHub use separate caches; imported JSON still fully overrides an entry with the same ID, while favorites are stored separately and remain available offline.
 - **Our memory album**: Open the notebook’s Memory Album, or choose “Take a Memory Photo” from the ♪ menu, to manually photograph Miku and her scene, add a title and note, and choose everyday, first meeting, birthday, or achievement. Export photos or delete them individually.
@@ -47,14 +47,14 @@ Hatsune Miku, living on your macOS desktop. She walks around animated Tokyo stre
 
 ### Optional proactive companionship
 
-Each of these can be turned on separately. **All are off by default**, and everything is handled on this Mac only:
+Each of these can be turned on separately. **All are off by default**. Local AI processes them on this Mac; sharing screen, app and media observations with cloud AI requires a separate opt-in:
 
 | Option | What she does |
 | --- | --- |
 | Apps & breaks | Notices what you're using and for how long, and suggests a break when it's time |
 | Music playing | Reads the song title from Music / Spotify and talks about what you're listening to |
 | YouTube / Niconico | Reads the video title |
-| Glance at the screen | Now and then shows the screen to the local model (never stored; requires macOS 14 or later) |
+| Glance at the screen | Now and then shows the screen to the selected model (cloud sharing requires opt-in; never stored; requires macOS 14 or later) |
 | Random little moments | Hums, asks you something, or invites you to play at random times |
 
 ### Desktop integration
@@ -65,7 +65,7 @@ Separate floating **Chat / Notebook** buttons, menu bar controls under **♪**, 
 
 - An Apple silicon Mac running macOS 13 or later
 - Building from source requires Xcode 26 or corresponding Command Line Tools, including the macOS 26 SDK or later
-- A separately running local AI service for chat; the service and model may need a newer system or more memory
+- For chat, a local AI service or your own OpenAI-compatible cloud service and API key; local services and models may need a newer system or more memory
 
 ## Install and build
 
@@ -92,7 +92,7 @@ Installation also produces these files in `outputs/`, **one level above the proj
 | `Miku Desktop (Public).zip` | Shareable package; each user obtains the Tda model themselves |
 | `Miku Desktop.app` | A shortcut to the latest local build |
 
-Once it's open, use the **Chat / Notebook** buttons on the desktop or **♪** in the menu bar. A local wallpaper server is built in, so Plash isn't needed. Scenes and the character work offline; chat needs the local AI service, and weather needs an internet connection.
+Once it's open, use the **Chat / Notebook** buttons on the desktop or **♪** in the menu bar. A local wallpaper server is built in, so Plash isn't needed. Scenes and the character work offline; chat needs an AI service configured, while weather and cloud AI need an internet connection.
 
 ### Updates and saved data
 
@@ -131,21 +131,29 @@ python3 scripts/import-tda-model.py /path/to/Tda式デフォ服ミク_ver1.1.zip
 
 A local build that includes the Tda model is for your own use only. The model and its textures are not distributed with the source code.
 
-## Setting up the local AI
+## Setting up AI
+
+### Local
 
 1. Install and start [oMLX](https://github.com/jundot/omlx), and load a local model.
-2. Open **Settings → Local AI** and enter the endpoint and the model ID your service actually provides.
+2. Open **Settings → Local AI**, select **AI source: On this Mac**, and enter the endpoint and the model ID your service actually provides.
 3. Click **Test connection**; once it succeeds, you can start chatting.
 
 The default endpoint is `http://127.0.0.1:8000/v1` with the model `Qwen3.5-0.8B-MLX-4bit`; change them to match your local service. The app doesn't ship a language model. Small models are limited in knowledge, language, and staying in character, so a larger model gives better results.
 
-For safety, only loopback (local) endpoints are accepted. When the settings match oMLX, the app reads oMLX's existing API key at run time and never writes it into the project. Image chat and "Glance at the screen" need both the service and the loaded model to support visual input.
+Local endpoints accept only loopback addresses. When the settings match oMLX, the app reads oMLX's existing API key at run time and never writes it into the project. Image chat and "Glance at the screen" need both the service and the loaded model to support visual input.
+
+### Cloud
+
+Under **Settings → Local AI**, select **AI source: Cloud**, enter your own OpenAI-compatible endpoint (such as `https://your-service/v1`), model ID and API key, then click **Test connection**. Remote endpoints require HTTPS; your key is stored only in this Mac's Keychain. Local and cloud endpoints and model IDs are saved separately, so switching does not overwrite them.
+
+Cloud mode sends chat content, memory summaries and diary notes to the service you choose. Screen, app and media observations are not shared by default. Enable “Also let the cloud see your screen, apps and media” to share them according to each observation setting. Images you attach to chat are sent with the message and require a vision-capable model.
 
 ## Privacy and network access
 
 - Conversations, memories, diary entries, and chat images are stored in `~/Library/Application Support/MikuDesktop/`. Preferences such as personality and language are stored in macOS user defaults.
-- Chat messages and any observations you turn on go to the local AI. With an AIMCP key configured, song queries missing from the offline catalog also send the identified title to MikuWiki, never the full conversation. Screen captures for proactive observations are never saved and need Screen Recording permission; the music and video options may need macOS Automation permission.
-- Voice calls request microphone and speech-recognition permission only after you press the phone button. Recognition audio is neither saved nor sent to a recognition server. If on-device recognition for the selected language is unavailable, the app tells you instead of using cloud recognition. Recognized text follows the same memory settings as typed chat.
+- Chat messages go to your selected local or cloud AI. Cloud AI also receives memory summaries and diary notes; screen, app and media observations are not shared by default. With an AIMCP key configured, song queries missing from the offline catalog also send the identified title to MikuWiki, never the full conversation. Screen captures for proactive observations are never saved and need Screen Recording permission; the music and video options may need macOS Automation permission.
+- Voice calls request microphone and speech-recognition permission only after you press the phone button. Recognition audio is neither saved nor sent to a recognition server. If on-device recognition for the selected language is unavailable, the app tells you instead of using cloud recognition. Recognized text goes to the selected AI and follows the same memory settings as typed chat.
 - When reading aloud is enabled, text goes only to the configured local TTS endpoint. Supply your own voice model; the app package contains no voice weights or reference audio. To keep her quiet for a while, click the speaker button in the chat window, or choose Mute for 1 Hour or Mute Until Turned Back On under Miku’s Voice in the ♪ menu. Nothing is generated while muted, and what she says on her own while asleep is never read aloud. Reading aloud also pauses on its own while you are on a call or recording (another app is using the microphone) or something is full screen in front; replays you ask for still play.
 - To keep her quiet during a Focus: macOS doesn’t let apps read Focus directly, so use a Shortcuts automation instead (macOS 26 or later). Run `open -g "miku-desktop://quiet/on"` when the Focus turns on and `open -g "miku-desktop://quiet/off"` when it turns off; step-by-step instructions are under Miku’s Voice → Follow Focus… in the ♪ menu. A Focus ending only lifts its own quiet, never a mute you set yourself. `miku-desktop://` links accept only these voice commands.
 - Resetting memory clears conversations, summaries, remembered facts, interaction history, and relationship data, but keeps her personality and other settings. You can restore from the backup afterwards or delete it permanently.
@@ -154,6 +162,7 @@ For safety, only loopback (local) endpoints are accepted. When the settings matc
 
 | Connects to | Why | How often |
 | --- | --- | --- |
+| Configured AI endpoint | Local AI uses loopback; cloud AI receives chats, memory summaries and diary notes over HTTPS, with separate opt-in for screen, app and media observations | When needed for chats, diary entries or enabled proactive features |
 | Open-Meteo | Weather for the selected city's coordinates | Periodically |
 | api.github.com, github.com | Check this project's stable releases and open the download page you choose; no conversations or personal records are sent | Once a day automatically or on request; automatic checks can be disabled |
 | magicalmirai.com, snowmiku.com, mikuexpo.com, www.scla.com.cn | Reads official public event dates, cities and venues; no chat content is sent | Every three days or on manual search, cached locally |

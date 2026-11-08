@@ -4,7 +4,7 @@
 
 macOS のデスクトップに住む初音ミク。動く東京の街並みを歩き回り、マウスに反応し、Mac の中で動くローカル AI を通じておしゃべりして、一緒に過ごした時間を覚えていてくれます。
 
-**Web サイト**：[miku.qimake.com](https://miku.qimake.com/)（紹介と動く背景のデモ）
+**Web サイト**：[desktop.mikutool.com](https://desktop.mikutool.com/)（紹介と動く背景のデモ）
 
 ![夕暮れの渋谷スクランブル交差点の背景](Wallpaper/assets/scenes/shibuya-scramble-dusk.jpg)
 

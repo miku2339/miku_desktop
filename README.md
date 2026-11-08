@@ -4,7 +4,7 @@
 
 住在 macOS 桌面上的初音未來：她會在動態的東京街景裡走動、回應你的滑鼠，也能透過在本機執行的 AI 和你聊天，並記住你們的相處。
 
-**網站**：[miku.qimake.com](https://miku.qimake.com/)（介紹與動態背景示範）
+**網站**：[desktop.mikutool.com](https://desktop.mikutool.com/)（介紹與動態背景示範）
 
 ![黃昏的澀谷十字路口背景](Wallpaper/assets/scenes/shibuya-scramble-dusk.jpg)
 

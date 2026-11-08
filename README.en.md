@@ -4,7 +4,7 @@
 
 Hatsune Miku, living on your macOS desktop. She walks around animated Tokyo street scenes, reacts to your pointer, and chats with you through an AI running on your own Mac, remembering the time you spend together.
 
-**Website**: [miku.qimake.com](https://miku.qimake.com/) (overview and live background demo)
+**Website**: [desktop.mikutool.com](https://desktop.mikutool.com/) (overview and live background demo)
 
 ![The Shibuya scramble crossing at dusk](Wallpaper/assets/scenes/shibuya-scramble-dusk.jpg)
 

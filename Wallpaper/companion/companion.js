@@ -14,6 +14,7 @@ import { shouldFallBack, streamTalk, talkFrame, textTalk, voiceTalk } from './ta
 import { checkLoop, shouldReportError } from './loop-health.js';
 import { canUseRoomBed, DEFAULT_ROOM_LAYOUT, loadRoomLayout, roomViewportGeometry } from './room-layout.js';
 import { createSleepCycle, isAsleep, normalizeOverride, scheduledAsleep } from './sleep.js';
+import { createNativeBridge } from './bridge.js';
 import { OutlineEffect } from './vendor/effects/OutlineEffect.js';
 import { chooseHandProp, createProps, hatFor, isTeaTime } from './props.js';
 
@@ -36,7 +37,9 @@ if (bedOverlay) {
 }
 const ambientCanvas = document.querySelector('#ambientCanvas');
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
-const hasNativeBridge = () => Boolean(window.webkit?.messageHandlers?.miku?.postMessage);
+// The macOS or Windows app around the page (bridge.js); none when opened in a browser.
+const nativeBridge = createNativeBridge(window);
+const hasNativeBridge = () => nativeBridge.available();
 const requestedLayer = new URLSearchParams(window.location.search).get('layer');
 const layerMode = ['background', 'character'].includes(requestedLayer) ? requestedLayer : 'all';
 const showsBackground = layerMode !== 'character';
@@ -662,10 +665,7 @@ function applyBackground(hour, elapsed) {
 }
 
 function postNative(message) {
-  const handler = window.webkit?.messageHandlers?.miku;
-  if (!handler?.postMessage) return false;
-  handler.postMessage(message);
-  return true;
+  return nativeBridge.post(message);
 }
 
 const bubbleName = document.createElement('span');

@@ -125,6 +125,15 @@ pub fn icon_host() -> Result<isize, String> {
     Err("desktop icon host not found (is Explorer running?)".into())
 }
 
+#[cfg(windows)]
+pub fn character_attachment_valid(hwnd: isize) -> bool {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{GetWindow, IsWindow, GW_OWNER};
+    unsafe {
+        let window = hwnd as windows_sys::Win32::Foundation::HWND;
+        IsWindow(window) != 0 && icon_host().is_ok_and(|host| GetWindow(window, GW_OWNER) as isize == host)
+    }
+}
+
 /// Keeps a desktop-owned character below applications without activating the desktop.
 #[cfg(windows)]
 pub fn position_above_icons(hwnd: isize, frame: Frame) -> Result<(), String> {

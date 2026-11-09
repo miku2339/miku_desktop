@@ -32,6 +32,17 @@ jobs:
       - name: Fetch public default model
         run: ./windows/scripts/fetch-model.ps1
 
+      - name: Validate Windows helper syntax
+        run: |
+          $tokens = $null
+          $errors = $null
+          $source = Get-Content windows/scripts/platform-host.ps1 -Raw
+          $null = [System.Management.Automation.Language.Parser]::ParseInput($source, [ref]$tokens, [ref]$errors)
+          if ($errors.Count) { throw ($errors | Out-String) }
+
+      - name: Run interface tests
+        run: node --test windows/ui/tests/*.test.mjs
+
       - name: Run Rust unit tests
         working-directory: windows/src-tauri
         run: cargo test --locked --lib

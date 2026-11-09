@@ -1,11 +1,17 @@
-//! Miku Desktop for Windows: the Tauri 2 + WebView2 shell around the shared page in
-//! `Wallpaper/companion` (docs/windows-port.md, stage 2).
+//! Miku Desktop for Windows with shared character rendering and native companion services.
 
 mod bridge;
+mod commands;
+mod companion;
 mod desktop;
+mod integration;
 mod layers;
+mod panels;
 mod passthrough;
+mod photos;
+mod platform;
 mod protocol;
+mod scheduler;
 mod settings;
 
 use std::collections::HashMap;
@@ -47,6 +53,11 @@ pub(crate) fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 const MONITOR_CHECK: Duration = Duration::from_secs(2);
 
 pub fn run() {
+    if let Err(error) = platform::claim_instance() {
+        eprintln!("Miku Desktop: {error}");
+        return;
+    }
+    configure_motion();
     let app = tauri::Builder::default()
         .register_uri_scheme_protocol(protocol::SCHEME, |ctx, request| {
             match ctx.app_handle().try_state::<PageFiles>() {
@@ -55,7 +66,10 @@ pub fn run() {
             }
         })
         .on_page_load(|webview, payload| layers::page_loaded(webview, payload.event()))
-        .invoke_handler(tauri::generate_handler![bridge::miku_message, bridge::miku_hit_result])
+        .invoke_handler(tauri::generate_handler![bridge::miku_message, bridge::miku_hit_result,
+            commands::desktop_snapshot, commands::desktop_open, commands::desktop_update_settings,
+            commands::desktop_send_message, commands::desktop_action, commands::desktop_platform,
+            commands::desktop_listen, commands::desktop_speak, commands::desktop_stop_speech])
         .setup(|app| {
             let handle = app.handle().clone();
             let data_dir = app.path().data_dir()?.join("MikuDesktop");
@@ -66,6 +80,21 @@ pub fn run() {
             }
             let imported_tda = data_dir.join("CharacterModels").join("tda");
             app.manage(PageFiles::new(root, imported_tda));
+            if let Ok(files) = std::fs::read_dir(data_dir.join("speech-cache")) {
+                for entry in files.flatten() {
+                    let file = entry.path();
+                    if file.extension().is_some_and(|extension| extension == "wav")
+                        && file.file_stem().and_then(|stem| stem.to_str()).is_some_and(|stem| uuid::Uuid::parse_str(stem).is_ok()) {
+                        let _ = std::fs::remove_file(file);
+                    }
+                }
+            }
+            let services = integration::Services::new(data_dir.clone());
+            if !data_dir.join("companion-settings.json").exists()
+                && std::env::var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS").unwrap_or_default().contains("--force-prefers-no-reduced-motion") {
+                let _ = services.companion.update_settings(serde_json::json!({"fullMotion":true}));
+            }
+            app.manage(services);
             app.manage(Shell {
                 settings: Mutex::new(Settings::load(&data_dir)),
                 layers: Mutex::new(Layers::default()),
@@ -74,21 +103,41 @@ pub fn run() {
             });
             build_tray(&handle)?;
             layers::create_all(&handle);
+            let _ = panels::open(&handle, "controls");
+            scheduler::start(handle.clone());
             spawn_pointer_polling(handle);
             Ok(())
         })
         .build(tauri::generate_context!())
         .expect("error while building Miku Desktop");
 
-    app.run(|_app, event| {
+    app.run(|app, event| {
         // The layers have no close button; keep running in the tray if Explorer takes a
         // layer down with it. Only the tray's Quit (an explicit exit code) ends the app.
-        if let RunEvent::ExitRequested { api, code, .. } = event {
-            if code.is_none() {
-                api.prevent_exit();
+        match event {
+            RunEvent::ExitRequested { api, code, .. } if code.is_none() => api.prevent_exit(),
+            RunEvent::Exit => {
+                integration::stop(app);
+                platform::shutdown();
+                platform::release_instance();
             }
+            _ => {}
         }
     });
+}
+
+fn configure_motion() {
+    #[cfg(windows)]
+    if let Some(data) = std::env::var_os("APPDATA") {
+        let file = PathBuf::from(data).join("MikuDesktop/companion-settings.json");
+        let setting = std::fs::read(file).ok().and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok());
+        if let Some(enabled) = setting.as_ref().and_then(|value| value["fullMotion"].as_bool()) {
+            let current = std::env::var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS").unwrap_or_default();
+            let mut flags: Vec<_> = current.split_whitespace().filter(|flag| !flag.starts_with("--force-prefers-reduced-motion") && !flag.starts_with("--force-prefers-no-reduced-motion")).map(String::from).collect();
+            if enabled { flags.push("--force-prefers-no-reduced-motion".into()); }
+            std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", flags.join(" "));
+        }
+    }
 }
 
 /// `Wallpaper/` with the shared page and assets. Debug builds read the repository's copy so
@@ -113,9 +162,16 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let touch = CheckMenuItem::with_id(app, "interactive", "可以觸碰 Miku", true, interactive, None::<&str>)?;
     let reset = MenuItem::with_id(app, "reset-position", "Miku 回到原位", true, None::<&str>)?;
     let reload = MenuItem::with_id(app, "reload", "重新載入桌面", true, None::<&str>)?;
+    let chat = MenuItem::with_id(app, "chat", "和 Miku 聊天", true, None::<&str>)?;
+    let notebook = MenuItem::with_id(app, "notebook", "手帳", true, None::<&str>)?;
+    let settings = MenuItem::with_id(app, "settings", "設定", true, None::<&str>)?;
+    let album = MenuItem::with_id(app, "album", "回憶相簿", true, None::<&str>)?;
+    let songs = MenuItem::with_id(app, "songs", "歌曲知識", true, None::<&str>)?;
+    let controls = MenuItem::with_id(app, "controls", "桌面控制", true, None::<&str>)?;
+    let come = MenuItem::with_id(app, "come", "Miku 過來一下", true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, "quit", "結束 Miku Desktop", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&touch, &reset, &reload, &separator, &quit])?;
+    let menu = Menu::with_items(app, &[&chat, &notebook, &settings, &album, &songs, &controls, &come, &separator, &touch, &reset, &reload, &quit])?;
 
     let mut tray = TrayIconBuilder::with_id("main").tooltip("Miku Desktop").menu(&menu);
     if let Some(icon) = app.default_window_icon() {
@@ -126,6 +182,8 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         "interactive" => layers::set_interactive(app, touch_item.is_checked().unwrap_or(true)),
         "reset-position" => layers::reset_pinned_position(app),
         "reload" => layers::reload_all(app),
+        "chat" | "notebook" | "settings" | "album" | "songs" | "controls" => { let _ = panels::open(app, event.id.as_ref()); }
+        "come" => integration::broadcast(app, "callOver", &serde_json::Value::Null, false),
         "quit" => app.exit(0),
         _ => {}
     })

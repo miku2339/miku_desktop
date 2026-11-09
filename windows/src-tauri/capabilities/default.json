@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "The Miku layers call only the app's own commands (miku_message, miku_hit_result); no Tauri core APIs are exposed to the page.",
-  "windows": ["bg-*", "char-*"],
+  "description": "App windows use origin-checked companion commands; wallpaper layers use only their own bridge. No Tauri core APIs are exposed.",
+  "windows": ["bg-*", "char-*", "app-*"],
   "permissions": []
 }

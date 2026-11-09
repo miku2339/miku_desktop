@@ -64,8 +64,23 @@ pub fn rebuild_if_monitors_changed(app: &AppHandle) {
     }
     let shell = app.state::<Shell>();
     if lock(&shell.layers).monitors == frames {
-        return;
+        let windows = app.webview_windows();
+        let count = windows.keys().filter(|name| name.starts_with(BACKGROUND_PREFIX) || name.starts_with(CHARACTER_PREFIX)).count();
+        let complete = count == frames.len() * 2;
+        #[cfg(windows)]
+        let attached = windows.iter().filter(|(name, _)| name.starts_with(CHARACTER_PREFIX)).all(|(_, window)| {
+            window.hwnd().is_ok_and(|hwnd| desktop::character_attachment_valid(hwnd.0 as isize))
+        });
+        #[cfg(not(windows))]
+        let attached = true;
+        if complete && attached { return; }
+        #[cfg(windows)]
+        if desktop::icon_host().is_err() { return; }
     }
+    force_rebuild(app);
+}
+
+pub fn force_rebuild(app: &AppHandle) {
     destroy_all(app);
     create_all(app);
 }
@@ -98,6 +113,7 @@ fn create_background(app: &AppHandle, label: &str, frame: Frame) -> tauri::Resul
         .focused(false)
         .visible(false)
         .build()?;
+    install_recovery(&window);
     place(&window, frame)?;
     window.set_ignore_cursor_events(true)?;
 
@@ -141,6 +157,7 @@ fn create_character(app: &AppHandle, label: &str, frame: Frame) -> tauri::Result
     #[cfg(not(target_os = "macos"))]
     let builder = builder.transparent(true);
     let window = builder.build()?;
+    install_recovery(&window);
     set_character_passthrough(&window, true)?;
     #[cfg(windows)]
     {
@@ -194,6 +211,7 @@ pub fn page_loaded(webview: &Webview, event: PageLoadEvent) {
     let Some(window) = app.get_webview_window(&label) else { return };
     let shell = app.state::<Shell>();
     let is_character = label.starts_with(CHARACTER_PREFIX);
+    if !is_character && !label.starts_with(BACKGROUND_PREFIX) { return; }
 
     match event {
         PageLoadEvent::Started => {
@@ -213,13 +231,16 @@ pub fn page_loaded(webview: &Webview, event: PageLoadEvent) {
         PageLoadEvent::Finished => {
             let interactive = is_character && lock(&shell.settings).interactive_mode;
             configure_page(&window, &shell, interactive);
+            let application = app.clone();
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+                crate::integration::configure(&application);
+            });
             if is_character {
                 if let Some(layer) = lock(&shell.layers).characters.get_mut(&label) {
                     layer.ready = true;
                 }
             }
-            // TODO(stages 3–5): weather, sun times, sleep schedule, relationship, special days
-            // and music, which macOS pushes 1.5 s after the page finishes loading.
         }
     }
 }
@@ -283,4 +304,42 @@ pub fn reload_all(app: &AppHandle) {
             eval_page(&window, "window.location.reload()");
         }
     }
+}
+
+/// Recreate a failed browser process; renderer failures can reload the affected page.
+pub fn install_recovery(window: &WebviewWindow) {
+    #[cfg(windows)]
+    {
+        let target = window.clone();
+        let _ = window.with_webview(move |view| {
+            use webview2_com::{ProcessFailedEventHandler, Microsoft::Web::WebView2::Win32::*};
+            let handler = ProcessFailedEventHandler::create(Box::new(move |_, args| {
+                let Some(args) = args else { return Ok(()); };
+                let mut kind = COREWEBVIEW2_PROCESS_FAILED_KIND::default();
+                unsafe { args.ProcessFailedKind(&mut kind)?; }
+                let window = target.clone();
+                if kind == COREWEBVIEW2_PROCESS_FAILED_KIND_BROWSER_PROCESS_EXITED {
+                    static RESTARTING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+                    if RESTARTING.swap(true, std::sync::atomic::Ordering::SeqCst) { return Ok(()); }
+                    tauri::async_runtime::spawn(async move {
+                        crate::integration::stop(window.app_handle());
+                        crate::platform::shutdown();
+                        crate::platform::release_instance();
+                        window.app_handle().restart();
+                    });
+                } else if kind == COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_EXITED {
+                    let _ = window.reload();
+                }
+                Ok(())
+            }));
+            unsafe {
+                if let Ok(webview) = view.controller().CoreWebView2() {
+                    let mut token = 0;
+                    let _ = webview.add_ProcessFailed(&handler, &mut token);
+                }
+            }
+        });
+    }
+    #[cfg(not(windows))]
+    let _ = window;
 }

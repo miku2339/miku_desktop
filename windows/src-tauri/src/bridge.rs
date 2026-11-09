@@ -47,11 +47,11 @@ pub fn miku_message(window: WebviewWindow, shell: State<'_, Shell>, message: Val
             let mut settings = lock(&shell.settings);
             settings.pinned_anchor = anchor.map(|x| x.clamp(0.0, 1.0));
             settings.save(&shell.data_dir);
-            // TODO(stage 6): tell the desktop controls window, like `onPinnedAnchorChanged`.
+            drop(settings);
+            crate::integration::notify(window.app_handle());
         }
         "touch" => {
-            // Head pats, hand holding (`kind: "handHold"`), pokes… macOS records these in
-            // CompanionMemory; the memory file is ported in stage 3. Logged for now.
+            // Keep touch history and relationship state in sync with the shared character.
             let Some(touch) = payload.get("kind").and_then(Value::as_str) else { return };
             if touch.chars().count() > 24 {
                 return;
@@ -64,13 +64,18 @@ pub fn miku_message(window: WebviewWindow, shell: State<'_, Shell>, message: Val
                 entry.insert("part".into(), Value::from(part));
             }
             shell.diagnostics.log("shell", &entry);
+            let app = window.app_handle();
+            if let Some(services) = app.try_state::<crate::integration::Services>() {
+                services.companion.record_touch(touch, part);
+                crate::integration::configure(app);
+                crate::integration::notify(app);
+            }
         }
         "haptic" | "hover-haptic" => {
             // Trackpad haptics are macOS only; nothing to do on Windows.
         }
         "sleep" => {
-            // Woken up by a touch: macOS keeps her up for `minutes` (SleepSchedule.wake) and
-            // pushes `setSleep` to both layers. The sleep schedule is ported later; logged for now.
+            // Touch temporarily overrides the sleep schedule and updates both layers.
             if payload.get("asleep").and_then(Value::as_bool) != Some(false) {
                 return;
             }
@@ -79,6 +84,11 @@ pub fn miku_message(window: WebviewWindow, shell: State<'_, Shell>, message: Val
             entry.insert("what".into(), Value::from("wake"));
             entry.insert("minutes".into(), Value::from(minutes));
             shell.diagnostics.log("shell", &entry);
+            let app = window.app_handle();
+            if let Some(services) = app.try_state::<crate::integration::Services>() {
+                let _ = services.companion.action("wake", serde_json::json!({"minutes":minutes}));
+                crate::integration::configure(app);
+            }
         }
         "diag" => shell.diagnostics.log(label, payload),
         _ => {}

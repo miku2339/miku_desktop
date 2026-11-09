@@ -1,5 +1,5 @@
-//! Puts the background layer behind the desktop icons, the Windows counterpart of the macOS
-//! panel at `desktopWindow + 1`.
+//! Places the background behind the desktop icons and the character above them, within
+//! the desktop's own window hierarchy.
 //!
 //! Asking Progman with the undocumented message 0x052C makes Explorer create a `WorkerW`
 //! window between the wallpaper and the icons (`SHELLDLL_DefView`); the background window
@@ -98,4 +98,65 @@ pub fn attach_behind_icons(hwnd: isize, frame: Frame) -> Result<(), String> {
 #[cfg(not(windows))]
 pub fn attach_behind_icons(_hwnd: isize, _frame: Frame) -> Result<(), String> {
     Err("the desktop background layer is only available on Windows".into())
+}
+
+/// The desktop window whose children include the icon view.
+#[cfg(windows)]
+pub fn icon_host() -> Result<isize, String> {
+    use std::ptr::{null, null_mut};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{FindWindowExW, FindWindowW};
+
+    let wide = |text: &str| text.encode_utf16().chain(Some(0)).collect::<Vec<_>>();
+    let defview = wide("SHELLDLL_DefView");
+    let worker = wide("WorkerW");
+    unsafe {
+        let progman = FindWindowW(wide("Progman").as_ptr(), null());
+        if !progman.is_null() && !FindWindowExW(progman, null_mut(), defview.as_ptr(), null()).is_null() {
+            return Ok(progman as isize);
+        }
+        let mut host = FindWindowExW(null_mut(), null_mut(), worker.as_ptr(), null());
+        while !host.is_null() {
+            if !FindWindowExW(host, null_mut(), defview.as_ptr(), null()).is_null() {
+                return Ok(host as isize);
+            }
+            host = FindWindowExW(null_mut(), host, worker.as_ptr(), null());
+        }
+    }
+    Err("desktop icon host not found (is Explorer running?)".into())
+}
+
+/// Positions a character child above its sibling icon view without activating the desktop.
+#[cfg(windows)]
+pub fn position_above_icons(hwnd: isize, frame: Frame) -> Result<(), String> {
+    use std::ptr::{null, null_mut};
+    use windows_sys::Win32::Foundation::{HWND, RECT};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        FindWindowExW, GetParent, GetWindowRect, SetWindowPos, HWND_TOP, SWP_FRAMECHANGED,
+        SWP_NOACTIVATE,
+    };
+
+    unsafe {
+        let window = hwnd as HWND;
+        let host = GetParent(window);
+        let defview: Vec<u16> = "SHELLDLL_DefView".encode_utf16().chain(Some(0)).collect();
+        if host.is_null() || FindWindowExW(host, null_mut(), defview.as_ptr(), null()).is_null() {
+            return Err("character desktop icon host is no longer available".into());
+        }
+        let mut host_rect = RECT { left: 0, top: 0, right: 0, bottom: 0 };
+        if GetWindowRect(host, &mut host_rect) == 0 {
+            return Err(format!("GetWindowRect for icon host failed: {}", std::io::Error::last_os_error()));
+        }
+        if SetWindowPos(
+            window,
+            HWND_TOP,
+            frame.x - host_rect.left,
+            frame.y - host_rect.top,
+            frame.width as i32,
+            frame.height as i32,
+            SWP_NOACTIVATE | SWP_FRAMECHANGED,
+        ) == 0 {
+            return Err(format!("SetWindowPos above icons failed: {}", std::io::Error::last_os_error()));
+        }
+    }
+    Ok(())
 }

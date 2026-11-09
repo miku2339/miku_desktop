@@ -1,7 +1,7 @@
 //! The two desktop layers, one set per monitor, like `WallpaperWindowController`:
 //! - background (`?layer=background`): attached under WorkerW, behind the desktop icons;
-//! - character (`?layer=character`): borderless, transparent, always on top, click-through
-//!   except over Miku (passthrough.rs).
+//! - character (`?layer=character`): transparent child above the desktop icons, click-through
+//!   except over Miku (passthrough.rs), below application windows.
 
 use serde_json::Value;
 use tauri::webview::PageLoadEvent;
@@ -128,16 +128,40 @@ fn create_character(app: &AppHandle, label: &str, frame: Frame) -> tauri::Result
         .resizable(false)
         .shadow(false)
         .skip_taskbar(true)
-        .always_on_top(true)
+        .focusable(false)
         .focused(false)
         .visible(false);
+    #[cfg(windows)]
+    let builder = {
+        let host = desktop::icon_host().map_err(std::io::Error::other)?;
+        // Register the parent with Tauri so mouse pass-through changes preserve WS_CHILD.
+        builder.parent_raw(windows::Win32::Foundation::HWND(host as *mut std::ffi::c_void))
+    };
     // macOS needs the private-API feature for this; the Windows shell does not.
     #[cfg(not(target_os = "macos"))]
     let builder = builder.transparent(true);
     let window = builder.build()?;
-    place(&window, frame)?;
     window.set_ignore_cursor_events(true)?;
-    window.show()?;
+    #[cfg(windows)]
+    {
+        let hwnd = window.hwnd()?.0 as isize;
+        let target = window.clone();
+        app.run_on_main_thread(move || {
+            let result = desktop::position_above_icons(hwnd, frame)
+                .and_then(|()| target.show().map_err(|error| error.to_string()));
+            if let Err(error) = result {
+                let shell = target.state::<Shell>();
+                lock(&shell.layers).characters.remove(target.label());
+                shell.diagnostics.note("layers", &format!("{}: {error}", target.label()));
+                let _ = target.destroy();
+            }
+        })?;
+    }
+    #[cfg(not(windows))]
+    {
+        place(&window, frame)?;
+        window.show()?;
+    }
     Ok(())
 }
 

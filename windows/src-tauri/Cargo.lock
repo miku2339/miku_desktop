@@ -1721,6 +1721,7 @@ dependencies = [
  "serde_json",
  "tauri",
  "tauri-build",
+ "windows",
  "windows-sys 0.59.0",
 ]
 

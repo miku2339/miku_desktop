@@ -22,6 +22,7 @@ percent-encoding = "2"
 [target.'cfg(windows)'.dependencies]
 # Raw Win32 for attaching the background layer under WorkerW (desktop.rs).
 windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
+windows = { version = "0.62", features = ["Win32_Foundation"] }
 
 [profile.release]
 codegen-units = 1

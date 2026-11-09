@@ -1,5 +1,5 @@
-//! Places the background behind the desktop icons and the character above them, within
-//! the desktop's own window hierarchy.
+//! Places the background behind the desktop icons and keeps the character owned by
+//! the desktop, below application windows.
 //!
 //! Asking Progman with the undocumented message 0x052C makes Explorer create a `WorkerW`
 //! window between the wallpaper and the icons (`SHELLDLL_DefView`); the background window
@@ -125,35 +125,31 @@ pub fn icon_host() -> Result<isize, String> {
     Err("desktop icon host not found (is Explorer running?)".into())
 }
 
-/// Positions a character child above its sibling icon view without activating the desktop.
+/// Keeps a desktop-owned character below applications without activating the desktop.
 #[cfg(windows)]
 pub fn position_above_icons(hwnd: isize, frame: Frame) -> Result<(), String> {
     use std::ptr::{null, null_mut};
-    use windows_sys::Win32::Foundation::{HWND, RECT};
+    use windows_sys::Win32::Foundation::HWND;
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        FindWindowExW, GetParent, GetWindowRect, SetWindowPos, HWND_TOP, SWP_FRAMECHANGED,
-        SWP_NOACTIVATE,
+        FindWindowExW, GetWindow, SetWindowPos, GW_OWNER, HWND_BOTTOM, SWP_FRAMECHANGED,
+        SWP_NOACTIVATE, SWP_NOOWNERZORDER,
     };
 
     unsafe {
         let window = hwnd as HWND;
-        let host = GetParent(window);
+        let host = GetWindow(window, GW_OWNER);
         let defview: Vec<u16> = "SHELLDLL_DefView".encode_utf16().chain(Some(0)).collect();
         if host.is_null() || FindWindowExW(host, null_mut(), defview.as_ptr(), null()).is_null() {
             return Err("character desktop icon host is no longer available".into());
         }
-        let mut host_rect = RECT { left: 0, top: 0, right: 0, bottom: 0 };
-        if GetWindowRect(host, &mut host_rect) == 0 {
-            return Err(format!("GetWindowRect for icon host failed: {}", std::io::Error::last_os_error()));
-        }
         if SetWindowPos(
             window,
-            HWND_TOP,
-            frame.x - host_rect.left,
-            frame.y - host_rect.top,
+            HWND_BOTTOM,
+            frame.x,
+            frame.y,
             frame.width as i32,
             frame.height as i32,
-            SWP_NOACTIVATE | SWP_FRAMECHANGED,
+            SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_FRAMECHANGED,
         ) == 0 {
             return Err(format!("SetWindowPos above icons failed: {}", std::io::Error::last_os_error()));
         }

@@ -1,6 +1,6 @@
 //! The two desktop layers, one set per monitor, like `WallpaperWindowController`:
 //! - background (`?layer=background`): attached under WorkerW, behind the desktop icons;
-//! - character (`?layer=character`): transparent child above the desktop icons, click-through
+//! - character (`?layer=character`): transparent window owned by the desktop, click-through
 //!   except over Miku (passthrough.rs), below application windows.
 
 use serde_json::Value;
@@ -134,8 +134,8 @@ fn create_character(app: &AppHandle, label: &str, frame: Frame) -> tauri::Result
     #[cfg(windows)]
     let builder = {
         let host = desktop::icon_host().map_err(std::io::Error::other)?;
-        // Register the parent with Tauri so mouse pass-through changes preserve WS_CHILD.
-        builder.parent_raw(windows::Win32::Foundation::HWND(host as *mut std::ffi::c_void))
+        // Keep a top-level window for transparency without clipping the desktop icon view.
+        builder.owner_raw(windows::Win32::Foundation::HWND(host as *mut std::ffi::c_void))
     };
     // macOS needs the private-API feature for this; the Windows shell does not.
     #[cfg(not(target_os = "macos"))]

@@ -9,7 +9,7 @@ use serde_json::{Map, Value};
 use tauri::{Manager, State, WebviewWindow};
 
 use crate::passthrough::{self, NormRect};
-use crate::{lock, Shell};
+use crate::{layers, lock, Shell};
 
 #[tauri::command]
 pub fn miku_message(window: WebviewWindow, shell: State<'_, Shell>, message: Value) {
@@ -39,7 +39,7 @@ pub fn miku_message(window: WebviewWindow, shell: State<'_, Shell>, message: Val
                 active && layer.want_ignore(false)
             };
             if take_mouse {
-                let _ = window.set_ignore_cursor_events(false);
+                let _ = layers::set_character_passthrough(&window, false);
             }
         }
         "pin" => {
@@ -95,7 +95,7 @@ pub fn miku_hit_result(window: WebviewWindow, shell: State<'_, Shell>, seq: u64,
         passthrough::hit_result(layer, interactive, seq, zone.as_deref())
     };
     if let Some(passthrough::Action::SetIgnore(ignore)) = action {
-        let _ = window.set_ignore_cursor_events(ignore);
+        let _ = layers::set_character_passthrough(&window, ignore);
     }
 }
 

@@ -172,7 +172,7 @@ fn poll_pointer(app: &AppHandle) {
         let Some(window) = app.get_webview_window(&label) else { continue };
         match action {
             Action::SetIgnore(ignore) => {
-                let _ = window.set_ignore_cursor_events(ignore);
+                let _ = layers::set_character_passthrough(&window, ignore);
             }
             Action::EndHover => bridge::eval_page(&window, "window.mikuCompanion?.endHover?.()"),
             Action::HitTest { seq, x, y } => {

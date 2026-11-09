@@ -156,3 +156,49 @@ pub fn position_above_icons(hwnd: isize, frame: Frame) -> Result<(), String> {
     }
     Ok(())
 }
+
+/// Changes mouse pass-through without showing or activating the character window.
+#[cfg(windows)]
+pub fn set_character_passthrough(hwnd: isize, ignore: bool) -> Result<(), String> {
+    use windows_sys::Win32::Foundation::{GetLastError, SetLastError, HWND};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        GetWindowLongPtrW, SetWindowLongPtrW, SetWindowPos, GWL_EXSTYLE, HWND_BOTTOM,
+        SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOOWNERZORDER, SWP_NOSIZE,
+        WS_EX_LAYERED, WS_EX_TRANSPARENT,
+    };
+
+    unsafe {
+        let window = hwnd as HWND;
+        SetLastError(0);
+        let current = GetWindowLongPtrW(window, GWL_EXSTYLE);
+        if current == 0 {
+            let error = GetLastError();
+            if error != 0 {
+                return Err(format!("GetWindowLongPtrW for character failed: {}", std::io::Error::from_raw_os_error(error as i32)));
+            }
+        }
+        let mask = (WS_EX_TRANSPARENT | WS_EX_LAYERED) as isize;
+        let desired = if ignore { current | mask } else { current & !mask };
+        if desired != current {
+            SetLastError(0);
+            if SetWindowLongPtrW(window, GWL_EXSTYLE, desired) == 0 {
+                let error = GetLastError();
+                if error != 0 {
+                    return Err(format!("SetWindowLongPtrW for character failed: {}", std::io::Error::from_raw_os_error(error as i32)));
+                }
+            }
+        }
+        if SetWindowPos(
+            window,
+            HWND_BOTTOM,
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_FRAMECHANGED,
+        ) == 0 {
+            return Err(format!("SetWindowPos for character pass-through failed: {}", std::io::Error::last_os_error()));
+        }
+    }
+    Ok(())
+}

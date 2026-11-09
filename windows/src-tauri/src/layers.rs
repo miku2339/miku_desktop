@@ -141,14 +141,15 @@ fn create_character(app: &AppHandle, label: &str, frame: Frame) -> tauri::Result
     #[cfg(not(target_os = "macos"))]
     let builder = builder.transparent(true);
     let window = builder.build()?;
-    window.set_ignore_cursor_events(true)?;
+    set_character_passthrough(&window, true)?;
     #[cfg(windows)]
     {
         let hwnd = window.hwnd()?.0 as isize;
         let target = window.clone();
         app.run_on_main_thread(move || {
             let result = desktop::position_above_icons(hwnd, frame)
-                .and_then(|()| target.show().map_err(|error| error.to_string()));
+                .and_then(|()| target.show().map_err(|error| error.to_string()))
+                .and_then(|()| desktop::set_character_passthrough(hwnd, true));
             if let Err(error) = result {
                 let shell = target.state::<Shell>();
                 lock(&shell.layers).characters.remove(target.label());
@@ -168,6 +169,22 @@ fn create_character(app: &AppHandle, label: &str, frame: Frame) -> tauri::Result
 fn place(window: &WebviewWindow, frame: Frame) -> tauri::Result<()> {
     window.set_position(PhysicalPosition::new(frame.x, frame.y))?;
     window.set_size(PhysicalSize::new(frame.width, frame.height))
+}
+
+pub fn set_character_passthrough(window: &WebviewWindow, ignore: bool) -> tauri::Result<()> {
+    #[cfg(windows)]
+    {
+        let target = window.clone();
+        window.app_handle().run_on_main_thread(move || {
+            let result = target.hwnd().map_err(|error| error.to_string())
+                .and_then(|hwnd| desktop::set_character_passthrough(hwnd.0 as isize, ignore));
+            if let Err(error) = result {
+                target.state::<Shell>().diagnostics.note("layers", &format!("{}: {error}", target.label()));
+            }
+        })
+    }
+    #[cfg(not(windows))]
+    window.set_ignore_cursor_events(ignore)
 }
 
 /// `on_page_load`: macOS does the same in `webView(_:didFinish:)` and on content-process restarts.
@@ -190,7 +207,7 @@ pub fn page_loaded(webview: &Webview, event: PageLoadEvent) {
                 layer.want_ignore(true)
             };
             if pass_through {
-                let _ = window.set_ignore_cursor_events(true);
+                let _ = set_character_passthrough(&window, true);
             }
         }
         PageLoadEvent::Finished => {
@@ -237,7 +254,7 @@ pub fn set_interactive(app: &AppHandle, enabled: bool) {
     }
     for window in character_windows(app) {
         if !enabled {
-            let _ = window.set_ignore_cursor_events(true);
+            let _ = set_character_passthrough(&window, true);
             if let Some(layer) = lock(&shell.layers).characters.get_mut(window.label()) {
                 layer.ignoring = Some(true);
             }

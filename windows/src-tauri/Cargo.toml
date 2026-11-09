@@ -1,0 +1,29 @@
+[package]
+name = "miku-desktop"
+version = "0.1.0"
+description = "Miku Desktop: Windows shell (Tauri 2 + WebView2) around the shared Wallpaper/companion page"
+edition = "2021"
+rust-version = "1.77.2"
+publish = false
+
+[lib]
+name = "miku_desktop_lib"
+crate-type = ["rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+percent-encoding = "2"
+
+[target.'cfg(windows)'.dependencies]
+# Raw Win32 for attaching the background layer under WorkerW (desktop.rs).
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+strip = true

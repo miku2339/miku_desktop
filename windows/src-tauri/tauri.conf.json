@@ -1,0 +1,33 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Miku Desktop",
+  "version": "0.1.0",
+  "identifier": "com.qimake.MikuDesktop",
+  "build": {
+    "frontendDist": "../ui"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "icon": ["icons/icon.png", "icons/icon.ico"],
+    "resources": {
+      "../../Wallpaper/companion/": "Wallpaper/companion/",
+      "../../Wallpaper/assets/scenes/": "Wallpaper/assets/scenes/",
+      "../../Wallpaper/assets/miku.png": "Wallpaper/assets/miku.png",
+      "../../Wallpaper/assets/companion-model/miku_v2.pmd": "Wallpaper/assets/companion-model/miku_v2.pmd",
+      "../../Wallpaper/assets/companion-model/eyeM2.bmp": "Wallpaper/assets/companion-model/eyeM2.bmp",
+      "../../Wallpaper/assets/companion-model/readme.txt": "Wallpaper/assets/companion-model/readme.txt",
+      "../../Wallpaper/assets/companion-model/readme_miku_v2.txt": "Wallpaper/assets/companion-model/readme_miku_v2.txt",
+      "../../Wallpaper/assets/companion-model/ASSET-NOTICE.txt": "Wallpaper/assets/companion-model/ASSET-NOTICE.txt",
+      "../../LICENSE": "LICENSE",
+      "../../THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md"
+    }
+  }
+}

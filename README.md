@@ -2,13 +2,27 @@
 
 **繁體中文** · [日本語](README.ja.md) · [English](README.en.md)
 
-住在 macOS 桌面上的初音未來：她會在動態的東京街景裡走動、回應你的滑鼠，也能透過本機或自選雲端 AI 和你聊天，並記住你們的相處。
+住在桌面上的初音未來：她會在動態的東京街景裡走動、回應你的滑鼠，也能透過本機或自選雲端 AI 和你聊天，並記住你們的相處。
 
 **網站**：[desktop.mikutool.com](https://desktop.mikutool.com/)（介紹與動態背景示範）
 
+## Windows 預覽版
+
+Windows 程式位於 [`windows`](https://github.com/miku2339/miku_desktop/tree/windows) 分支，完整使用與建置方式見 [Windows README](windows/README.md)。下方的原生功能與安裝章節介紹 macOS 版。
+
+- **桌面伴侶**：背景在桌面圖示後，Miku 與可拖動的「♪／聊天／手帳／設定」控制列留在桌面，一般程式可以覆蓋；控制列記住上次的位置。
+- **AI**：使用此電腦的 Ollama，或自己的相容 OpenAI API 雲端服務。Ollama 預設端點為 `http://127.0.0.1:11434/v1`，先下載模型，再到設定重新整理模型清單。雲端金鑰存於 Windows Credential Manager。
+- **聊天與陪伴**：圖片選取／貼上／拖放、記憶與關係、手帳／日記／月曆、猜拳與歌曲問答／節奏遊戲、歌曲知識、回憶相簿，以及選用的天氣／前景程式／媒體／畫面觀察。
+- **Tda 角色**：在設定選取作者原始 `Tda式デフォ服ミク_ver1.1.zip`，校驗後私人匯入並優先使用。公開套件保留 Animasa 備用角色，不附 Tda 模型或貼圖。
+- **語音**：Windows 已安裝的原生語音或自備 localhost TTS；通話支援分段播放、嘴型同步與手動打斷。擁有者的私人 Miku 聲線、模型及訓練素材不對外提供。
+
+可從 [Windows 建置](https://github.com/miku2339/miku_desktop/actions/workflows/windows-build.yml) 下載成功執行的 `miku-desktop-windows-x64` 產物（需要 GitHub 登入），解壓後執行 `miku-desktop.exe`，保留相鄰的 `Wallpaper/` 等檔案。建置產物保留 3 天；也可依 Windows README 從原始碼建置。目前沒有已驗證的 NSIS 安裝檔或程式碼簽章。
+
+**驗證範圍**：Windows 11（10.0.26200）／RTX 3080／單螢幕遠端桌面已確認桌面控制列、聊天入口、App 內 Ollama 繁體中文回覆與相簿拍照。麥克風與通話音訊尚未實測；Windows 10、多螢幕不同 DPI、實體主控台與 NSIS 安裝仍待驗收。
+
 ![黃昏的澀谷十字路口背景](Wallpaper/assets/scenes/shibuya-scramble-dusk.jpg)
 
-## 特色
+## macOS 版功能
 
 ### 會動的場景
 

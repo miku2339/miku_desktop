@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "App windows use origin-checked companion commands; wallpaper layers use only their own bridge. No Tauri core APIs are exposed.",
+  "windows": ["bg-*", "char-*", "app-*"],
+  "permissions": []
+}

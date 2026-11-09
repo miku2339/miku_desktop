@@ -8,6 +8,8 @@ Hatsune Miku, living on your macOS desktop. She walks around animated Tokyo stre
 
 ![The Shibuya scramble crossing at dusk](Wallpaper/assets/scenes/shibuya-scramble-dusk.jpg)
 
+> **Windows preview:** the [`windows` branch](https://github.com/miku2339/miku_desktop/tree/windows) includes the desktop control bar, Ollama / user-configured cloud AI, chat, notebook, games and album. See the [Windows guide](windows/README.md) (Traditional Chinese). Windows 11 / RTX 3080 desktop controls, chat and album capture have been checked; microphone / call audio, Windows 10, mixed-DPI monitors and NSIS installation remain unverified. The sections below describe the macOS app.
+
 ## Features
 
 ### Living scenes

@@ -1,0 +1,74 @@
+name: Windows build
+
+on:
+  pull_request:
+    paths:
+      - 'windows/**'
+      - 'Wallpaper/**'
+      - '.github/workflows/windows-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      CARGO_INCREMENTAL: '0'
+      CARGO_PROFILE_DEV_DEBUG: '0'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Select Rust stable MSVC
+        run: rustup default stable-x86_64-pc-windows-msvc
+
+      - name: Fetch public default model
+        run: ./windows/scripts/fetch-model.ps1
+
+      - name: Validate Windows helper syntax
+        run: |
+          $tokens = $null
+          $errors = $null
+          $source = Get-Content windows/scripts/platform-host.ps1 -Raw
+          $null = [System.Management.Automation.Language.Parser]::ParseInput($source, [ref]$tokens, [ref]$errors)
+          if ($errors.Count) { throw ($errors | Out-String) }
+
+      - name: Run interface tests
+        run: node --test windows/ui/tests/*.test.mjs
+
+      - name: Run Rust unit tests
+        working-directory: windows/src-tauri
+        run: cargo test --locked --lib
+
+      - name: Build Windows executable
+        working-directory: windows/src-tauri
+        run: cargo build --locked
+
+      - name: Collect portable app
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $source = Join-Path $env:GITHUB_WORKSPACE 'windows/src-tauri/target/debug'
+          $destination = Join-Path $env:RUNNER_TEMP 'miku-desktop-windows'
+          New-Item -ItemType Directory -Path $destination -Force | Out-Null
+          # tauri-build copies the public bundle.resources beside the executable.
+          foreach ($entry in @('miku-desktop.exe', 'Wallpaper', 'LICENSE', 'THIRD_PARTY_NOTICES.md')) {
+            Copy-Item -LiteralPath (Join-Path $source $entry) -Destination $destination -Recurse
+          }
+          if (-not (Test-Path -LiteralPath (Join-Path $destination 'Wallpaper/companion/index.html') -PathType Leaf)) {
+            throw 'The portable app is missing its companion page.'
+          }
+
+      - name: Upload portable app
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: miku-desktop-windows-x64
+          path: ${{ runner.temp }}/miku-desktop-windows/
+          if-no-files-found: error
+          retention-days: 3

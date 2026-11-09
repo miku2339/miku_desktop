@@ -166,6 +166,22 @@ pub fn position_above_icons(hwnd: isize, frame: Frame) -> Result<(), String> {
     Ok(())
 }
 
+/// Returns an owned window to the desktop without changing its position or size.
+#[cfg(windows)]
+pub fn floor_owned_window(hwnd: isize) -> Result<(), String> {
+    use windows_sys::Win32::Foundation::HWND;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        SetWindowPos, HWND_BOTTOM, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOOWNERZORDER, SWP_NOSIZE,
+    };
+    if unsafe {
+        SetWindowPos(hwnd as HWND, HWND_BOTTOM, 0, 0, 0, 0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER)
+    } == 0 {
+        return Err(format!("SetWindowPos for desktop-owned window failed: {}", std::io::Error::last_os_error()));
+    }
+    Ok(())
+}
+
 /// Changes mouse pass-through without showing or activating the character window.
 #[cfg(windows)]
 pub fn set_character_passthrough(hwnd: isize, ignore: bool) -> Result<(), String> {

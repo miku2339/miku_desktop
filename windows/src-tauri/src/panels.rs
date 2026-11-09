@@ -106,6 +106,25 @@ fn position_controls(app: &AppHandle, window: &WebviewWindow) -> Result<(), Stri
     Ok(())
 }
 
+fn floor_controls(window: &WebviewWindow) {
+    #[cfg(windows)]
+    {
+        let target = window.clone();
+        let _ = window.app_handle().run_on_main_thread(move || {
+            if let Ok(hwnd) = target.hwnd() {
+                if let Err(error) = crate::desktop::floor_owned_window(hwnd.0 as isize) {
+                    target
+                        .state::<crate::Shell>()
+                        .diagnostics
+                        .note("controls", &error);
+                }
+            }
+        });
+    }
+    #[cfg(not(windows))]
+    let _ = window;
+}
+
 fn bundled_url(url: &tauri::Url) -> bool {
     let origin = (url.scheme() == "tauri" && url.host_str() == Some("localhost"))
         || (matches!(url.scheme(), "http" | "https") && url.host_str() == Some("tauri.localhost"));
@@ -211,12 +230,24 @@ pub fn open(app: &AppHandle, view: &str) -> Result<(), String> {
                         tokio::time::sleep(Duration::from_millis(500)).await;
                         if expected.load(Ordering::SeqCst) == version {
                             let shell = app.state::<crate::Shell>();
-                            let settings = crate::lock(&shell.settings);
+                            {
+                                let settings = crate::lock(&shell.settings);
+                                if expected.load(Ordering::SeqCst) == version {
+                                    settings.save(&shell.data_dir);
+                                }
+                            }
                             if expected.load(Ordering::SeqCst) == version {
-                                settings.save(&shell.data_dir);
+                                if let Some(window) = app.get_webview_window("app-controls") {
+                                    floor_controls(&window);
+                                }
                             }
                         }
                     });
+                }
+                if matches!(event, tauri::WindowEvent::Focused(false)) {
+                    if let Some(window) = app.get_webview_window("app-controls") {
+                        floor_controls(&window);
+                    }
                 }
             }
             if matches!(event, tauri::WindowEvent::Destroyed) {

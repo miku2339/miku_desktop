@@ -17,8 +17,9 @@ pub fn attach_behind_icons(hwnd: isize, frame: Frame) -> Result<(), String> {
     use windows_sys::Win32::Foundation::{BOOL, HWND, LPARAM, RECT};
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         EnumWindows, FindWindowExW, FindWindowW, GetWindowLongPtrW, GetWindowRect, SendMessageTimeoutW,
-        SetParent, SetWindowLongPtrW, SetWindowPos, GWL_STYLE, SMTO_NORMAL, SWP_FRAMECHANGED, SWP_NOACTIVATE,
-        SWP_NOZORDER, SWP_SHOWWINDOW, WS_CAPTION, WS_CHILD, WS_POPUP, WS_SYSMENU, WS_THICKFRAME,
+        SetLayeredWindowAttributes, SetParent, SetWindowLongPtrW, SetWindowPos, GWL_STYLE, LWA_ALPHA,
+        SMTO_NORMAL, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOZORDER, SWP_SHOWWINDOW, WS_CAPTION, WS_CHILD,
+        WS_POPUP, WS_SYSMENU, WS_THICKFRAME,
     };
 
     fn wide(text: &str) -> Vec<u16> {
@@ -60,6 +61,13 @@ pub fn attach_behind_icons(hwnd: isize, frame: Frame) -> Result<(), String> {
         }
 
         let window = hwnd as *mut c_void as HWND;
+        // The click-through background is layered and needs an explicit opacity.
+        if SetLayeredWindowAttributes(window, 0, 255, LWA_ALPHA) == 0 {
+            return Err(format!(
+                "SetLayeredWindowAttributes for background failed: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
         // A child window: no popup frame, positioned in the host's coordinates.
         let mut style = GetWindowLongPtrW(window, GWL_STYLE);
         style &= !((WS_POPUP | WS_CAPTION | WS_THICKFRAME | WS_SYSMENU) as isize);

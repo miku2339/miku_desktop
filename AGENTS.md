@@ -5,6 +5,7 @@
 - clone 後統一執行 `./scripts/install-app.sh`，完成 Tda 原始 ZIP 取得、校驗、匯入、建置、安裝與開啟。不要只執行 `fetch-model.sh` 和 `build-app.sh` 就回報安裝完成。
 - 若已持有作者原始 ZIP，使用 `./scripts/install-app.sh --tda-archive "/path/to/Tda式デフォ服ミク_ver1.1.zip"`。若命令列下載被原站拒絕，可先用可用的瀏覽器工具，從作者頁面正常下載至 Downloads，再重跑安裝。只有遇到需要本人登入或驗證的步驟才請使用者完成；不要使用其他人重新上傳的模型鏡像。
 - 只有使用者明確選擇略過 Tda 時才加 `--skip-tda`，並保留既有匯入模型。`--app-dir DIR` 可指定安裝資料夾，`--no-open` 可暫不開啟。
+- 已安裝 macOS App、只需配置 Tda 時，執行 `python3 scripts/import-tda-model.py --apply`，下載、校驗、匯入後重新開啟 App，不必重新建置。原站下載受阻時會開啟作者頁，等待 Downloads 中的原始 ZIP；無互動環境可加 `--no-browser`。
 - 交付前確認實際安裝位置及載入的角色模型。Tda 尚未就緒時，明確回報待完成的步驟。
 - Tda 模型保存在使用者的 `~/Library/Application Support/MikuDesktop/CharacterModels/tda/`，作者規約一併保留。GitHub 與公開安裝包不附原始 Tda 模型及貼圖。
 

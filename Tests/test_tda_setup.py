@@ -3,9 +3,11 @@ from importlib.util import module_from_spec, spec_from_file_location
 import io
 import json
 import os
+import plistlib
 from pathlib import Path
 import tempfile
 import unittest
+import subprocess
 from unittest.mock import patch
 from urllib.error import HTTPError
 from urllib.parse import parse_qs
@@ -35,6 +37,106 @@ def author_page(control="permission", key="false"):
 
 
 class TdaSetupTests(unittest.TestCase):
+    def make_app(self, root, info=None):
+        app = Path(root) / "Miku Desktop.app"
+        (app / "Contents/MacOS").mkdir(parents=True)
+        (app / "Contents/MacOS/MikuDesktop").write_bytes(b"fixture")
+        with (app / "Contents/Info.plist").open("wb") as stream:
+            plistlib.dump(info if info is not None else {
+                "CFBundleIdentifier": "com.qimake.MikuDesktop", "CFBundleExecutable": "MikuDesktop",
+            }, stream)
+        return app
+
+    def test_apply_targets_user_data_and_reopens_only_after_verified_import(self):
+        with tempfile.TemporaryDirectory() as temporary, contextlib.redirect_stdout(io.StringIO()):
+            home = Path(temporary)
+            app = self.make_app(home)
+            events = []
+            with patch.object(setup.sys, "platform", "darwin"), patch.object(setup.Path, "home", return_value=home), \
+                    patch.object(setup, "configure", side_effect=lambda *args, **kwargs: events.append(("import", args, kwargs))), \
+                    patch.object(setup.subprocess, "run", side_effect=lambda *args, **kwargs: events.append(("open", args, kwargs))):
+                self.assertEqual(setup.main(["--apply", "--app", str(app), "original.zip"]), 0)
+            self.assertEqual([event[0] for event in events], ["import", "open"])
+            self.assertEqual(events[0][1][0], home / "Library/Application Support/MikuDesktop/CharacterModels/tda")
+            self.assertEqual(events[0][2], {"archive": "original.zip", "allow_browser": True})
+            self.assertEqual(events[1][1][0], ["/usr/bin/open", "-n", str(app.resolve())])
+
+    def test_apply_failure_never_reopens_app_and_has_standalone_recovery(self):
+        with tempfile.TemporaryDirectory() as temporary, contextlib.redirect_stdout(io.StringIO()), \
+                contextlib.redirect_stderr(io.StringIO()) as errors:
+            app = self.make_app(temporary)
+            with patch.object(setup.sys, "platform", "darwin"), \
+                    patch.object(setup, "configure", side_effect=setup.archive_error()), \
+                    patch.object(setup.subprocess, "run") as reopen:
+                self.assertEqual(setup.main(["--apply", "--app", str(app), "--no-browser"]), 1)
+            reopen.assert_not_called()
+            self.assertIn("--apply <author-original.zip>", errors.getvalue())
+            self.assertIn(str(Path(setup.__file__).resolve()), errors.getvalue())
+            self.assertNotIn("install-app.sh", errors.getvalue())
+
+    def test_apply_no_browser_flag_and_missing_app(self):
+        with tempfile.TemporaryDirectory() as temporary, contextlib.redirect_stdout(io.StringIO()), \
+                contextlib.redirect_stderr(io.StringIO()):
+            app = self.make_app(temporary)
+            with patch.object(setup.sys, "platform", "darwin"), patch.object(setup, "configure") as configure, \
+                    patch.object(setup.subprocess, "run"):
+                self.assertEqual(setup.main(["--apply", "--app", str(app), "--no-browser"]), 0)
+                self.assertFalse(configure.call_args.kwargs["allow_browser"])
+                configure.reset_mock()
+                self.assertEqual(setup.main(["--apply", "--app", str(app.parent / "missing.app")]), 1)
+                configure.assert_not_called()
+
+    def test_invalid_bundle_is_rejected(self):
+        with tempfile.TemporaryDirectory() as temporary, patch.object(setup.sys, "platform", "darwin"):
+            app = self.make_app(temporary, info=["not a dictionary"])
+            with self.assertRaises(setup.ModelSetupError):
+                setup.installed_app(app)
+            with (app / "Contents/Info.plist").open("wb") as stream:
+                plistlib.dump({"CFBundleIdentifier": "other.app"}, stream)
+            with self.assertRaises(setup.ModelSetupError):
+                setup.installed_app(app)
+
+    def test_reopen_failure_keeps_the_import_and_reports_action_needed(self):
+        with patch.object(setup.subprocess, "run", side_effect=subprocess.CalledProcessError(1, "open")):
+            with self.assertRaisesRegex(setup.ModelSetupError, "model was imported"):
+                setup.apply_model(Path("/Applications/Miku Desktop.app"))
+
+    def test_apply_options_cannot_redirect_the_destination_or_claim_verify_only(self):
+        with contextlib.redirect_stderr(io.StringIO()):
+            for args in [["--apply", "--destination", "/tmp/other"], ["--apply", "--verify"], ["--app", "other.app"]]:
+                with self.subTest(args=args), self.assertRaises(SystemExit) as error:
+                    setup.main(args)
+                self.assertEqual(error.exception.code, 2)
+
+    def test_browser_failure_and_timeout_are_bounded(self):
+        with contextlib.redirect_stdout(io.StringIO()):
+            for failure in [False, setup.webbrowser.Error("no usable browser")]:
+                with patch.object(setup.webbrowser, "open", side_effect=failure if isinstance(failure, Exception) else None,
+                                  return_value=False), self.assertRaises(setup.ModelSetupError):
+                    setup.wait_for_author_archive(Path("/missing"))
+            with patch.object(setup.webbrowser, "open", return_value=True), \
+                    patch.object(setup.time, "monotonic", side_effect=[0, 181]), \
+                    patch.object(setup.time, "sleep") as sleep, self.assertRaises(setup.ModelSetupError):
+                setup.wait_for_author_archive(Path("/missing"))
+            sleep.assert_not_called()
+
+    @unittest.skipUnless(AUTHOR_ARCHIVE.is_file(), "author original ZIP not supplied")
+    def test_browser_download_continues_after_verification_without_extra_zip_copy(self):
+        with tempfile.TemporaryDirectory() as temporary, contextlib.redirect_stdout(io.StringIO()):
+            root = Path(temporary)
+            downloads = root / "Downloads"
+            downloads.mkdir()
+            archive = downloads / (Path(setup.ARCHIVE_NAME).stem + " (1).zip")
+            def complete_download(_):
+                archive.symlink_to(AUTHOR_ARCHIVE)
+                return True
+            with patch.object(setup, "download_archive", side_effect=setup.ModelSetupError("interactive download required")), \
+                    patch.object(setup.webbrowser, "open", side_effect=complete_download) as browser:
+                setup.configure(root / "tda", downloads=downloads, allow_browser=True)
+            browser.assert_called_once_with(setup.AUTHOR_URL)
+            self.assertTrue(setup.is_ready(root / "tda"))
+            self.assertEqual(list(downloads.iterdir()), [archive])
+
     def test_network_flow_uses_author_form_and_escapes_unicode_path(self):
         fake = FakeOpener([
             author_page(),

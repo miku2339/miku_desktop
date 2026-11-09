@@ -122,6 +122,16 @@ The installer stores the classic outfit model by Tda / 金子卵黄 and its auth
 
 The bundled Animasa model is used before import. Public packages do not include the Tda model or its textures.
 
+If the app is already installed, Python 3 can download and apply the model without extra packages or rebuilding the app:
+
+```sh
+python3 scripts/import-tda-model.py --apply
+```
+
+You can download [just this Python script](scripts/import-tda-model.py) and run `python3 import-tda-model.py --apply` from its folder. It looks for `/Applications/Miku Desktop.app` or `~/Applications/Miku Desktop.app`; use `--app "/path/to/Miku Desktop.app"` for another location. The app reopens after the model is applied.
+
+If the author site requires browser verification or blocks command-line downloads, the script opens the author's page and waits for the original ZIP in Downloads, then verifies and applies it. You can also run `python3 scripts/import-tda-model.py --apply "/path/to/Tda式デフォ服ミク_ver1.1.zip"`. Add `--no-browser` to disable the browser fallback.
+
 When building from source, you can also import with Python 3 before building:
 
 ```sh

@@ -122,6 +122,16 @@ GitHub Release のタグは `v` と `Info.plist` のバージョン番号を組�
 
 インポート前は同梱の Animasa モデルを使用します。公開パッケージには Tda モデルとテクスチャは含まれません。
 
+App をインストール済みの場合は、Python 3 でモデルをダウンロードして適用することもできます。追加パッケージのインストールや App の再ビルドは不要です。
+
+```sh
+python3 scripts/import-tda-model.py --apply
+```
+
+[この Python スクリプトだけ](scripts/import-tda-model.py)をダウンロードし、保存先で `python3 import-tda-model.py --apply` を実行することもできます。既定では `/Applications/Miku Desktop.app` または `~/Applications/Miku Desktop.app` を探します。別の場所は `--app "/path/to/Miku Desktop.app"` で指定できます。適用後に App を開き直します。
+
+配布サイトでブラウザ認証が必要な場合やコマンドラインからダウンロードできない場合は、作者のページを開き、元の ZIP が Downloads に保存されるのを待って検証・適用します。`python3 scripts/import-tda-model.py --apply "/path/to/Tda式デフォ服ミク_ver1.1.zip"` で入手済みの ZIP を指定することもできます。ブラウザを開かない場合は `--no-browser` を追加してください。
+
 ソースコードからビルドする場合は、Python 3 でインポートしてからビルドすることもできます。
 
 ```sh

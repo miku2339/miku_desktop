@@ -122,6 +122,16 @@ App 每天自動向 GitHub 檢查一次正式版本；有新版時，選單列�
 
 匯入前會使用內附的 Animasa 模型。公開安裝包不包含 Tda 模型與貼圖。
 
+已安裝 App 時，也可用 Python 3 下載並套用模型，不需安裝額外套件或重新編譯 App：
+
+```sh
+python3 scripts/import-tda-model.py --apply
+```
+
+可只下載[這支 Python 腳本](scripts/import-tda-model.py)，在存放目錄執行 `python3 import-tda-model.py --apply`。預設尋找 `/Applications/Miku Desktop.app` 或 `~/Applications/Miku Desktop.app`；其他位置可加 `--app "/path/to/Miku Desktop.app"`。套用成功後會重新開啟 App。
+
+原站需要瀏覽器驗證或命令列下載受阻時，腳本會開啟作者頁面，等待你把原始 ZIP 下載到 Downloads，再校驗並套用；也可直接執行 `python3 scripts/import-tda-model.py --apply "/path/to/Tda式デフォ服ミク_ver1.1.zip"`。不希望開啟瀏覽器時加上 `--no-browser`。
+
 從原始碼建置時，也可用 Python 3 匯入後再建置：
 
 ```sh

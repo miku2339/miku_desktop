@@ -8,14 +8,18 @@ from http.cookiejar import CookieJar
 import io
 import json
 import os
+import plistlib
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 import tempfile
+import time
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode, urlsplit, urlunsplit
 from urllib.request import HTTPCookieProcessor, HTTPRedirectHandler, Request, build_opener
 import zipfile
+import webbrowser
 
 
 AUTHOR_URL = "https://bowlroll.net/file/16344"
@@ -52,7 +56,7 @@ class ModelSetupError(Exception):
 
 
 def archive_error():
-    return ModelSetupError(f"Expected the original Tda v1.1 ZIP from {AUTHOR_URL}. Use ./scripts/install-app.sh --tda-archive <author-original.zip>.")
+    return ModelSetupError(f"Expected the original Tda v1.1 ZIP from {AUTHOR_URL}.")
 
 
 def checked_archive(data):
@@ -183,7 +187,35 @@ def import_archive(archive, destination):
         return import_bytes(read_bounded(stream, MAX_ARCHIVE_BYTES), destination)
 
 
-def configure(destination, archive=None, downloads=None, opener=None):
+def wait_for_author_archive(downloads, timeout=180):
+    print(f"Complete the download on the author's page: {AUTHOR_URL}")
+    print(f"Waiting up to {timeout} seconds for the original ZIP in {downloads}.")
+    try:
+        opened = webbrowser.open(AUTHOR_URL)
+    except webbrowser.Error:
+        opened = False
+    if not opened:
+        raise ModelSetupError("Could not open the author's page. Download the original ZIP and supply its path.")
+    deadline = time.monotonic() + timeout
+    seen = {}
+    while time.monotonic() < deadline:
+        for candidate in downloads.glob(f"{Path(ARCHIVE_NAME).stem}*.zip"):
+            try:
+                stat = candidate.stat()
+                signature = (stat.st_size, stat.st_mtime_ns)
+                if seen.get(candidate) == signature:
+                    continue
+                seen[candidate] = signature
+                with candidate.open("rb") as stream:
+                    checked_archive(read_bounded(stream, MAX_ARCHIVE_BYTES))
+                return candidate
+            except (OSError, ModelSetupError):
+                continue
+        time.sleep(1)
+    raise ModelSetupError("No verified original ZIP was downloaded. Run again with the downloaded ZIP path.")
+
+
+def configure(destination, archive=None, downloads=None, opener=None, allow_browser=False):
     if archive is not None:
         imported = import_archive(archive, destination)
         print("Imported the supplied author-original Tda ZIP.")
@@ -201,7 +233,42 @@ def configure(destination, archive=None, downloads=None, opener=None):
         except ModelSetupError:
             pass
     print(f"Obtaining the original Tda ZIP from {AUTHOR_URL}")
-    return import_bytes(download_archive(opener=opener), destination)
+    try:
+        data = download_archive(opener=opener)
+    except ModelSetupError as error:
+        if not allow_browser:
+            raise
+        print(error)
+        return import_archive(wait_for_author_archive(downloads), destination)
+    return import_bytes(data, destination)
+
+
+def installed_app(candidate=None):
+    if sys.platform != "darwin":
+        raise ModelSetupError("Automatic application is supported on macOS. Use --destination to import files elsewhere.")
+    candidates = ([Path(candidate).expanduser()] if candidate is not None else [
+        Path("/Applications/Miku Desktop.app"), Path.home() / "Applications/Miku Desktop.app",
+    ])
+    for app in candidates:
+        try:
+            with (app / "Contents/Info.plist").open("rb") as stream:
+                info = plistlib.load(stream)
+            if (isinstance(info, dict) and info.get("CFBundleIdentifier") == "com.qimake.MikuDesktop"
+                    and info.get("CFBundleExecutable") == "MikuDesktop"
+                    and (app / "Contents/MacOS/MikuDesktop").is_file()):
+                return app.resolve()
+        except (OSError, ValueError, plistlib.InvalidFileException):
+            continue
+    raise ModelSetupError("Install Miku Desktop first, or use --app /path/to/Miku\\ Desktop.app to select it.")
+
+
+def apply_model(app):
+    # A fresh instance asks the existing app to save and quit before taking its place.
+    try:
+        subprocess.run(["/usr/bin/open", "-n", str(app)], check=True, timeout=15)
+    except (OSError, subprocess.SubprocessError):
+        raise ModelSetupError("The model was imported, but Miku Desktop could not be reopened. Open the app again to apply it.") from None
+    print(f"Requested reopening Miku Desktop to apply the verified Tda model: {app}")
 
 
 def main(argv=None):
@@ -210,21 +277,35 @@ def main(argv=None):
     location = parser.add_mutually_exclusive_group()
     location.add_argument("--user", action="store_true", help="Configure this user's installed app instead of a source-tree model")
     location.add_argument("--destination", type=Path, help="Use a specific model directory")
+    parser.add_argument("--apply", action="store_true", help="Download, import and reopen the installed macOS app with Tda (implies --user)")
+    parser.add_argument("--app", type=Path, help="Installed Miku Desktop.app to reopen with --apply")
+    parser.add_argument("--no-browser", action="store_true", help="Do not open the author page if an automatic download is unavailable")
     parser.add_argument("--verify", action="store_true", help="Verify all installed model assets without changing or downloading files")
     options = parser.parse_args(argv)
+    if options.apply and (options.destination is not None or options.verify):
+        parser.error("--apply cannot be combined with --destination or --verify")
+    if options.app is not None and not options.apply:
+        parser.error("--app requires --apply")
     destination = options.destination
     if destination is None:
-        destination = (Path.home() / "Library/Application Support/MikuDesktop/CharacterModels/tda" if options.user
+        destination = (Path.home() / "Library/Application Support/MikuDesktop/CharacterModels/tda" if options.user or options.apply
                        else Path(__file__).resolve().parent.parent / "Wallpaper/assets/companion-model/tda")
     try:
+        app = installed_app(options.app) if options.apply else None
         if options.verify:
             if not is_ready(destination):
                 raise ModelSetupError("The Tda model has not been completely configured.")
         else:
-            configure(destination, archive=options.archive)
+            configure(destination, archive=options.archive, allow_browser=options.apply and not options.no_browser)
         print(f"Tda v1.1 ready: {destination}")
+        if app is not None:
+            apply_model(app)
     except (ModelSetupError, OSError, zipfile.BadZipFile) as error:
-        print(f"Tda setup failed: {error}\nObtain the author's original ZIP at {AUTHOR_URL}, then run ./scripts/install-app.sh --tda-archive <path>.", file=sys.stderr)
+        recovery = (f'python3 "{Path(__file__).resolve()}" --apply <author-original.zip>' if options.apply
+                    else "./scripts/install-app.sh --tda-archive <author-original.zip>")
+        if options.apply and options.app is not None:
+            recovery += f' --app "{options.app}"'
+        print(f"Tda setup failed: {error}\nObtain the author's original ZIP at {AUTHOR_URL}, then run {recovery}.", file=sys.stderr)
         return 1
     return 0
 

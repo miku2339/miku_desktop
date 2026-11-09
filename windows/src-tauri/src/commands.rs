@@ -108,11 +108,27 @@ pub async fn desktop_update_settings(
             object.remove(key);
         }
     }
+    app.state::<Services>().companion.validate_settings(&core)?;
     let startup = patch.get("launchAtLogin").and_then(Value::as_bool);
+    let previous_startup = if startup.is_some() {
+        native(&app, "autostart", json!({})).await?["enabled"].as_bool()
+    } else {
+        None
+    };
     if let Some(enabled) = startup {
         native(&app, "autostart", json!({"enabled":enabled})).await?;
     }
-    app.state::<Services>().companion.update_settings(core)?;
+    if let Err(error) = app.state::<Services>().companion.update_settings(core) {
+        if let Some(enabled) = previous_startup {
+            if native(&app, "autostart", json!({"enabled":enabled}))
+                .await
+                .is_err()
+            {
+                return Err(format!("{error}；開機啟動設定未能回復，請重新檢查。"));
+            }
+        }
+        return Err(error);
+    }
     {
         let mut settings = lock(&shell.settings);
         if let Some(value) = patch.get("selectedScene").and_then(Value::as_str) {

@@ -15,11 +15,26 @@ pub struct Settings {
     pub selected_scene: String,
     /// Where she was pinned after a drag (0…1 across the screen), like macOS `pinnedAnchor`.
     pub pinned_anchor: Option<f64>,
+    pub controls_position: Option<[i32; 2]>,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { interactive_mode: true, selected_scene: "auto".into(), pinned_anchor: None }
+        Self { interactive_mode: true, selected_scene: "auto".into(), pinned_anchor: None, controls_position: None }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Settings;
+
+    #[test]
+    fn controls_position_is_optional_in_existing_settings() {
+        let settings: Settings = serde_json::from_str(r#"{"interactiveMode":false,"selectedScene":"room"}"#).unwrap();
+        assert_eq!(settings.controls_position, None);
+        assert!(!settings.interactive_mode);
+        let settings: Settings = serde_json::from_str(r#"{"controlsPosition":[-1700,620]}"#).unwrap();
+        assert_eq!(settings.controls_position, Some([-1700, 620]));
     }
 }
 

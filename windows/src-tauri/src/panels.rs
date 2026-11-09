@@ -1,8 +1,110 @@
 //! Application windows share the bundled interface; desktop layers keep their own origin.
 
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Arc,
+};
+use std::time::Duration;
+use tauri::{
+    AppHandle, Manager, PhysicalPosition, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
+};
 
 const VIEWS: &[&str] = &["chat", "settings", "notebook", "album", "songs", "controls"];
+
+fn clamp_position(point: [i32; 2], size: [u32; 2], origin: [i32; 2], area: [u32; 2]) -> [i32; 2] {
+    std::array::from_fn(|axis| {
+        let minimum = i64::from(origin[axis]);
+        let maximum = minimum + i64::from(area[axis].saturating_sub(size[axis]));
+        i64::from(point[axis]).clamp(minimum, maximum) as i32
+    })
+}
+
+fn position_panel(window: &WebviewWindow) -> Result<(), String> {
+    let monitor = window
+        .current_monitor()
+        .ok()
+        .flatten()
+        .or_else(|| window.app_handle().primary_monitor().ok().flatten());
+    if let Some(monitor) = monitor {
+        let area = monitor.work_area();
+        let size = window.outer_size().map_err(|error| error.to_string())?;
+        let center = [
+            (i64::from(area.position.x) + (i64::from(area.size.width) - i64::from(size.width)) / 2)
+                as i32,
+            (i64::from(area.position.y)
+                + (i64::from(area.size.height) - i64::from(size.height)) / 2) as i32,
+        ];
+        let point = clamp_position(
+            center,
+            [size.width, size.height],
+            [area.position.x, area.position.y],
+            [area.size.width, area.size.height],
+        );
+        window
+            .set_position(PhysicalPosition::new(point[0], point[1]))
+            .map_err(|error| error.to_string())?;
+    }
+    Ok(())
+}
+
+fn position_controls(app: &AppHandle, window: &WebviewWindow) -> Result<(), String> {
+    let saved = { crate::lock(&app.state::<crate::Shell>().settings).controls_position };
+    let monitor = saved
+        .and_then(|point| {
+            app.available_monitors().ok()?.into_iter().find(|monitor| {
+                let origin = monitor.position();
+                let size = monitor.size();
+                i64::from(point[0]) >= i64::from(origin.x)
+                    && i64::from(point[1]) >= i64::from(origin.y)
+                    && i64::from(point[0]) < i64::from(origin.x) + i64::from(size.width)
+                    && i64::from(point[1]) < i64::from(origin.y) + i64::from(size.height)
+            })
+        })
+        .or_else(|| app.primary_monitor().ok().flatten());
+    if let Some(monitor) = monitor {
+        let area = monitor.work_area();
+        let mut size = window.outer_size().map_err(|error| error.to_string())?;
+        let requested = saved.unwrap_or([
+            area.position.x + 24,
+            area.position.y + area.size.height as i32 - size.height as i32 - 24,
+        ]);
+        let mut point = clamp_position(
+            requested,
+            [size.width, size.height],
+            [area.position.x, area.position.y],
+            [area.size.width, area.size.height],
+        );
+        window
+            .set_position(PhysicalPosition::new(point[0], point[1]))
+            .map_err(|error| error.to_string())?;
+        // Moving across monitors may change the physical size through DPI scaling.
+        size = window.outer_size().map_err(|error| error.to_string())?;
+        point = clamp_position(
+            point,
+            [size.width, size.height],
+            [area.position.x, area.position.y],
+            [area.size.width, area.size.height],
+        );
+        window
+            .set_position(PhysicalPosition::new(point[0], point[1]))
+            .map_err(|error| error.to_string())?;
+        #[cfg(windows)]
+        if let Ok(hwnd) = window.hwnd() {
+            let frame = crate::passthrough::Frame {
+                x: point[0],
+                y: point[1],
+                width: size.width,
+                height: size.height,
+            };
+            let handle = hwnd.0 as isize;
+            app.run_on_main_thread(move || {
+                let _ = crate::desktop::position_above_icons(handle, frame);
+            })
+            .map_err(|error| error.to_string())?;
+        }
+    }
+    Ok(())
+}
 
 fn bundled_url(url: &tauri::Url) -> bool {
     let origin = (url.scheme() == "tauri" && url.host_str() == Some("localhost"))
@@ -88,35 +190,35 @@ pub fn open(app: &AppHandle, view: &str) -> Result<(), String> {
     };
     let window = builder.build().map_err(|error| error.to_string())?;
     if view == "controls" {
-        if let Ok(Some(monitor)) = app.primary_monitor() {
-            let area = monitor.work_area();
-            let height = (64. * monitor.scale_factor()) as i32;
-            let position = tauri::PhysicalPosition::new(
-                area.position.x + 24,
-                area.position.y + area.size.height as i32 - height - 24,
-            );
-            let _ = window.set_position(position);
-            #[cfg(windows)]
-            if let Ok(hwnd) = window.hwnd() {
-                let frame = crate::passthrough::Frame {
-                    x: position.x,
-                    y: position.y,
-                    width: (320. * monitor.scale_factor()) as u32,
-                    height: height as u32,
-                };
-                let app = app.clone();
-                let handle = hwnd.0 as isize;
-                let _ = app.run_on_main_thread(move || {
-                    let _ = crate::desktop::position_above_icons(handle, frame);
-                });
-            }
-        }
+        position_controls(app, &window)?;
+    } else {
+        position_panel(&window)?;
     }
     crate::layers::install_recovery(&window);
     window.on_window_event({
         let app = app.clone();
         let label = label.clone();
+        let position_version = Arc::new(AtomicU64::new(0));
         move |event| {
+            if label == "app-controls" {
+                if let tauri::WindowEvent::Moved(position) = event {
+                    let shell = app.state::<crate::Shell>();
+                    crate::lock(&shell.settings).controls_position = Some([position.x, position.y]);
+                    let version = position_version.fetch_add(1, Ordering::SeqCst) + 1;
+                    let expected = position_version.clone();
+                    let app = app.clone();
+                    tauri::async_runtime::spawn(async move {
+                        tokio::time::sleep(Duration::from_millis(500)).await;
+                        if expected.load(Ordering::SeqCst) == version {
+                            let shell = app.state::<crate::Shell>();
+                            let settings = crate::lock(&shell.settings);
+                            if expected.load(Ordering::SeqCst) == version {
+                                settings.save(&shell.data_dir);
+                            }
+                        }
+                    });
+                }
+            }
             if matches!(event, tauri::WindowEvent::Destroyed) {
                 if let Some(state) = app.try_state::<crate::integration::Services>() {
                     let owns_voice =
@@ -141,6 +243,21 @@ pub fn open(app: &AppHandle, view: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn positions_stay_inside_work_area_with_outer_window_size() {
+        assert_eq!(
+            clamp_position([90, 90], [900, 649], [0, 0], [1200, 700]),
+            [90, 51]
+        );
+        assert_eq!(
+            clamp_position([-100, 680], [320, 64], [-1920, 0], [1920, 700]),
+            [-320, 636]
+        );
+        assert_eq!(
+            clamp_position([600, 600], [2000, 900], [0, 0], [1200, 700]),
+            [0, 0]
+        );
+    }
     #[test]
     fn native_data_commands_only_trust_the_bundled_origin() {
         for url in [

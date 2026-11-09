@@ -97,15 +97,17 @@ pub async fn capture(app: &AppHandle) -> Result<Value, String> {
     #[cfg(windows)]
     {
         let windows = app.webview_windows();
-        let background = windows
+        let (background_label, background) = windows
             .iter()
             .find(|(name, _)| name.starts_with(layers::BACKGROUND_PREFIX))
-            .map(|(_, value)| value.clone())
+            .map(|(name, value)| (name.clone(), value.clone()))
             .ok_or("桌面背景尚未就緒")?;
+        let surface_id = background_label
+            .strip_prefix(layers::BACKGROUND_PREFIX)
+            .unwrap();
         let character = windows
-            .iter()
-            .find(|(name, _)| name.starts_with(layers::CHARACTER_PREFIX))
-            .map(|(_, value)| value.clone())
+            .get(&format!("{}{surface_id}", layers::CHARACTER_PREFIX))
+            .cloned()
             .ok_or("角色尚未就緒")?;
         let background = surface(background).await?;
         let character = surface(character).await?;

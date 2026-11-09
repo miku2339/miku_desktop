@@ -155,79 +155,15 @@ impl Companion {
         value
     }
 
+    pub fn validate_settings(&self, patch: &Value) -> Result<(), String> {
+        validated_settings(&self.state().settings, patch).map(|_| ())
+    }
+
     pub fn update_settings(&self, patch: Value) -> Result<Value, String> {
-        let patch = patch.as_object().ok_or("Settings must be an object.")?;
         let mut guard = self.state();
         let mut state = guard.clone();
-        for (raw, value) in patch {
-            let key = aliases()
-                .iter()
-                .find(|(alias, _)| *alias == raw.as_str())
-                .map(|(_, canonical)| *canonical)
-                .unwrap_or(raw.as_str());
-            if [
-                "cloudApiKey",
-                "aimcpApiKey",
-                "clearCloudApiKey",
-                "clearAimcpApiKey",
-                "cloudApiKeyPresent",
-                "aimcpApiKeyPresent",
-            ]
-            .contains(&key)
-            {
-                continue;
-            }
-            if state.settings.get(key).is_none()
-                && ![
-                    "musicPlatform",
-                    "sleepStartHour",
-                    "sleepEndHour",
-                    "sleepScheduleEnabled",
-                    "sleepOverrideKind",
-                    "sleepOverrideUntil",
-                    "sleepOverrideReturnAt",
-                    "sleepOverrideRestMinutes",
-                    "proactiveMinutes",
-                    "events",
-                    "voiceVolume",
-                    "readProactive",
-                    "minimizeOnClose",
-                    "selectedScene",
-                ]
-                .contains(&key)
-            {
-                return Err(format!("Unknown setting: {key}"));
-            }
-            if let Some(previous) = state.settings.get(key) {
-                if (previous.is_boolean() && !value.is_boolean())
-                    || (previous.is_string() && !value.is_string())
-                {
-                    return Err(format!("Invalid value for {key}."));
-                }
-            }
-            if value.as_str().is_some_and(|s| s.len() > 4096) {
-                return Err(format!("Setting {key} is too long."));
-            }
-            state.settings[key] = value.clone();
-        }
-        if !["local", "cloud"].contains(&state.settings["aiProvider"].as_str().unwrap_or("")) {
-            return Err("Choose local or cloud AI.".into());
-        }
-        if !["auto", "zh-Hant", "yue", "en", "ja", "ko"]
-            .contains(&state.settings["replyLanguage"].as_str().unwrap_or(""))
-        {
-            return Err("Unsupported reply language.".into());
-        }
-        let configured = state.settings[if state.settings["aiProvider"] == "cloud" {
-            "cloudEndpoint"
-        } else {
-            "endpoint"
-        }]
-        .as_str()
-        .unwrap_or("");
-        if !configured.trim().is_empty() {
-            ai::endpoint(&state.settings)?;
-        }
+        state.settings = validated_settings(&state.settings, &patch)?;
+        let patch = patch.as_object().unwrap();
         for (field, slot, clear) in [
             ("cloudApiKey", "cloudAI", "clearCloudApiKey"),
             ("aimcpApiKey", "aimcp", "clearAimcpApiKey"),
@@ -241,12 +177,6 @@ impl Companion {
                 .map(str::trim)
                 .filter(|s| !s.is_empty())
             {
-                if key.len() > 4096 || key.chars().any(char::is_whitespace) {
-                    return Err("The API key has an invalid format.".into());
-                }
-                if slot == "aimcp" && !ai::matches(r"^aimcp_[A-Za-z0-9_-]{43}$", key) {
-                    return Err("The AIMCP API key has an invalid format.".into());
-                }
                 crate::platform::store_secret(slot, key)?;
             }
         }
@@ -1260,6 +1190,96 @@ impl Companion {
     }
 }
 
+fn validated_settings(current: &Value, patch: &Value) -> Result<Value, String> {
+    let patch = patch.as_object().ok_or("Settings must be an object.")?;
+    let mut settings = current.clone();
+    for (raw, value) in patch {
+        let key = aliases()
+            .iter()
+            .find(|(alias, _)| *alias == raw.as_str())
+            .map(|(_, canonical)| *canonical)
+            .unwrap_or(raw.as_str());
+        if [
+            "cloudApiKey",
+            "aimcpApiKey",
+            "clearCloudApiKey",
+            "clearAimcpApiKey",
+            "cloudApiKeyPresent",
+            "aimcpApiKeyPresent",
+        ]
+        .contains(&key)
+        {
+            continue;
+        }
+        if settings.get(key).is_none()
+            && ![
+                "musicPlatform",
+                "sleepStartHour",
+                "sleepEndHour",
+                "sleepScheduleEnabled",
+                "sleepOverrideKind",
+                "sleepOverrideUntil",
+                "sleepOverrideReturnAt",
+                "sleepOverrideRestMinutes",
+                "proactiveMinutes",
+                "events",
+                "voiceVolume",
+                "readProactive",
+                "minimizeOnClose",
+                "selectedScene",
+            ]
+            .contains(&key)
+        {
+            return Err(format!("Unknown setting: {key}"));
+        }
+        if let Some(previous) = settings.get(key) {
+            if (previous.is_boolean() && !value.is_boolean())
+                || (previous.is_string() && !value.is_string())
+            {
+                return Err(format!("Invalid value for {key}."));
+            }
+        }
+        if value.as_str().is_some_and(|s| s.len() > 4096) {
+            return Err(format!("Setting {key} is too long."));
+        }
+        settings[key] = value.clone();
+    }
+    if !["local", "cloud"].contains(&settings["aiProvider"].as_str().unwrap_or("")) {
+        return Err("Choose local or cloud AI.".into());
+    }
+    if !["auto", "zh-Hant", "yue", "en", "ja", "ko"]
+        .contains(&settings["replyLanguage"].as_str().unwrap_or(""))
+    {
+        return Err("Unsupported reply language.".into());
+    }
+    let configured = settings[if settings["aiProvider"] == "cloud" {
+        "cloudEndpoint"
+    } else {
+        "endpoint"
+    }]
+    .as_str()
+    .unwrap_or("");
+    if !configured.trim().is_empty() {
+        ai::endpoint(&settings)?;
+    }
+    for field in ["cloudApiKey", "aimcpApiKey"] {
+        if let Some(key) = patch
+            .get(field)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|key| !key.is_empty())
+        {
+            if key.len() > 4096 || key.chars().any(char::is_whitespace) {
+                return Err("The API key has an invalid format.".into());
+            }
+            if field == "aimcpApiKey" && !ai::matches(r"^aimcp_[A-Za-z0-9_-]{43}$", key) {
+                return Err("The AIMCP API key has an invalid format.".into());
+            }
+        }
+    }
+    Ok(settings)
+}
+
 fn interrupt_voice_turn(state: &mut State, payload: &Value) -> Result<Value, String> {
     let heard = short(payload["completedText"].as_str().unwrap_or(""), 4000);
     let user = payload["userText"].as_str().map(|text| short(text, 12_000));
@@ -1506,6 +1526,28 @@ fn remember_explicit_song_preference(state: &mut State, text: &str, songs: &[Val
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn settings_validation_has_no_side_effects_for_invalid_patches() {
+        let directory = std::env::temp_dir().join(format!("miku-settings-validation-{}", id()));
+        let companion = Companion::new(directory.clone());
+        let original = companion.settings();
+        for patch in [
+            json!({"launchAtLogin":true,"aiProvider":"cloud","cloudEndpoint":"http://example.org/v1","clearCloudApiKey":true}),
+            json!({"launchAtLogin":true,"cloudApiKey":"invalid key"}),
+            json!({"launchAtLogin":true,"aimcpApiKey":"invalid"}),
+            json!({"launchAtLogin":true,"unknownSetting":true}),
+        ] {
+            assert!(companion.validate_settings(&patch).is_err());
+            assert_eq!(companion.settings(), original);
+            assert!(!directory.exists());
+        }
+        assert!(companion
+            .validate_settings(&json!({"speechVoice":"Windows voice"}))
+            .is_ok());
+        assert_eq!(companion.settings(), original);
+        assert!(!directory.exists());
+    }
 
     #[test]
     fn native_speech_and_local_tts_keep_separate_voices() {

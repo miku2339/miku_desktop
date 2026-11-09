@@ -8,6 +8,8 @@ macOS のデスクトップに住む初音ミク。動く東京の街並みを�
 
 ![夕暮れの渋谷スクランブル交差点の背景](Wallpaper/assets/scenes/shibuya-scramble-dusk.jpg)
 
+> **Windows プレビュー版：** [`windows` ブランチ](https://github.com/miku2339/miku_desktop/tree/windows) にデスクトップ操作バー、Ollama／任意のクラウドAI、チャット、手帳、ゲーム、アルバムを収録しています。[Windows ガイド](windows/README.md)（繁体字中国語）をご覧ください。Windows 11／RTX 3080 で操作バー・チャット・アルバム撮影を確認済みです。マイク・通話音声、Windows 10、異なるDPIの複数画面、NSISインストールは未検証です。以下はmacOS版の説明です。
+
 ## 特長
 
 ### 動くシーン

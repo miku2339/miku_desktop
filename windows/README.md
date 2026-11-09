@@ -2,11 +2,11 @@
 
 Tauri 2 + WebView2 版本，與 macOS 共用 `Wallpaper/companion/` 的角色、動畫與場景。背景位於桌面圖示後，角色及控制列留在桌面，一般程式可覆蓋。
 
-目前為預覽版。已在 Windows 11（10.0.26200）／RTX 3080／單螢幕 RDP 環境驗證桌面透明合成、圖示與視窗層級；Windows 10、多螢幕不同 DPI、實體主控台與 NSIS 安裝仍需驗收。
+目前為預覽版。已在 Windows 11（10.0.26200）／RTX 3080／單螢幕 RDP 環境驗證桌面透明合成、控制列與聊天入口、Ollama 繁體中文回覆及相簿拍照。麥克風與通話音訊尚未實測；Windows 10、多螢幕不同 DPI、實體主控台與 NSIS 安裝仍需驗收。
 
 ## 使用
 
-從托盤或桌面控制列開啟聊天、手帳、設定、相簿與歌曲知識。
+從托盤或桌面控制列開啟聊天、手帳、設定、相簿與歌曲知識。拖動控制列的 ♪ 可移動位置，重新開啟時會恢復。
 
 - **AI**：在設定選擇 Ollama 本機模型，預設端點 `http://127.0.0.1:11434/v1`；先在此電腦的 Ollama 下載模型，再重新整理模型清單。亦可設定相容 OpenAI API 的 HTTPS 雲端端點、模型與自己的金鑰。金鑰存於 Windows Credential Manager。
 - **角色**：設定中選取作者原始 `Tda式デフォ服ミク_ver1.1.zip`，經完整校驗後匯入 `%APPDATA%\MikuDesktop\CharacterModels\tda`，保留作者規約。已匯入時優先載入 Tda；公開套件只附 Animasa 備用角色。
@@ -25,7 +25,7 @@ Tauri 2 + WebView2 版本，與 macOS 共用 `Wallpaper/companion/` 的角色、
 需要 Windows 10/11 x64、WebView2 Runtime、Rust stable MSVC，以及 Visual Studio Build Tools 的「使用 C++ 的桌面開發」。
 
 ```powershell
-./windows/scripts/fetch-model.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File windows/scripts/fetch-model.ps1
 cd windows/src-tauri
 cargo test --locked --lib
 cargo build --locked

@@ -9,12 +9,16 @@ final class StaticHTTPServer {
 
     private let rootURL: URL
     private let importedModelURL: URL?
+    private let importedV4XModelURL: URL?
+    private let customModelURL: URL?
     private let queue = DispatchQueue(label: "com.qimake.MikuDesktop.StaticHTTPServer")
     private var listener: NWListener?
 
-    init(rootURL: URL, importedModelURL: URL? = nil) {
+    init(rootURL: URL, importedModelURL: URL? = nil, importedV4XModelURL: URL? = nil, customModelURL: URL? = nil) {
         self.rootURL = rootURL.standardizedFileURL.resolvingSymlinksInPath()
         self.importedModelURL = importedModelURL?.standardizedFileURL.resolvingSymlinksInPath()
+        self.importedV4XModelURL = importedV4XModelURL?.standardizedFileURL
+        self.customModelURL = customModelURL?.standardizedFileURL
     }
 
     func start(completion: @escaping (Result<URL, Error>) -> Void) {
@@ -127,17 +131,44 @@ final class StaticHTTPServer {
 
         var base = rootURL
         var fileComponents = Array(components)
-        if fileComponents.prefix(3) == ["assets", "companion-model", "tda"],
+        var modelAsset = false
+        if fileComponents.prefix(3) == ["assets", "companion-model", "tda-v4x"] {
+            let asset = fileComponents.dropFirst(3).joined(separator: "/")
+            guard CharacterModelStore.v4xRenderFiles.contains(asset) else { return nil }
+            if let importedV4XModelURL, CharacterModelStore.hasModel(.v4x, in: importedV4XModelURL) {
+                base = importedV4XModelURL
+            } else if let bundled = CharacterModelStore.bundledDirectory(for: .v4x, wallpaper: rootURL),
+                      CharacterModelStore.hasModel(.v4x, in: bundled) {
+                base = bundled
+            } else { return nil }
+            modelAsset = true
+            fileComponents.removeFirst(3)
+        } else if fileComponents.prefix(3) == ["assets", "companion-model", "custom"] {
+            guard let customModelURL, CharacterModelStore.hasModel(.custom, in: customModelURL) else { return nil }
+            let asset = fileComponents.dropFirst(3)
+            let ext = asset.last.map { (String($0) as NSString).pathExtension.lowercased() }
+            guard asset.elementsEqual(["miku.pmx"]) ||
+                    (asset.count <= 8 && !asset.contains(where: { $0.hasPrefix(".") }) &&
+                     ext.map(CharacterModelStore.textureExtensions.contains) == true) else { return nil }
+            base = customModelURL
+            modelAsset = true
+            fileComponents.removeFirst(3)
+        } else if fileComponents.prefix(3) == ["assets", "companion-model", "tda"],
            let importedModelURL,
            FileManager.default.fileExists(atPath: importedModelURL.appendingPathComponent("miku.pmx").path) {
             base = importedModelURL
             fileComponents.removeFirst(3)
         }
-        let requested = fileComponents.reduce(base) { url, component in
+        let unresolved = fileComponents.reduce(base) { url, component in
             url.appendingPathComponent(String(component), isDirectory: false)
-        }.standardizedFileURL.resolvingSymlinksInPath()
+        }.standardizedFileURL
+        let requested = unresolved.resolvingSymlinksInPath()
         let rootPath = base.path.hasSuffix("/") ? base.path : base.path + "/"
         guard requested.path == base.path || requested.path.hasPrefix(rootPath) else { return nil }
+        if modelAsset {
+            let values = try? unresolved.resourceValues(forKeys: [.isRegularFileKey])
+            return requested.path == unresolved.path && values?.isRegularFile == true ? requested : nil
+        }
         var isDirectory: ObjCBool = false
         if FileManager.default.fileExists(atPath: requested.path, isDirectory: &isDirectory), isDirectory.boolValue {
             return requested.appendingPathComponent("index.html")

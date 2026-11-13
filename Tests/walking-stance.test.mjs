@@ -130,6 +130,24 @@ test('drifting too far makes her step instead of sliding', () => {
   assert.ok(lifted > restY + 0.05, 'a foot is lifted on the way');
 });
 
+test('a large anchor jump re-plants immediately instead of stretching both legs', () => {
+  const rig = loadLegRig();
+  const walking = createWalking(rig);
+  resetRig(rig.restPose);
+  walking.holdStance({ active: true, delta: 1 });
+
+  rig.model.position.x += 3;
+  resetRig(rig.restPose);
+  rig.model.updateMatrixWorld(true);
+  const neutral = Object.fromEntries(['左', '右'].map(side => [side, anklePose(rig, side).position]));
+  walking.holdStance({ active: true, delta: 1 / 30 });
+
+  assert.equal(walking.stanceStatus().stepping, false);
+  for (const side of ['左', '右']) {
+    assert.ok(anklePose(rig, side).position.distanceTo(neutral[side]) < 0.06, `${side} foot follows the teleported root`);
+  }
+});
+
 test('picked up: the feet go with her at once', () => {
   const rig = loadLegRig();
   const walking = createWalking(rig);

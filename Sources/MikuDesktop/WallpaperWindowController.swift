@@ -37,7 +37,10 @@ final class WallpaperWindowController: NSObject, WKNavigationDelegate, WKScriptM
     private(set) var webView: WKWebView!
     private var backgroundPanel: NSPanel!
     private var backgroundWebView: WKWebView!
-    private let characterURL: URL
+    private let characterPageURL: URL
+    private var characterURL: URL {
+        characterPageURL.appending(queryItems: [URLQueryItem(name: "character", value: CharacterModelStore.currentModel.rawValue)])
+    }
     private let backgroundURL: URL
 
     private var characterRect: CGRect = .zero
@@ -66,7 +69,7 @@ final class WallpaperWindowController: NSObject, WKNavigationDelegate, WKScriptM
     init(url: URL) {
         interactiveMode = UserDefaults.standard.object(forKey: "interactiveMode") as? Bool ?? true
         selectedScene = UserDefaults.standard.string(forKey: "selectedScene") ?? "auto"
-        characterURL = Self.layerURL(url, layer: "character")
+        characterPageURL = Self.layerURL(url, layer: "character")
         backgroundURL = Self.layerURL(url, layer: "background")
         super.init()
 

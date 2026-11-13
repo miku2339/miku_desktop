@@ -2,6 +2,7 @@ import * as THREE from 'three';
 
 const FACE_MATERIALS = new Set(['face00', 'face01', 'eye_hi', 'eye_hi2']);
 const NORMAL_STEP = 0.0001;
+const REFERENCE_EYE_HEIGHT = 18.24166;
 
 function smoothstep(start, end, value) {
   const weight = THREE.MathUtils.clamp((value - start) / (end - start), 0, 1);
@@ -13,8 +14,9 @@ function bell(value, center, width) {
   return Math.exp(-distance * distance);
 }
 
-function deformPoint(point, features, eyeHeight) {
-  const { x, y, z } = point;
+function deformPoint(point, features, heightOffset, lowerFaceLift) {
+  const { x, z } = point;
+  const y = point.y - heightOffset;
   const side = Math.abs(x);
   const front = features.insideMouth ? 1 : smoothstep(0.2, 0.75, z);
   const neck = smoothstep(16.95, 17.22, y);
@@ -35,17 +37,16 @@ function deformPoint(point, features, eyeHeight) {
   const cheekWidth = features.iris ? 0 : x * 0.065 * jaw - x * 0.055 * mouth;
   const chin = bell(x, 0, 0.25) * (1 - smoothstep(17.28, 17.55, y));
   point.x = x + support * (cheekWidth + eyeWidth);
-  point.y = y + support * (
-    Math.max(0, 18.0 - y) * 0.16 * lowerFace
-    + 0.035 * chin
-    + (eyeHeight - y) * 0.10 * eye
+  point.y += support * (
+    (Math.max(0, 18.0 - y) * 0.16 * lowerFace + 0.035 * chin) * lowerFaceLift
+    + (REFERENCE_EYE_HEIGHT - y) * 0.10 * eye
     + 0.018 * smoothstep(0.55, 0.85, side) * eye
   );
   point.z = z - support * (0.055 * nose + 0.015 * mouth);
   return point;
 }
 
-export function applyFaceStyle(model) {
+export function applyFaceStyle(model, { lowerFaceLift = 1 } = {}) {
   const geometry = model.geometry;
   const materials = Array.isArray(model.material) ? model.material : [model.material];
   const bones = model.skeleton?.bones || [];
@@ -64,6 +65,16 @@ export function applyFaceStyle(model) {
   const facialVertices = new Map();
   const indices = geometry.getIndex();
   if (!indices) return false;
+  const leftEye = bones.find(bone => bone.name === '左目');
+  const rightEye = bones.find(bone => bone.name === '右目');
+  model.updateMatrixWorld(true);
+  const inverseModel = model.matrixWorld.clone().invert();
+  const leftPosition = leftEye?.getWorldPosition(new THREE.Vector3()).applyMatrix4(inverseModel);
+  const rightPosition = rightEye?.getWorldPosition(new THREE.Vector3()).applyMatrix4(inverseModel);
+  // The Tda variants place the same face geometry at different heights.
+  const heightOffset = leftPosition && rightPosition
+    ? (leftPosition.y + rightPosition.y) / 2 - REFERENCE_EYE_HEIGHT
+    : 0;
   for (const group of geometry.groups) {
     const material = materials[group.materialIndex];
     if (!FACE_MATERIALS.has(material?.name)) continue;
@@ -80,20 +91,13 @@ export function applyFaceStyle(model) {
       facialVertices.set(index, {
         iris: irisWeight > 0.5,
         insideMouth: material.name === 'face01'
-          && position.getY(index) < 17.85
+          && position.getY(index) - heightOffset < 17.85
           && Math.abs(position.getX(index)) < 0.5
       });
     }
   }
   if (facialVertices.size === 0) return false;
 
-  const leftEye = bones.find(bone => bone.name === '左目');
-  const rightEye = bones.find(bone => bone.name === '右目');
-  model.updateMatrixWorld(true);
-  const inverseModel = model.matrixWorld.clone().invert();
-  const leftPosition = leftEye?.getWorldPosition(new THREE.Vector3()).applyMatrix4(inverseModel);
-  const rightPosition = rightEye?.getWorldPosition(new THREE.Vector3()).applyMatrix4(inverseModel);
-  const eyeHeight = leftPosition && rightPosition ? (leftPosition.y + rightPosition.y) / 2 : 18.24166;
   const original = position.array.slice();
   const point = new THREE.Vector3();
   const shifted = new THREE.Vector3();
@@ -104,13 +108,13 @@ export function applyFaceStyle(model) {
 
   for (const [index, features] of facialVertices) {
     point.fromArray(original, index * 3);
-    deformPoint(point, features, eyeHeight);
+    deformPoint(point, features, heightOffset, lowerFaceLift);
     position.setXYZ(index, point.x, point.y, point.z);
 
     for (let axis = 0; axis < 3; axis += 1) {
       shifted.fromArray(original, index * 3);
       shifted.setComponent(axis, shifted.getComponent(axis) + NORMAL_STEP);
-      deformPoint(shifted, features, eyeHeight);
+      deformPoint(shifted, features, heightOffset, lowerFaceLift);
       columns[axis].subVectors(shifted, point).divideScalar(NORMAL_STEP);
     }
     jacobian.set(
@@ -131,7 +135,7 @@ export function applyFaceStyle(model) {
         shifted.fromArray(original, index * 3);
         point.add(shifted);
       }
-      deformPoint(point, features, eyeHeight);
+      deformPoint(point, features, heightOffset, lowerFaceLift);
       if (geometry.morphTargetsRelative) {
         shifted.fromBufferAttribute(position, index);
         point.sub(shifted);

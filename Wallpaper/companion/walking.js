@@ -2,6 +2,8 @@ import * as THREE from './vendor/three.module.js';
 
 const SIDE_NAMES = ['左', '右'];
 const EPSILON = 1e-6;
+// Keep part of her face visible as she walks across the desktop.
+export const WALK_TURN_ANGLE = 1.05;
 
 const clamp01 = value => THREE.MathUtils.clamp(value, 0, 1);
 const smoothstep = value => {
@@ -78,6 +80,7 @@ export function createWalking({ model, bones, restPose }) {
   let stopping = null;
   let recovery = null;
   let initializedFeet = false;
+  let lastRootX = null;
   let lastPose = { active: false, weight: 0, direction: 1, turn: 0, stride: 0 };
 
   const hipPosition = new THREE.Vector3();
@@ -208,6 +211,7 @@ export function createWalking({ model, bones, restPose }) {
     stopping = null;
     recovery = null;
     initializedFeet = false;
+    lastRootX = null;
     lastPose = { active: false, weight: 0, direction: 1, turn: 0, stride: 0 };
     stance.weight = 0;
     stance.captured = false;
@@ -216,6 +220,13 @@ export function createWalking({ model, bones, restPose }) {
 
   function update({ walking, rootX, destinationX, delta = 0 }) {
     const safeDelta = THREE.MathUtils.clamp(Number(delta) || 0, 0, 0.1);
+    const hasRoot = Number.isFinite(rootX);
+    if (plan && hasRoot && lastRootX !== null && Math.abs(rootX - lastRootX) > STANCE_REBASE) {
+      reset();
+      model.position.y = 0;
+      model.updateMatrixWorld(true);
+    }
+    if (hasRoot) lastRootX = rootX;
     if (walking && Number.isFinite(rootX) && Number.isFinite(destinationX)) {
       const nextDirection = Math.sign(destinationX - rootX) || plan?.direction || 1;
       const changedDestination = plan && Math.abs(destinationX - plan.destinationX) > 0.02;
@@ -307,13 +318,18 @@ export function createWalking({ model, bones, restPose }) {
     const settling = stopping && stopping.progress < 2 - EPSILON;
     const active = requested || Boolean(settling) || weight > EPSILON;
     const startTurn = smoothstep(effectiveU / 0.16);
+    const motion = stopping ? 0 : weight * plan.motionScale;
     lastPose = {
       active,
       weight,
       direction: plan.direction,
       turn: turnWeight * startTurn * plan.turnScale,
-      stride: stopping ? 0 : Math.sin(effectiveU * Math.PI) * weight * plan.motionScale,
-      phase: effectiveU
+      stride: Math.sin(effectiveU * Math.PI) * motion,
+      phase: effectiveU,
+      // +1 when the left foot takes the first step: tells the body which side is which.
+      lead: plan.firstSwingSide === '左' ? 1 : -1,
+      motion,
+      stepLength: plan.stepLength
     };
     return lastPose;
   }
@@ -331,7 +347,7 @@ export function createWalking({ model, bones, restPose }) {
       leg.relativeQuaternion.copy(inverseModelQuaternion).multiply(leg.lockedQuaternion);
       leg.currentTargetQuaternion.copy(leg.lockedQuaternion);
       leg.swingStartQuaternion.copy(leg.lockedQuaternion);
-      leg.groundY = leg.neutralY + 0.35 * model.scale.y;
+      leg.groundY = leg.neutralY;
       leg.initialX = leg.target.x;
       leg.z = leg.target.z;
       leg.swingStartZ = leg.z;
@@ -399,22 +415,32 @@ export function createWalking({ model, bones, restPose }) {
           + plan.direction * sample.landingDisplacement * plan.stepLength;
         targetX = THREE.MathUtils.lerp(leg.initialX, landingX, firstSwing);
       }
-      let targetZ = leg.z;
-      if (leg.needsRebaseZ && !sample.planted) {
-        if (leg.wasPlanted) leg.swingStartZ = leg.z;
-        canonicalOffset.set(leg.neutralOffsetX, 0, leg.neutralOffsetZ).applyQuaternion(modelQuaternion);
-        leg.landingZ = model.position.z + canonicalOffset.z;
-        targetZ = THREE.MathUtils.lerp(leg.swingStartZ, leg.landingZ, smoothstep(sample.swing));
-      }
       leg.landingHome = sample.landingDisplacement >= plan.stepCount - EPSILON;
+      let targetZ = leg.z;
+      if (!sample.planted && (leg.needsRebaseZ || !plan.needsHome)) {
+        if (leg.wasPlanted) leg.swingStartZ = leg.z;
+        const swing = sample.swing;
+        let depthProgress = swing;
+        if (plan.needsHome) {
+          canonicalOffset.set(leg.neutralOffsetX, 0, leg.neutralOffsetZ).applyQuaternion(modelQuaternion);
+          leg.landingZ = model.position.z + canonicalOffset.z;
+        } else {
+          const heading = plan.direction * WALK_TURN_ANGLE * plan.turnScale;
+          const lane = leg.neutralOffsetZ * Math.cos(heading) - leg.neutralOffsetX * Math.sin(heading);
+          leg.landingZ = leg.landingHome ? leg.neutralZ : model.position.z + lane;
+          // Move into the lane before the feet pass, and leave it after the last pass.
+          depthProgress = smoothstep(leg.landingHome ? swing ** 2 : swing * (2 - swing));
+        }
+        targetZ = THREE.MathUtils.lerp(leg.swingStartZ, leg.landingZ, depthProgress);
+      }
       if (!leg.wasPlanted && sample.planted) {
         if (leg.needsRebaseZ) {
           canonicalOffset.set(leg.neutralOffsetX, 0, leg.neutralOffsetZ).applyQuaternion(modelQuaternion);
           leg.landingZ = model.position.z + canonicalOffset.z;
-          leg.z = leg.landingZ;
-          targetZ = leg.z;
           leg.needsRebaseZ = false;
         }
+        leg.z = leg.landingZ;
+        targetZ = leg.z;
         if (leg.landingHome) leg.lockedQuaternion.copy(leg.neutralQuaternion);
         else leg.lockedQuaternion.copy(modelQuaternion).multiply(leg.relativeQuaternion);
       } else if (leg.wasPlanted && !sample.planted) {
@@ -515,12 +541,33 @@ export function createWalking({ model, bones, restPose }) {
     }
   }
 
+  function settleHipHeight() {
+    // Lower the hips only as far as needed to reach both foot targets.
+    let drop = 0;
+    for (const side of SIDE_NAMES) {
+      const leg = legs[side];
+      if (!leg.hip || !leg.knee || !leg.ankle) continue;
+      leg.hip.getWorldPosition(hipPosition);
+      leg.knee.getWorldPosition(kneePosition);
+      leg.ankle.getWorldPosition(anklePosition);
+      const reach = hipPosition.distanceTo(kneePosition) + kneePosition.distanceTo(anklePosition) - 0.01;
+      const dx = leg.target.x - hipPosition.x;
+      const dz = leg.target.z - hipPosition.z;
+      const verticalReach = Math.sqrt(Math.max(0, reach ** 2 - dx ** 2 - dz ** 2));
+      drop = Math.max(drop, hipPosition.y - leg.target.y - verticalReach);
+    }
+    if (drop <= EPSILON) return;
+    model.position.y -= drop * weight;
+    model.updateMatrixWorld(true);
+  }
+
   function solve() {
     if (!plan || weight <= EPSILON) return;
     model.position.y = 0;
     model.updateMatrixWorld(true);
     if (!initializedFeet) initializeFeet();
     updateFootTargets();
+    settleHipHeight();
     for (const side of SIDE_NAMES) solveLeg(legs[side]);
     refreshLegGrants();
     model.updateMatrixWorld(true);
@@ -535,6 +582,8 @@ export function createWalking({ model, bones, restPose }) {
   const STANCE_SLACK = 0.45;
   const STANCE_TURN = 0.6;
   const STANCE_STEP_SECONDS = 0.32;
+  const STANCE_REBASE = Math.max(STANCE_SLACK * 3, legWorldLength() * 0.15);
+  const STANCE_REBASE_TURN = STANCE_TURN * 2;
   const stance = {
     weight: 0,
     captured: false,
@@ -644,7 +693,12 @@ export function createWalking({ model, bones, restPose }) {
     const yaw = stanceEuler.setFromQuaternion(modelQuaternion, 'YXZ').y;
     const drift = Math.hypot(model.position.x - stance.rootX, model.position.z - stance.rootZ);
     const turned = Math.abs(Math.atan2(Math.sin(yaw - stance.yaw), Math.cos(yaw - stance.yaw)));
-    if (!stance.step && (drift > STANCE_SLACK || turned > STANCE_TURN)) {
+    if (drift > STANCE_REBASE || turned > STANCE_REBASE_TURN) {
+      // A scene/anchor jump is not a physical step: keeping the old targets would pull
+      // both legs toward the previous screen position for a frame.
+      captureStance();
+      stance.step = null;
+    } else if (!stance.step && (drift > STANCE_SLACK || turned > STANCE_TURN)) {
       // Too far from where she planted her feet: a quick little step to re-plant them.
       stance.step = {
         progress: 0,

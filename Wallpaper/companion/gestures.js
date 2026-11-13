@@ -45,8 +45,8 @@ export function createGestures(api) {
   // or the sleeve cuff) faces the right way: shoulder lift, upper arm forward / raise, elbow,
   // forearm twist, wrist. Left-side values; the right side mirrors.
   const FACE_SPOTS = {
-    // Covering her mouth: palm on the mouth, fingers up (yawn, giggle, sneeze).
-    mouth: { shoulder: 0.169, armY: 1.235, armZ: 0.04, elbowY: -1.175, elbowZ: 2.899, twist: 0.973, wristX: -0.49, wristZ: 0.36 },
+    // Covering her mouth: palm turned inward, fingers below the eyes.
+    mouth: { shoulder: 0.166, armY: 1.14, armZ: -0.12, elbowY: -1.03, elbowZ: 2.927, twist: 1.88, wristX: -0.36, wristZ: 0.105 },
     // Thinking: a loosely curled hand under the chin, palm towards it.
     chin: { shoulder: -0.169, armY: 0.942, armZ: -0.012, elbowY: -0.751, elbowZ: 3.106, twist: 1.145, wristX: -0.265, wristZ: 0.586 },
     // One of both hands up by her mouth, elbows out so the forearms don't cross (a gasp).

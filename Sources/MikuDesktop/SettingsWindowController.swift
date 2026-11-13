@@ -50,7 +50,9 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
     private let customField = NSTextField()
     private let nicknameField = NSTextField()
     private let characterModelStatus = NSTextField.mikuLabel("", size: 12.5, color: MikuTheme.secondaryText)
+    private let characterModelPopup = NSPopUpButton()
     private let characterModelImportButton = MikuPillButton(frame: .zero)
+    private let characterModelCustomButton = MikuPillButton(frame: .zero)
     private let characterModelDownloadButton = MikuPillButton(frame: .zero)
     private var importingCharacterModel = false
     private let replyLanguagePopup = NSPopUpButton()
@@ -175,6 +177,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         customField.placeholderString = L10n.text("customPlaceholder")
         nicknameField.placeholderString = L10n.text("nicknamePlaceholder")
         characterModelImportButton.title = L10n.text("characterModelImport")
+        characterModelCustomButton.title = L10n.text("characterModelImportCustom")
         characterModelDownloadButton.title = L10n.text("characterModelDownload")
         refreshCharacterModel()
         resetPositionButton.title = L10n.text("resetPosition")
@@ -481,8 +484,12 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         characterModelStatus.preferredMaxLayoutWidth = 280
         characterModelStatus.setAccessibilityIdentifier("character-model-status")
         characterModelStatus.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        characterModelPopup.setAccessibilityIdentifier("character-model-selection")
+        characterModelPopup.target = self
+        characterModelPopup.action = #selector(characterModelChanged)
         characterModelImportButton.setAccessibilityIdentifier("character-model-import")
-        for button in [characterModelImportButton, characterModelDownloadButton] {
+        characterModelCustomButton.setAccessibilityIdentifier("character-model-import-custom")
+        for button in [characterModelImportButton, characterModelCustomButton, characterModelDownloadButton] {
             button.style = .soft
             button.controlHeight = 26
             button.font = MikuTheme.font(12, .semibold)
@@ -490,6 +497,8 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         }
         characterModelImportButton.symbolName = "square.and.arrow.down"
         characterModelImportButton.action = #selector(importCharacterModel)
+        characterModelCustomButton.symbolName = "folder"
+        characterModelCustomButton.action = #selector(importCustomCharacterModel)
         characterModelDownloadButton.symbolName = "arrow.up.right"
         characterModelDownloadButton.action = #selector(openCharacterModelDownload)
 
@@ -607,7 +616,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         characterModelButtons.orientation = .horizontal
         characterModelButtons.alignment = .centerY
         characterModelButtons.spacing = 6
-        let characterModelStack = NSStackView(views: [characterModelStatus, characterModelButtons])
+        let characterModelStack = NSStackView(views: [characterModelPopup, characterModelStatus, characterModelButtons, characterModelCustomButton])
         characterModelStack.orientation = .vertical
         characterModelStack.alignment = .leading
         characterModelStack.spacing = 6
@@ -931,23 +940,46 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
     // MARK: - Actions
 
     private func refreshCharacterModel() {
-        characterModelStatus.stringValue = importingCharacterModel
-            ? L10n.text("characterModelImporting")
-            : CharacterModelStore.currentModelName
+        let current = CharacterModelStore.currentModel
+        characterModelPopup.removeAllItems()
+        for model in CharacterModelStore.availableModels() {
+            characterModelPopup.addItem(withTitle: model == .custom ? L10n.text("characterModelCustom") : model.name)
+            characterModelPopup.lastItem?.representedObject = model.rawValue
+        }
+        select(current.rawValue, in: characterModelPopup)
+        characterModelPopup.isEnabled = !importingCharacterModel
+        characterModelStatus.isHidden = !importingCharacterModel
+        characterModelStatus.stringValue = L10n.text("characterModelImporting")
         characterModelImportButton.isEnabled = !importingCharacterModel
+        characterModelCustomButton.isEnabled = !importingCharacterModel
+    }
+
+    @objc private func characterModelChanged() {
+        guard let value = characterModelPopup.selectedItem?.representedObject as? String,
+              let model = CharacterModelStore.Model(rawValue: value) else { return }
+        CharacterModelStore.select(model)
     }
 
     @objc private func openCharacterModelDownload() {
-        NSWorkspace.shared.open(CharacterModelStore.authorURL)
+        let url = CharacterModelStore.currentModel == .classic ? CharacterModelStore.authorURL : CharacterModelStore.v4xAuthorURL
+        NSWorkspace.shared.open(url)
     }
 
     @objc private func importCharacterModel() {
+        chooseCharacterModel(custom: false)
+    }
+
+    @objc private func importCustomCharacterModel() {
+        chooseCharacterModel(custom: true)
+    }
+
+    private func chooseCharacterModel(custom: Bool) {
         guard !importingCharacterModel, let window = characterModelImportButton.window ?? window else { return }
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.zip]
+        panel.allowedContentTypes = custom ? [UTType(filenameExtension: "pmx") ?? .data] : [.zip]
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
-        panel.message = L10n.text("characterModelImportTerms")
+        panel.message = L10n.text(custom ? "characterModelImportCustomHelp" : "characterModelImportTerms")
         panel.beginSheetModal(for: window) { [weak self] response in
             MainActor.assumeIsolated {
                 guard response == .OK, let self, let url = panel.url else { return }
@@ -955,22 +987,30 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
                 self.refreshCharacterModel()
                 Task {
                     do {
-                        try await Task.detached(priority: .userInitiated) {
-                            try CharacterModelStore.importArchive(from: url)
+                        let model = try await Task.detached(priority: .userInitiated) {
+                            if custom {
+                                try CharacterModelStore.importCustomModel(from: url)
+                                return CharacterModelStore.Model.custom
+                            }
+                            return try CharacterModelStore.importArchive(from: url)
                         }.value
                         self.importingCharacterModel = false
+                        CharacterModelStore.select(model)
                         self.refreshCharacterModel()
-                        NotificationCenter.default.post(name: .mikuCharacterModelChanged, object: nil)
                     } catch {
                         self.importingCharacterModel = false
                         self.refreshCharacterModel()
                         let alert = NSAlert()
                         alert.messageText = L10n.text("characterModelImportFailed")
-                        switch error as? CharacterModelStore.ImportError {
-                        case .invalidArchive, .invalidContents:
-                            alert.informativeText = L10n.text("characterModelWrongArchive")
-                        default:
-                            alert.informativeText = L10n.text("characterModelImportRetry")
+                        if custom {
+                            alert.informativeText = L10n.text("characterModelImportCustomHelp")
+                        } else {
+                            switch error as? CharacterModelStore.ImportError {
+                            case .invalidArchive, .invalidContents:
+                                alert.informativeText = L10n.text("characterModelWrongArchive")
+                            default:
+                                alert.informativeText = L10n.text("characterModelImportRetry")
+                            }
                         }
                         alert.addButton(withTitle: L10n.text("characterModelDismiss"))
                         if let window = self.characterModelImportButton.window ?? self.window {

@@ -8,6 +8,8 @@ Vendored from [three.js r171](https://github.com/mrdoob/three.js/tree/r171), inc
 
 ## Hatsune Miku model
 
+**Tda式初音ミクV4X Ver1.00** is by **Tda**. Thanks to Tda for granting Miku Desktop permission to bundle the original PMX and its required textures with the app for free distribution through this project's GitHub Releases, and to **ナルパジン (Narupajin)** for coordinating the permission. The original terms accompany the app and still apply. This project-specific permission covers the app bundle on GitHub Releases. The model files are kept outside the source repository and standalone downloads remain at the original distribution. [Tda's original distribution](https://bowlroll.net/file/146088)
+
 Animasa Hatsune Miku v2.3, originally bundled with MikuMikuDance. The model and eye texture are fetched separately from the [three.js r171 Miku example](https://github.com/mrdoob/three.js/tree/r171/examples/models/mmd/miku). See `Wallpaper/assets/companion-model/readme_miku_v2.txt`, `readme.txt` and `ASSET-NOTICE.txt`. These assets are not covered by the three.js MIT license or the project’s PolyForm Noncommercial license.
 
 Hatsune Miku is a character of Crypton Future Media, Inc. Consult [Piapro character licensing](https://piapro.jp/license/character_guideline) for character use. The repository does not include model weights or character model binaries. A local build may contain the separately downloaded character model; the build does not grant redistribution rights.

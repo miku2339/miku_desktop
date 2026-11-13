@@ -7,7 +7,7 @@
 - 只有使用者明確選擇略過 Tda 時才加 `--skip-tda`，並保留既有匯入模型。`--app-dir DIR` 可指定安裝資料夾，`--no-open` 可暫不開啟。
 - 已安裝 macOS App、只需配置 Tda 時，執行 `python3 scripts/import-tda-model.py --apply`，下載、校驗、匯入後重新開啟 App，不必重新建置。原站下載受阻時會開啟作者頁，等待 Downloads 中的原始 ZIP；無互動環境可加 `--no-browser`。
 - 交付前確認實際安裝位置及載入的角色模型。Tda 尚未就緒時，明確回報待完成的步驟。
-- Tda 模型保存在使用者的 `~/Library/Application Support/MikuDesktop/CharacterModels/tda/`，作者規約一併保留。GitHub 與公開安裝包不附原始 Tda 模型及貼圖。
+- 經典服裝模型保存在使用者的 `~/Library/Application Support/MikuDesktop/CharacterModels/tda/`，作者規約一併保留。Tda 授權本專案僅於 GitHub Releases 免費提供含 V4X 原始 PMX、必要貼圖及原始規約的 App 同捆版。原始碼倉庫、一般分享安裝包與獨立模型下載沿用各自的素材規約。
 
 ## Miku 語音（TTS）：只限擁有者自己使用
 

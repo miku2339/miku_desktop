@@ -265,7 +265,7 @@ def installed_app(candidate=None):
 def apply_model(app):
     # A fresh instance asks the existing app to save and quit before taking its place.
     try:
-        subprocess.run(["/usr/bin/open", "-n", str(app)], check=True, timeout=15)
+        subprocess.run(["/usr/bin/open", "-n", str(app), "--args", "--select-tda-classic"], check=True, timeout=15)
     except (OSError, subprocess.SubprocessError):
         raise ModelSetupError("The model was imported, but Miku Desktop could not be reopened. Open the app again to apply it.") from None
     print(f"Requested reopening Miku Desktop to apply the verified Tda model: {app}")

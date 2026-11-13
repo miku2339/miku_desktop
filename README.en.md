@@ -6,6 +6,12 @@ Hatsune Miku, living on your macOS desktop. She walks around animated Tokyo stre
 
 **Website**: [desktop.mikutool.com](https://desktop.mikutool.com/) (overview and live background demo)
 
+## Default character and thanks
+
+**Tda式初音ミクV4X** is the default character in the V4X bundle for GitHub Releases. Thank you to **Tda** for creating the model and allowing us to include it in the free app, and to **ナルパジン (Narupajin)** for coordinating and confirming permission. [Original model distribution](https://bowlroll.net/file/146088)
+
+New users see V4X on first launch and can switch models in **Notebook → Settings → Character**. The original V4X terms are included with the app and still apply. [Third-party assets and terms](THIRD_PARTY_NOTICES.md)
+
 ![The Shibuya scramble crossing at dusk](Wallpaper/assets/scenes/shibuya-scramble-dusk.jpg)
 
 ## Features
@@ -102,15 +108,15 @@ Quit Miku Desktop before replacing the app. Chats, memories, affection, diary, a
 
 For source updates, run `git pull --ff-only` followed by `./scripts/install-app.sh --skip-tda` to keep the configured character. If an older app has Tda only inside its bundle, import the author's ZIP once before switching to a public build.
 
-### Shareable build
+### GitHub Release build
 
 ```sh
-./scripts/build-app.sh --public
+./scripts/build-app.sh --public --v4x-archive "/path/to/Tda式初音ミクV4X_Ver1.00.zip"
 ```
 
-This creates `../outputs/Miku Desktop (Public).zip` without the optional Tda model. Every asset remains subject to its own license.
+This creates `../outputs/MikuDesktop-macOS.zip`. The app includes the original V4X PMX, its required textures, and the original terms. The permission for this bundle covers free distribution through this project's GitHub Releases. For general sharing, `./scripts/build-app.sh --public` packages Animasa.
 
-For a GitHub Release, use `v` followed by the version in `Info.plist` as its tag and upload this public ZIP (it may be named `MikuDesktop-macOS.zip`). Update notices appear once the stable release and its app package are published.
+For a GitHub Release, use `v` followed by the version in `Info.plist` as its tag and attach `MikuDesktop-macOS.zip`. Update notices appear once the stable release and its app package are published.
 
 ### Tda classic outfit model
 
@@ -120,7 +126,9 @@ The installer stores the classic outfit model by Tda / 金子卵黄 and its auth
 2. Open **Notebook → Settings → Character**, click **Import Tda ZIP…**, and select the archive.
 3. The desktop character switches to Tda immediately. The model and its authors' terms are stored on this Mac and retained when you update the app.
 
-The bundled Animasa model is used before import. Public packages do not include the Tda model or its textures.
+Switch between bundled V4X, Animasa, and imported models in **Notebook → Settings → Character**.
+
+Use **Import PMX…** to choose a compatible custom character. Keep the texture paths relative to the model. Importing another PMX replaces the previous custom character.
 
 If the app is already installed, Python 3 can download and apply the model without extra packages or rebuilding the app:
 
@@ -139,7 +147,7 @@ python3 scripts/import-tda-model.py /path/to/Tda式デフォ服ミク_ver1.1.zip
 ./scripts/build-app.sh
 ```
 
-A local build that includes the Tda model is for your own use only. The model and its textures are not distributed with the source code.
+A local build that includes the classic outfit model is for your own use only. The model and its textures are not distributed with the source code.
 
 ## Setting up AI
 

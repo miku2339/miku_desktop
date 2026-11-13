@@ -59,7 +59,7 @@ class TdaSetupTests(unittest.TestCase):
             self.assertEqual([event[0] for event in events], ["import", "open"])
             self.assertEqual(events[0][1][0], home / "Library/Application Support/MikuDesktop/CharacterModels/tda")
             self.assertEqual(events[0][2], {"archive": "original.zip", "allow_browser": True})
-            self.assertEqual(events[1][1][0], ["/usr/bin/open", "-n", str(app.resolve())])
+            self.assertEqual(events[1][1][0], ["/usr/bin/open", "-n", str(app.resolve()), "--args", "--select-tda-classic"])
 
     def test_apply_failure_never_reopens_app_and_has_standalone_recovery(self):
         with tempfile.TemporaryDirectory() as temporary, contextlib.redirect_stdout(io.StringIO()), \

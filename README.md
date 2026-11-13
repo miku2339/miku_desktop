@@ -6,6 +6,12 @@
 
 **網站**：[desktop.mikutool.com](https://desktop.mikutool.com/)（介紹與動態背景示範）
 
+## 預設角色與致謝
+
+GitHub Releases 的 V4X 同捆版以 **Tda式初音ミクV4X** 為預設角色。感謝 **Tda** 製作模型並同意隨 App 免費發布，也謝謝 **ナルパジン（Narupajin）** 協助聯繫與確認。 [模型原始配布頁](https://bowlroll.net/file/146088)
+
+新使用者首次啟動時會載入 V4X，可在 **手帳 → 設定 → 角色** 切換模型。V4X 的原始使用規約隨 App 附上，並繼續適用。 [第三方素材與使用條款](THIRD_PARTY_NOTICES.md)
+
 ![黃昏的澀谷十字路口背景](Wallpaper/assets/scenes/shibuya-scramble-dusk.jpg)
 
 ## 特色
@@ -102,15 +108,15 @@ App 每天自動向 GitHub 檢查一次正式版本；有新版時，選單列�
 
 從原始碼更新時，使用 `git pull --ff-only` 後執行 `./scripts/install-app.sh --skip-tda`，保留本機已配置的角色。舊版若只有 App 內附的 Tda，請先從作者 ZIP 匯入一次，再改用公開版。
 
-### 公開分享用的打包
+### GitHub Release 打包
 
 ```sh
-./scripts/build-app.sh --public
+./scripts/build-app.sh --public --v4x-archive "/path/to/Tda式初音ミクV4X_Ver1.00.zip"
 ```
 
-會產生 `../outputs/Miku Desktop (Public).zip`，並排除選用的 Tda 模型。各項素材仍適用各自的授權條款。
+會產生 `../outputs/MikuDesktop-macOS.zip`，其中的 App 內含 V4X 原始 PMX、顯示所需的貼圖與原始使用規約。此同捆版的個別許可適用於本專案的 GitHub Releases 免費發布。一般分享用的 `./scripts/build-app.sh --public` 會打包 Animasa。
 
-發布 GitHub Release 時，tag 使用 `v` 加上 `Info.plist` 的版本號，並上傳此公開 ZIP（可命名為 `MikuDesktop-macOS.zip`）。正式發布且安裝包上傳完成後，更新提示才會顯示該版本。
+發布 GitHub Release 時，tag 使用 `v` 加上 `Info.plist` 的版本號，並附上 `MikuDesktop-macOS.zip`。正式發布且安裝包上傳完成後，更新提示才會顯示該版本。
 
 ### Tda 經典服裝模型
 
@@ -120,7 +126,9 @@ App 每天自動向 GitHub 檢查一次正式版本；有新版時，選單列�
 2. 開啟 **手帳 → 設定 → 角色**，按 **匯入 Tda ZIP…**，選取該壓縮檔。
 3. 匯入完成後，桌面角色會立即切換成 Tda。模型與原作者的規約保存在這部 Mac，更新 App 後仍會保留。
 
-匯入前會使用內附的 Animasa 模型。公開安裝包不包含 Tda 模型與貼圖。
+可在 **手帳 → 設定 → 角色** 重新選擇同捆 V4X、Animasa 或已匯入的模型。
+
+也可以按 **匯入 PMX…** 選擇相容的自訂角色。請保留模型與貼圖的相對路徑。重新匯入會取代上一個自訂角色。
 
 已安裝 App 時，也可用 Python 3 下載並套用模型，不需安裝額外套件或重新編譯 App：
 
@@ -139,7 +147,7 @@ python3 scripts/import-tda-model.py /path/to/Tda式デフォ服ミク_ver1.1.zip
 ./scripts/build-app.sh
 ```
 
-這種包含 Tda 模型的本機建置只限自己使用。模型與貼圖不會隨原始碼散布。
+包含經典服裝模型的本機建置僅限個人使用。模型與貼圖不會隨原始碼散布。
 
 ## 設定 AI
 

@@ -6,6 +6,12 @@ macOS のデスクトップに住む初音ミク。動く東京の街並みを�
 
 **Web サイト**：[desktop.mikutool.com](https://desktop.mikutool.com/)（紹介と動く背景のデモ）
 
+## 標準キャラクターと謝辞
+
+GitHub Releases 向けの V4X 同梱版では、**Tda式初音ミクV4X** が標準キャラクターです。モデルを制作し、アプリへの同梱と無償配布をご許可くださった **Tda** 様、許諾の確認を取り次いでくださった **ナルパジン** 様に感謝いたします。 [モデルの配布元](https://bowlroll.net/file/146088)
+
+新規ユーザーの初回起動時には V4X が表示されます。**手帳 → 設定 → キャラクター** からモデルを切り替えられます。V4X の元の利用規約はアプリに同梱され、引き続き適用されます。 [サードパーティ素材と利用条件](THIRD_PARTY_NOTICES.md)
+
 ![夕暮れの渋谷スクランブル交差点の背景](Wallpaper/assets/scenes/shibuya-scramble-dusk.jpg)
 
 ## 特長
@@ -102,15 +108,15 @@ Miku Desktop を終了してからアプリを置き換えてください。会�
 
 ソースから更新する場合は `git pull --ff-only` の後に `./scripts/install-app.sh --skip-tda` を実行し、設定済みのキャラクターを引き継ぎます。旧版のアプリ内だけに Tda がある場合は、公開版へ切り替える前に作者の ZIP を一度読み込んでください。
 
-### 公開用パッケージ
+### GitHub Release 用パッケージ
 
 ```sh
-./scripts/build-app.sh --public
+./scripts/build-app.sh --public --v4x-archive "/path/to/Tda式初音ミクV4X_Ver1.00.zip"
 ```
 
-任意の Tda モデルを除いた `../outputs/Miku Desktop (Public).zip` が生成されます。各素材にはそれぞれのライセンスが適用されます。
+`../outputs/MikuDesktop-macOS.zip` が生成されます。アプリには V4X の元の PMX、表示に必要なテクスチャ、利用規約が含まれます。この同梱版の個別許諾は、本プロジェクトの GitHub Releases での無償配布に適用されます。一般共有用の `./scripts/build-app.sh --public` には Animasa モデルが含まれます。
 
-GitHub Release のタグは `v` と `Info.plist` のバージョン番号を組み合わせ、公開 ZIP を添付します（`MikuDesktop-macOS.zip` という名前も使用できます）。正式版とアプリのアップロードが完了すると、更新通知に表示されます。
+GitHub Release のタグは `v` と `Info.plist` のバージョン番号を組み合わせ、`MikuDesktop-macOS.zip` を添付します。正式版とアプリのアップロードが完了すると、更新通知に表示されます。
 
 ### Tda デフォルト衣装モデル
 
@@ -120,7 +126,9 @@ GitHub Release のタグは `v` と `Info.plist` のバージョン番号を組�
 2. **手帳 → 設定 → キャラクター** を開き、**Tda ZIP をインポート…** から ZIP を選択します。
 3. インポート後、デスクトップのキャラクターがすぐに Tda に切り替わります。モデルと作者の利用規約はこの Mac に保存され、App を更新しても引き継がれます。
 
-インポート前は同梱の Animasa モデルを使用します。公開パッケージには Tda モデルとテクスチャは含まれません。
+**手帳 → 設定 → キャラクター** から、同梱の V4X、Animasa、インポート済みのモデルに切り替えられます。
+
+**PMX を読み込む…** から対応するカスタムキャラクターを選べます。モデルからテクスチャへの相対パスを維持してください。別の PMX を読み込むと、前のカスタムキャラクターが置き換わります。
 
 App をインストール済みの場合は、Python 3 でモデルをダウンロードして適用することもできます。追加パッケージのインストールや App の再ビルドは不要です。
 
@@ -139,7 +147,7 @@ python3 scripts/import-tda-model.py /path/to/Tda式デフォ服ミク_ver1.1.zip
 ./scripts/build-app.sh
 ```
 
-Tda モデルを含むローカルビルドは個人利用に限ります。モデルとテクスチャはソースコードと一緒には配布されません。
+デフォルト衣装モデルを含むローカルビルドは個人利用に限ります。モデルとテクスチャはソースコードと一緒には配布されません。
 
 ## AI の設定
 

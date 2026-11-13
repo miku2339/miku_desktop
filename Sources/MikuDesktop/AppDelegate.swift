@@ -21,6 +21,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         replaceOtherInstances()
+        CharacterModelStore.initializeSelection()
+        if CommandLine.arguments.contains("--select-tda-classic") { CharacterModelStore.select(.classic) }
         MikuTrainingActivity.shared.start()
         NSApp.setActivationPolicy(.accessory)
         statusItem.button?.title = "♪"
@@ -106,7 +108,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             presentStartupError()
             return
         }
-        let server = StaticHTTPServer(rootURL: resourceURL, importedModelURL: CharacterModelStore.directory)
+        let server = StaticHTTPServer(rootURL: resourceURL, importedModelURL: CharacterModelStore.directory,
+                                      importedV4XModelURL: CharacterModelStore.importedDirectory(for: .v4x),
+                                      customModelURL: CharacterModelStore.importedDirectory(for: .custom))
         self.server = server
         server.start { [weak self] result in
             DispatchQueue.main.async {

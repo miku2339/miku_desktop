@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { createGrounding } from './grounding.js';
-import { createWalking } from './walking.js';
+import { createWalking, WALK_TURN_ANGLE } from './walking.js';
 import { createCarry } from './carry.js';
 import { createTouchGestures } from './touch-gestures.js';
 import { createShake, shakeAftermath } from './shake.js';
@@ -184,6 +184,7 @@ const state = {
   modelURL: null,
   modelName: null,
   bones: new Map(),
+  skirtRootCount: 0,
   restPose: new Map(),
   morphs: {},
   loadedScenes: [],
@@ -1421,7 +1422,24 @@ function anchorAt(elapsed, behavior) {
 function walkingProgress(fromAnchor, toAnchor, progress, duration) {
   const distance = Math.abs(screenAnchorToWorld(toAnchor) - screenAnchorToWorld(fromAnchor));
   const travelDuration = Math.min(duration, Math.max(1.2, distance / 3.1));
-  return smoothstep(progress * duration / travelDuration);
+  // Get going within a step, stroll at a steady pace, then slow down to stop:
+  // the feet follow the distance covered, so a steady pace means a steady cadence.
+  return cruiseProgress(
+    progress * duration / travelDuration,
+    Math.min(0.5, travelDuration / 3) / travelDuration,
+    Math.min(0.6, travelDuration / 3) / travelDuration
+  );
+}
+
+/** 0→1 over x in [0, 1]: eased speed-up over `rampUp`, constant speed, eased slow-down over `rampDown`. */
+function cruiseProgress(x, rampUp, rampDown) {
+  const t = THREE.MathUtils.clamp(x, 0, 1);
+  const speed = 1 / (1 - (rampUp + rampDown) / 2);
+  // Distance covered while the speed eases in with smoothstep: x³ - x⁴/2.
+  const ramp = u => u * u * u - u * u * u * u / 2;
+  if (t < rampUp) return speed * rampUp * ramp(t / rampUp);
+  if (t > 1 - rampDown) return 1 - speed * rampDown * ramp((1 - t) / rampDown);
+  return speed * (rampUp / 2 + t - rampUp);
 }
 
 const facePosition = new THREE.Vector3();
@@ -1639,11 +1657,8 @@ function applyStretch(progress, variant = null, elapsed = 0) {
 // throws the twintails and skirt outward and makes them trail behind.
 
 const turning = { yaw: { x: 0, v: 0 }, hair: { x: 0, v: 0 }, glance: { x: 0, v: 0 } };
-// She walks in three-quarter view rather than full profile, so you still see her face.
-const TURN_ANGLE = 1.05;
-
 function applyTurnFollowThrough(gaitPose, elapsed, cue = 0) {
-  const walkYaw = gaitPose.active ? gaitPose.direction * TURN_ANGLE * gaitPose.turn : 0;
+  const walkYaw = gaitPose.active ? gaitPose.direction * WALK_TURN_ANGLE * gaitPose.turn : 0;
   // While the watchdog is turning her back round, ignore every deliberate offset.
   const recovering = state.yawWatch.recoverUntil > elapsed;
   let target = walkYaw + (recovering ? 0 : state.turnOffset);
@@ -1721,8 +1736,8 @@ function turnCue(routineBehavior, elapsed, idleOnly) {
 function applySkirtTrail(amount) {
   const trail = THREE.MathUtils.clamp(amount, -0.045, 0.045);
   if (Math.abs(trail) < 0.001) return;
-  if (state.bones.has('スカート_0_0')) {
-    for (let index = 0; index < 8; index += 1) {
+  if (state.skirtRootCount > 0) {
+    for (let index = 0; index < state.skirtRootCount; index += 1) {
       rotateBone(`スカート_0_${index}`, 0, 0, trail);
     }
     return;
@@ -1731,9 +1746,9 @@ function applySkirtTrail(amount) {
 }
 
 function applySkirtFollow(leftSwing, rightSwing, weight = 1) {
-  if (state.bones.has('スカート_0_0')) {
-    for (let index = 0; index < 8; index += 1) {
-      const angle = index * Math.PI / 4;
+  if (state.skirtRootCount > 0) {
+    for (let index = 0; index < state.skirtRootCount; index += 1) {
+      const angle = index * (2 * Math.PI / state.skirtRootCount);
       const front = Math.cos(angle);
       const leftWeight = (1 + Math.sin(angle)) / 2;
       const rightWeight = 1 - leftWeight;
@@ -1992,15 +2007,52 @@ function applyNod(progress, curious = false, variant = null) {
 }
 
 function applyWalk(pose) {
-  const { direction, stride, weight } = pose;
+  const { direction, weight } = pose;
+  const motion = pose.motion ?? Math.abs(pose.stride);
+  const phase = pose.phase ?? 0;
+  const lead = pose.lead ?? 1;
   state.model.rotation.y = direction * 1.22 * pose.turn;
-  offsetBone('センター', 0, Math.abs(stride) * 0.06 * weight, 0);
-  rotateBone('上半身', 0.025, -0.05 * stride, 0, weight);
-  applySkirtFollow(0.20 * stride, -0.20 * stride, weight);
-  rotateBone('左腕', -0.16 * stride, 0, 0, weight);
-  rotateBone('右腕', 0.16 * stride, 0, 0, weight);
-  rotateBone('左髪１', 0.035, -0.08 * stride, 0, weight);
-  rotateBone('右髪１', 0.035, -0.08 * stride, 0, weight);
+  // The first half step starts from feet together.
+  const ramp = smoothstep(THREE.MathUtils.clamp(phase, 0, 1));
+  // How far the left leg is ahead of the right (-1…1): furthest as each foot lands.
+  const legs = -Math.cos(phase * Math.PI) * lead * motion * ramp;
+  // Which leg is swinging (+ left): her weight sits over the other one.
+  const shift = Math.sin(phase * Math.PI) * lead * motion;
+  // Lowest as a foot lands (knees soften), back up as she passes over it.
+  const dip = Math.cos(phase * Math.PI) ** 2 * motion * ramp;
+  // Arms trail the legs a little, and settle smoothly when she stops.
+  const arms = springTo(springs.walkArms, legs, 2.2, 0.8);
+  const down = springTo(springs.walkDip, dip, 4, 0.9);
+  const sway = springTo(springs.walkSway, shift, 3, 0.9);
+  // The planted feet sit between her hips and half a step behind: keep her hips over them
+  // instead of leaning out ahead (eases back over her feet as she stops).
+  const behind = 0.5 * (pose.stepLength ?? 0) / Math.max(0.01, state.model.scale.z) * motion * ramp;
+  const back = springTo(springs.walkBack, behind, 2.2, 1);
+
+  // Measured on the Tda rig: +x on an upper arm swings the hand backwards.
+  offsetBone('センター', -0.09 * sway, -0.2 * down, -back, weight);
+  rotateBone('下半身', 0, -0.07 * legs, -0.035 * sway, weight);
+  rotateBone('上半身', 0.03 * motion, 0.09 * arms, 0.03 * sway, weight);
+  // Head stays steady while the shoulders turn.
+  rotateBone('首', 0, -0.04 * arms, 0, weight);
+  rotateBone('頭', 0.02 * down, -0.03 * arms, -0.015 * sway, weight);
+  applySkirtFollow(-0.22 * legs, 0.22 * legs, weight);
+  // Each arm swings forward with the opposite leg.
+  for (const [side, forward] of [['左', -arms], ['右', arms]]) {
+    // An arm holding something (umbrella, drink…) stays with it.
+    const free = weight * (1 - heldArmWeight(side));
+    rotateBone(`${side}腕`, -0.3 * forward, 0, 0, free);
+    // Elbows stay soft, bending more as the arm swings forward; the hand trails a little.
+    rotateBone(`${side}ひじ`, -(0.12 * motion + 0.28 * Math.max(0, forward)), 0, 0, free);
+    rotateBone(`${side}手首`, 0.06 * forward, 0, 0, free);
+  }
+  rotateBone('左髪１', 0.035 + 0.05 * down, -0.06 * arms, 0, weight);
+  rotateBone('右髪１', 0.035 + 0.05 * down, -0.06 * arms, 0, weight);
+}
+
+function heldArmWeight(side) {
+  const pose = propState.shown ? HOLD_POSES[propState.shown] : null;
+  return pose && pose[`${side}腕`] ? THREE.MathUtils.clamp(propState.hold.x, 0, 1) : 0;
 }
 
 const grantRotation = new THREE.Quaternion();
@@ -2057,7 +2109,11 @@ const springs = {
   hair: { x: 0, v: 0 },
   skirt: { x: 0, v: 0 },
   lollX: { x: 0, v: 0 },
-  lollY: { x: 0, v: 0 }
+  lollY: { x: 0, v: 0 },
+  walkArms: { x: 0, v: 0 },
+  walkDip: { x: 0, v: 0 },
+  walkSway: { x: 0, v: 0 },
+  walkBack: { x: 0, v: 0 }
 };
 let springDelta = 0;
 
@@ -2304,6 +2360,7 @@ function updateModel(elapsed) {
   // Upset: she stands half turned away from you until you've apologised.
   if (!carrying && !dragging) state.turnOffset += state.upset.side * 0.6 * state.upset.x;
   if (gaitPose.active) applyWalk(gaitPose);
+  else for (const spring of [springs.walkArms, springs.walkDip, springs.walkSway, springs.walkBack]) spring.x = spring.v = 0;
   applyTurnFollowThrough(gaitPose, elapsed, turnCue(routineBehavior, elapsed, !reaction && !dragging && !carrying));
   if (behaviorName === 'headPat' || behaviorName === 'headStroke') applyHeadPat(behavior.progress, behavior.variant);
   if (behaviorName === 'headStroke') rotateBone('頭', 0, 0, Math.sin(elapsed * 3.6) * 0.02 * gestureEnvelope(behavior.progress));
@@ -2363,6 +2420,8 @@ const HOLD_POSES = {
   umbrella: { '右腕': [0.48, 0.5, -0.71], '右ひじ': [-0.63, 0.4, 0.12], '右手首': [-0.87, 0.5, -0.1] },
   drink: { '右腕': [-0.18, -0.36, 0.27], '右ひじ': [0.02, 1.83, -0.2], '右手首': [-0.44, 0.14, -0.19] },
   sip: { '右腕': [-0.45, 0.78, 0.94], '右ひじ': [-0.69, 1.77, -0.62], '右手首': [-0.72, -0.99, 0.71], '頭': [0.06, 0, 0] },
+  sipTda: { '右腕': [-0.12, 0.64, 0.82], '右ひじ': [-0.69, 1.75, -0.62], '右手首': [-0.81, -0.93, 0.94], '頭': [0.06, 0, 0] },
+  sipV4X: { '右腕': [-0.01, 0.58, 0.78], '右ひじ': [-0.67, 1.78, -0.58], '右手首': [-0.83, -0.88, 1.07], '頭': [0.06, 0, 0] },
   leek: { '右腕': [-0.21, 0.87, -0.97], '右ひじ': [-0.02, -0.54, -0.4], '右手首': [0.11, -0.5, 0.48] },
   fan: { '右腕': [0.04, 0.07, 0.12], '右ひじ': [0.19, 1.93, -1.08], '右手首': [-0.38, -0.32, 0.49] },
   glowsticks: {
@@ -2379,6 +2438,11 @@ const HAT_PLACEMENT = {
   beanie: { position: [0, 1.75, -0.25], rotation: [-0.12, 0, 0], scale: 1 }
 };
 
+function drinkSipAmount(elapsed) {
+  const cycle = (elapsed % 9) / 9;
+  return easeBetween(cycle, 0.55, 0.68) * (1 - easeBetween(cycle, 0.86, 0.97));
+}
+
 function applyHoldPose(name, weight, elapsed) {
   if (!name || weight <= 0.001) return;
   const pose = HOLD_POSES[name];
@@ -2386,9 +2450,14 @@ function applyHoldPose(name, weight, elapsed) {
   let extra = null;
   if (name === 'drink') {
     // A sip every few seconds: the cup comes up to her mouth and goes back down.
-    const cycle = (elapsed % 9) / 9;
-    const sip = easeBetween(cycle, 0.55, 0.68) * (1 - easeBetween(cycle, 0.86, 0.97));
-    if (sip > 0.001) extra = { pose: HOLD_POSES.sip, amount: sip };
+    const sip = drinkSipAmount(elapsed);
+    if (sip > 0.001) {
+      // The two Tda rigs have different arm lengths and lip heights.
+      const sipPose = state.modelURL?.includes('/tda-v4x/')
+        ? HOLD_POSES.sipV4X
+        : state.model?.geometry.userData.MMD?.format === 'pmx' ? HOLD_POSES.sipTda : HOLD_POSES.sip;
+      extra = { pose: sipPose, amount: sip };
+    }
     if (sip > 0.5) setMorph('う', 0.5 * weight);
     else setSmile(0.35 * weight);
   }
@@ -2453,7 +2522,8 @@ const propVectors = {
   toCamera: new THREE.Vector3(0, 0, 1),
   side: new THREE.Vector3(),
   forward: new THREE.Vector3(),
-  basis: new THREE.Matrix4()
+  basis: new THREE.Matrix4(),
+  rotation: new THREE.Quaternion()
 };
 
 const umbrellaFitVectors = {
@@ -2667,13 +2737,15 @@ function placeHandProps(elapsed) {
   } else if (name === 'drink') {
     // The cup sits in the grip, its side against her palm, held a little below the middle.
     // It turns with her hand, but she keeps it mostly upright so nothing spills.
-    pointAlong(object, propVectors.side.copy(fist.axis).lerp(propVectors.up, PROP_FIT.cupUpright).normalize());
+    const sip = drinkSipAmount(elapsed);
+    const yaw = state.model?.geometry.userData.MMD?.format === 'pmx' ? state.model.rotation.y * sip : 0;
+    const cupAxis = propVectors.side.copy(fist.axis).lerp(propVectors.up, PROP_FIT.cupUpright);
+    pointAlong(object, cupAxis.applyAxisAngle(propVectors.up, -yaw));
     object.position.addScaledVector(fist.inward, PROP_FIT.cupOut).addScaledVector(fist.along, PROP_FIT.cupAlong)
       .addScaledVector(fist.axis, -PROP_FIT.cupDrop);
-    const cycle = (elapsed % 9) / 9;
-    const sip = easeBetween(cycle, 0.55, 0.68) * (1 - easeBetween(cycle, 0.86, 0.97));
-    // Follows her hand (set above); tipped a little more towards her mouth while she sips.
+    // Tip the straw towards her mouth in the direction she faces.
     object.rotateX(-0.3 * sip);
+    object.quaternion.premultiply(propVectors.rotation.setFromAxisAngle(propVectors.up, yaw));
   } else if (name === 'closedUmbrella') {
     // Hanging from her fingers by the J hook, the shaft straight down.
     orientAlong(object, propVectors.up, fist.axis);
@@ -3792,6 +3864,7 @@ async function loadModel() {
         scale: bone.scale.clone()
       });
     }
+    while (state.bones.has(`スカート_0_${state.skirtRootCount}`)) state.skirtRootCount += 1;
     walking = createWalking({ model: state.model, bones: state.bones, restPose: state.restPose });
     state.morphs = { ...(state.model.morphTargetDictionary || {}) };
     state.ready = true;

@@ -4,7 +4,7 @@ import test from 'node:test';
 
 import * as THREE from '../Wallpaper/companion/vendor/three.module.js';
 import { Parser } from '../Wallpaper/companion/vendor/libs/mmdparser.module.js';
-import { createWalking } from '../Wallpaper/companion/walking.js';
+import { createWalking, WALK_TURN_ANGLE } from '../Wallpaper/companion/walking.js';
 
 const modelPath = new URL('../Wallpaper/assets/companion-model/tda/miku.pmx', import.meta.url);
 
@@ -68,6 +68,27 @@ test('step count follows travel distance instead of behavior duration', () => {
   assert.equal(walking.status().direction, -1);
 });
 
+test('a large root jump discards stale walking foot targets', () => {
+  const rig = loadLegRig();
+  const walking = createWalking(rig);
+  resetRig(rig.restPose);
+  walking.update({ walking: true, rootX: 0, destinationX: 9.744, delta: 1 / 30 });
+  walking.solve();
+
+  rig.model.position.x = 3;
+  resetRig(rig.restPose);
+  rig.model.updateMatrixWorld(true);
+  const neutral = Object.fromEntries(['左', '右'].map(side => [side, anklePose(rig, side).position]));
+  walking.update({ walking: false, rootX: 3, destinationX: 9.744, delta: 1 / 30 });
+  walking.solve();
+
+  assert.equal(walking.status().active, false);
+  assert.equal(rig.model.position.y, 0);
+  for (const side of ['左', '右']) {
+    assert.ok(anklePose(rig, side).position.distanceTo(neutral[side]) < 0.06, `${side} foot ignores the stale target`);
+  }
+});
+
 for (const direction of [1, -1]) {
   test(`stance ankle stays fixed while walking ${direction > 0 ? 'right' : 'left'}`, () => {
     const rig = loadLegRig();
@@ -109,6 +130,44 @@ for (const direction of [1, -1]) {
     assert.ok(comparedFrames > 40);
   });
 }
+
+test('boots pass at different depths and plant at standing height', () => {
+  for (const direction of [1, -1]) {
+    const rig = loadLegRig();
+    const walking = createWalking(rig);
+    const destinationX = direction * 9.744;
+    const sides = ['左', '右'];
+    const standing = sides.map(side => anklePose(rig, side).position);
+    let previousGap = 0;
+    let passes = 0;
+
+    for (let frame = 0; frame <= 120; frame += 1) {
+      resetRig(rig.restPose);
+      const rootX = destinationX * frame / 120;
+      rig.model.position.set(rootX, 0, 0);
+      const pose = walking.update({ walking: true, rootX, destinationX, delta: 1 / 30 });
+      rig.model.rotation.y = direction * WALK_TURN_ANGLE * pose.turn;
+      walking.solve();
+
+      const [left, right] = sides.map(side => anklePose(rig, side).position);
+      const { feet } = walking.status();
+      [left, right].forEach((ankle, index) => {
+        if (feet[sides[index]].planted) assert.ok(Math.abs(ankle.y - standing[index].y) < 0.02);
+      });
+      const gap = left.x - right.x;
+      if (gap * previousGap < 0) {
+        assert.ok(Math.abs(left.z - right.z) > 0.3, `feet pass at the same depth on frame ${frame}`);
+        passes += 1;
+      }
+      previousGap = gap;
+    }
+
+    assert.equal(passes, 4);
+    sides.forEach((side, index) => {
+      assert.ok(Math.abs(anklePose(rig, side).position.z - standing[index].z) < 0.02);
+    });
+  }
+});
 
 test('swing foot rises and returns to its neutral ankle height', () => {
   const rig = loadLegRig();

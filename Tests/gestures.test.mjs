@@ -183,7 +183,7 @@ test('clap meets and separates open palms in front of the chest without crossing
   t.diagnostic(`closed gap ${closedGap.toFixed(3)}, open gap ${openGap.toFixed(3)}, palms y ${closedLeft.palm.y.toFixed(3)}/${closedRight.palm.y.toFixed(3)}, z ${closedLeft.palm.z.toFixed(3)}/${closedRight.palm.z.toFixed(3)}, wrist x ${closedLeft.wrist.x.toFixed(3)}/${closedRight.wrist.x.toFixed(3)}, normals x ${closedLeft.normal.x.toFixed(3)}/${closedRight.normal.x.toFixed(3)}, wrist bend ${closedLeft.wristBend.toFixed(3)}/${closedRight.wristBend.toFixed(3)}`);
 });
 
-function poseGesture(rig, name, progress, variant = {}) {
+function poseGesture(rig, name, progress, variant = {}, elapsed = 0) {
   resetRig(rig);
   applyBaseArms(rig);
   const gestures = createGestures({
@@ -201,7 +201,7 @@ function poseGesture(rig, name, progress, variant = {}) {
     setTurnOffset: () => {},
     lift: () => {}
   });
-  gestures[name](progress, 0, { side: '右', ...variant });
+  gestures[name](progress, elapsed, { side: '右', ...variant });
   applyGrantRotations(rig);
   rig.model.updateMatrixWorld(true);
 }
@@ -238,6 +238,29 @@ test('hands by the face show the palm the right way, not the back of the hand or
       const left = palmFacing(rig, '左');
       const right = palmFacing(rig, '右');
       assert.ok(left.elbow.x > right.elbow.x + 1, 'forearms cross in front of her chest');
+    }
+  }
+});
+
+test('both hands can cover the mouth while laughing without hiding the eyes', () => {
+  const rig = loadRig();
+  const head = rig.bones.get('頭');
+  for (const side of ['左', '右']) {
+    for (const elapsed of [0, 0.14]) {
+      poseGesture(rig, 'laugh', 0.5, { side }, elapsed);
+      const eye = head.worldToLocal(rig.bones.get(`${side}目`).getWorldPosition(new THREE.Vector3()));
+      const fingertips = ['人指', '中指', '薬指', '小指'].map(finger => (
+        head.worldToLocal(rig.bones.get(`${side}${finger}３`).getWorldPosition(new THREE.Vector3()))
+      ));
+      const wristBend = handPose(rig, side).wristBend;
+      const hand = palmFacing(rig, side);
+      const facing = hand.palm.transformDirection(head.matrixWorld.clone().invert());
+      const palm = head.worldToLocal(hand.centre);
+      assert.ok(facing.z < -0.8, `${side}: palm turns away from her mouth (${facing.z})`);
+      assert.ok(Math.abs(palm.x) < 0.4 && palm.y > -0.45 && palm.y < 0.26, `${side}: palm misses the mouth (${palm.toArray()})`);
+      assert.ok(palm.z > 1.3 && palm.z < 1.9, `${side}: palm intersects or floats too far from the face (${palm.z})`);
+      assert.ok(fingertips.every(tip => tip.y < eye.y + 0.04), `${side}: fingers rise to eye level`);
+      assert.ok(wristBend < 0.5, `${side}: wrist bends too far (${wristBend})`);
     }
   }
 });

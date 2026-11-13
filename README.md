@@ -6,6 +6,8 @@
 
 **網站**：[desktop.mikutool.com](https://desktop.mikutool.com/)（介紹與動態背景示範）
 
+[**下載 macOS 版**](https://github.com/miku2339/miku_desktop/releases/latest)
+
 ## 預設角色與致謝
 
 GitHub Releases 的 V4X 同捆版以 **Tda式初音ミクV4X** 為預設角色。感謝 **Tda** 製作模型並同意隨 App 免費發布，也謝謝 **ナルパジン（Narupajin）** 協助聯繫與確認。 [模型原始配布頁](https://bowlroll.net/file/146088)

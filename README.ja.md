@@ -6,6 +6,8 @@ macOS のデスクトップに住む初音ミク。動く東京の街並みを�
 
 **Web サイト**：[desktop.mikutool.com](https://desktop.mikutool.com/)（紹介と動く背景のデモ）
 
+[**macOS 版をダウンロード**](https://github.com/miku2339/miku_desktop/releases/latest)
+
 ## 標準キャラクターと謝辞
 
 GitHub Releases 向けの V4X 同梱版では、**Tda式初音ミクV4X** が標準キャラクターです。モデルを制作し、アプリへの同梱と無償配布をご許可くださった **Tda** 様、許諾の確認を取り次いでくださった **ナルパジン** 様に感謝いたします。 [モデルの配布元](https://bowlroll.net/file/146088)

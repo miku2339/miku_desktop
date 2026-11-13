@@ -6,6 +6,8 @@ Hatsune Miku, living on your macOS desktop. She walks around animated Tokyo stre
 
 **Website**: [desktop.mikutool.com](https://desktop.mikutool.com/) (overview and live background demo)
 
+[**Download for macOS**](https://github.com/miku2339/miku_desktop/releases/latest)
+
 ## Default character and thanks
 
 **Tda式初音ミクV4X** is the default character in the V4X bundle for GitHub Releases. Thank you to **Tda** for creating the model and allowing us to include it in the free app, and to **ナルパジン (Narupajin)** for coordinating and confirming permission. [Original model distribution](https://bowlroll.net/file/146088)

@@ -185,6 +185,7 @@ const state = {
   modelName: null,
   bones: new Map(),
   skirtRootCount: 0,
+  skirtAngles: [],
   restPose: new Map(),
   morphs: {},
   loadedScenes: [],
@@ -1745,10 +1746,25 @@ function applySkirtTrail(amount) {
   for (const name of ['左ｽｶｰﾄ前', '左ｽｶｰﾄ後', '右ｽｶｰﾄ前', '右ｽｶｰﾄ後']) rotateBone(name, 0, 0, trail);
 }
 
+/**
+ * Where each skirt root sits around her waist (0 = front, +π/2 = her left), read from
+ * the rest pose: the panels aren't evenly spaced (V4X packs the front, spreads the back).
+ */
+function skirtRootAngles(count) {
+  if (count === 0) return [];
+  state.model.updateMatrixWorld(true);
+  const roots = Array.from({ length: count }, (_, index) => (
+    state.bones.get(`スカート_0_${index}`).getWorldPosition(new THREE.Vector3())
+  ));
+  // Measured from the middle of the ring itself, not a hip bone that may sit off-centre.
+  const center = roots.reduce((sum, root) => sum.add(root), new THREE.Vector3()).multiplyScalar(1 / count);
+  return roots.map(root => Math.atan2(root.x - center.x, root.z - center.z));
+}
+
 function applySkirtFollow(leftSwing, rightSwing, weight = 1) {
   if (state.skirtRootCount > 0) {
     for (let index = 0; index < state.skirtRootCount; index += 1) {
-      const angle = index * (2 * Math.PI / state.skirtRootCount);
+      const angle = state.skirtAngles[index] ?? index * (2 * Math.PI / state.skirtRootCount);
       const front = Math.cos(angle);
       const leftWeight = (1 + Math.sin(angle)) / 2;
       const rightWeight = 1 - leftWeight;
@@ -3865,6 +3881,7 @@ async function loadModel() {
       });
     }
     while (state.bones.has(`スカート_0_${state.skirtRootCount}`)) state.skirtRootCount += 1;
+    state.skirtAngles = skirtRootAngles(state.skirtRootCount);
     walking = createWalking({ model: state.model, bones: state.bones, restPose: state.restPose });
     state.morphs = { ...(state.model.morphTargetDictionary || {}) };
     state.ready = true;

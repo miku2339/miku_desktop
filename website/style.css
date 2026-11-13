@@ -284,6 +284,11 @@ h2 { font-size: clamp(30px, 4vw, 44px); line-height: 1.2; }
 .steps h3 { font-size: 20px; margin-bottom: 4px; }
 .steps p { color: var(--muted); margin: 0; }
 .install { border-top: 1px solid #dfe8ea; }
+.platform { display: flex; align-items: center; gap: 12px; font-size: 26px; margin-bottom: 26px; }
+.steps + .platform { margin-top: 56px; padding-top: 44px; border-top: 1px solid #dfe8ea; }
+.tag { font: 700 13px/1 var(--body); letter-spacing: .04em; padding: 6px 11px; border-radius: 999px; background: var(--mist); color: var(--teal-deep); border: 1px solid rgba(19,122,116,.25); }
+.platform-note { max-width: 38rem; color: var(--muted); margin: -8px 0 30px; }
+.steps code { overflow-wrap: anywhere; }
 
 .foot { background: var(--ink); color: #b7c3d1; padding: 56px 0; font-size: 14px; line-height: 1.7; }
 .foot p { max-width: 52rem; }
@@ -342,6 +347,8 @@ h2 { font-size: clamp(30px, 4vw, 44px); line-height: 1.2; }
 .js .reveal.in .facts li:nth-child(3) { transition-delay: .24s; }
 .js .reveal.in .facts li:nth-child(4) { transition-delay: .36s; }
 .js .reveal.in .facts li:nth-child(5) { transition-delay: .48s; }
+.js .reveal.in .facts li:nth-child(6) { transition-delay: .6s; }
+.js .reveal.in .facts li:nth-child(7) { transition-delay: .72s; }
 
 /* Chat: her reply arrives after a typing indicator */
 .js .bubbles .you, .js .bubbles .her { opacity: 0; transform: translateY(10px) scale(.96); transition: opacity .4s ease, transform .4s cubic-bezier(.3,1.4,.5,1); }

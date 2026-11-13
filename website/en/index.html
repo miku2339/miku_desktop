@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Miku Desktop</title>
-<meta name="description" content="Hatsune Miku on your Mac desktop: scenes change with your local time, while chat and memory run entirely on your device. An unofficial fan project.">
+<meta name="description" content="Hatsune Miku on your desktop: scenes change with your local time, and she chats through a local AI or a cloud AI you choose and remembers your time together. For macOS, with a Windows preview. An unofficial fan project.">
 <meta name="robots" content="index,follow,max-image-preview:large">
 <link rel="canonical" href="https://desktop.mikutool.com/en/">
 <link rel="alternate" hreflang="zh-Hant" href="https://desktop.mikutool.com/">
@@ -14,9 +14,17 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Miku Desktop">
 <meta property="og:title" content="Miku Desktop">
-<meta property="og:description" content="Hatsune Miku on your Mac desktop: scenes change with your local time, while chat and memory run entirely on your device. An unofficial fan project.">
+<meta property="og:description" content="Hatsune Miku on your desktop: scenes change with your local time, and she chats through a local AI or a cloud AI you choose and remembers your time together. For macOS, with a Windows preview. An unofficial fan project.">
 <meta property="og:url" content="https://desktop.mikutool.com/en/">
 <meta property="og:locale" content="en_US">
+<meta property="og:image" content="https://desktop.mikutool.com/assets/miku-desktop-share-v2.jpg">
+<meta property="og:image:type" content="image/jpeg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Tda式初音ミクV4X winks and makes a peace sign at Shibuya Crossing at dusk. The text on the left reads Miku Desktop, macOS and Windows Preview.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://desktop.mikutool.com/assets/miku-desktop-share-v2.jpg">
+<meta name="twitter:image:alt" content="Tda式初音ミクV4X winks and makes a peace sign at Shibuya Crossing at dusk. The text on the left reads Miku Desktop, macOS and Windows Preview.">
 <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -26,7 +34,7 @@
         "@id": "https://desktop.mikutool.com/en/#webpage",
         "name": "Miku Desktop",
         "url": "https://desktop.mikutool.com/en/",
-        "description": "Hatsune Miku on your Mac desktop: scenes change with your local time, while chat and memory run entirely on your device. An unofficial fan project.",
+        "description": "Hatsune Miku on your desktop: scenes change with your local time, and she chats through a local AI or a cloud AI you choose and remembers your time together. For macOS, with a Windows preview. An unofficial fan project.",
         "inLanguage": "en",
         "isPartOf": { "@id": "https://desktop.mikutool.com/#website" }
       }
@@ -37,7 +45,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;800&amp;family=Noto+Sans+TC:wght@400;500;700&amp;display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../style.css">
+<link rel="stylesheet" href="../style.css?v=9e6ddd90d6dc">
 </head>
 <body data-time="day">
 
@@ -48,7 +56,7 @@
     <img class="scene-img" data-for="night" src="../assets/room-night.jpg" alt="">
   </div>
   <div class="miku-wrap" id="miku-wrap">
-    <img class="hero-miku" src="../assets/miku.png" alt="Hatsune Miku standing in her room">
+    <img class="hero-miku" src="../assets/miku-v4x.webp" width="1000" height="1500" alt="Hatsune Miku winking and making a peace sign (Tda式初音ミクV4X)">
   </div>
   <canvas class="particles" id="hero-particles" aria-hidden="true"></canvas>
 
@@ -72,14 +80,14 @@
     <h1><span class="line">Miku lives</span><span class="line">on your desktop</span></h1>
     <p class="lede">From sunrise through dusk to late at night, the light in her room follows your clock. Pat her head, hold her hand, or talk with her; she'll remember what you tell her.</p>
     <div class="cta-row">
-      <a class="btn primary" href="https://github.com/miku2339/miku_desktop/blob/main/README.en.md#install-and-build">View build instructions</a>
+      <a class="btn primary" href="https://github.com/miku2339/miku_desktop/releases/latest">Download for macOS</a>
       <a class="btn ghost repo" id="repo-link" href="https://github.com/miku2339/miku_desktop">
         <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
         GitHub repository
       </a>
       <a class="btn ghost" href="#install">View installation steps</a>
     </div>
-    <p class="req">Free · Requires an Apple silicon Mac with macOS 13 or later</p>
+    <p class="req">Free · Apple silicon Mac (macOS 13 or later) · Windows preview</p>
   </div>
 
   <div class="dial" role="group" aria-label="Change the scene time">
@@ -95,8 +103,9 @@
   <div class="wrap two reveal">
     <h2>More than a wallpaper</h2>
     <div class="prose">
-      <p>She walks around your desktop on her own. Move the pointer close and she'll look your way; poke her cheek or pat her head and she'll respond. Pick her up by dragging her, then let go and she'll land back on the ground.</p>
+      <p>She walks around your desktop on her own. Move the pointer close and she'll look your way; poke her cheek or pat her head and she'll respond. Hold her hand and she'll follow your pointer. Pick her up by dragging her, then let go and she'll land back on the ground.</p>
       <p>At around 1:00 a.m., she returns to her room, lies on her side in bed, and tucks herself under the covers. Say good night and she can go to sleep earlier.</p>
+      <p>Her default look is Tda式初音ミクV4X, made by Tda. It comes with the app you download, so she's there the moment you open it. In Notebook → Settings → Character you can switch to the classic outfit or the Animasa model, or import a compatible PMX character.</p>
       <p>On rainy days she carries a clear umbrella, at tea time she has a drink in hand, and now and then she fans herself, hugs a leek, or waves glowsticks. On holidays she wears a hat for the occasion. Put on some music and she rests a hand on her headset and moves to the beat.</p>
     </div>
   </div>
@@ -173,11 +182,13 @@
         <p class="her">You've worked hard today. Shall I hum something cheerful for you? ♪</p>
       </div>
       <ul class="facts">
-        <li><b>Three languages.</b>Traditional Chinese, Japanese, and English. Chinese replies use a Taiwanese Mandarin tone by default; ask her and she'll switch to Cantonese.</li>
+        <li><b>Many languages.</b>The interface comes in Traditional Chinese, Japanese, English, and Korean. She can reply in Mandarin, Cantonese, Japanese, English, or Korean, or automatically follow the language you use.</li>
         <li><b>Sounds like Miku.</b>Upbeat and direct, and she can't stop once the talk turns to music. She'll hum along, but never quotes copyrighted lyrics.</li>
         <li><b>Your choice of personality.</b>Cheerful, gentle, quiet, or one you write yourself, plus the name she uses for you.</li>
         <li><b>Long-term memory.</b>She remembers your preferences and the relationship you've built together. You can delete individual memories at any time.</li>
-        <li><b>Image understanding.</b>Drag an image into the chat window when your local model supports image input.</li>
+        <li><b>Image understanding.</b>Drag an image into the chat window when the model you chose supports image input.</li>
+        <li><b>Voice calls.</b>Press the phone button and just talk. Speech recognition runs on your device, and you can cut in while she's speaking. Her voice comes from the local speech engine you set up.</li>
+        <li><b>Local or cloud AI.</b>By default she uses a model on your own computer. You can also enter your own OpenAI-compatible cloud service and API key.</li>
       </ul>
     </div>
   </div>
@@ -187,8 +198,10 @@
   <div class="wrap two reveal">
     <h2>Her days</h2>
     <ul class="facts">
-      <li><b>Special days.</b>She remembers her birthday, Miku Day, Christmas, New Year, and summer festivals, as well as the day you first met. Magical Mirai and SNOW MIKU dates are checked on the official sites every three days.</li>
+      <li><b>Special days.</b>She remembers her birthday, Miku Day, Christmas, New Year, and summer festivals, as well as the day you first met. Magical Mirai, Miku With You, MIKU EXPO, and SNOW MIKU dates are checked through official sources every three days.</li>
       <li><b>A notebook and a diary.</b>Every night before bed, she writes about the day in her diary. You can read it in Miku's Notebook.</li>
+      <li><b>Song knowledge.</b>200 verified Hatsune Miku songs are built in, each with its creator, year, and a link to the original. When she doesn't know a song, she says so. Tell her in chat what you'd like to hear and she can open it on YouTube or Spotify.</li>
+      <li><b>Memory album.</b>Take a photo of Miku and the scene as they are, add a title and a note, and keep it as a memory you share.</li>
       <li><b>Mini games.</b>Rock-paper-scissors, a Vocaloid song quiz, and rhythm tap. Just ask in chat to start one.</li>
       <li><b>Now and then, she comes to you.</b>Turn on "Random little moments" and she'll hum, ask you something, or invite you to play at random times.</li>
     </ul>
@@ -197,10 +210,11 @@
 
 <section class="band private">
   <div class="wrap two reveal">
-    <h2>Everything stays on your Mac</h2>
+    <h2>On your computer by default</h2>
     <div class="prose">
-      <p>Your own computer's AI model handles each chat, so conversations, memories, and images are never uploaded. The weather feature sends only the coordinates of the city you select, and checking Magical Mirai and SNOW MIKU dates only reads the public pages of their official sites.</p>
-      <p>Noticing the apps you use, the music you play, and the videos you watch, glancing at your screen now and then, and random little moments are five separate proactive companionship features. All are off by default and must be enabled individually.</p>
+      <p>By default, an AI model on your own computer handles each chat, and conversations, memories, diary entries, and images are stored on your device. If you switch to a cloud AI, your chat messages, memory summaries, diary material, and any images you attach are sent to the service you specify. Your API key is stored only in the system credential store (Keychain on macOS, Credential Manager on Windows).</p>
+      <p>The weather feature sends only the coordinates of the place you select. Checking official event dates and app updates only reads public pages. The optional online song lookup sends only the song title or the search text you enter, never the whole conversation.</p>
+      <p>Noticing the apps you use, the music you play, and the videos you watch, glancing at your screen now and then, and random little moments are five separate proactive companionship features. All are off by default and must be enabled individually. With a cloud AI, screen, app, and media information is sent only after you also turn on sharing.</p>
     </div>
   </div>
 </section>
@@ -208,24 +222,43 @@
 <section class="band install" id="install">
   <div class="wrap two reveal">
     <h2>Installation</h2>
+    <div class="platforms">
+    <h3 class="platform">macOS</h3>
     <ol class="steps">
       <li>
-        <h3>Download the source and install</h3>
-        <p>Follow the <a href="https://github.com/miku2339/miku_desktop/blob/main/README.en.md#install-and-build">GitHub installation instructions</a> to clone the repository, then run <code>./scripts/install-app.sh</code>. It obtains and configures the author's original Tda model, builds and installs the app. If the download requires login or verification, obtain the ZIP from the author and continue with <code>--tda-archive</code>.</p>
+        <h3>Download the app</h3>
+        <p>Download <code>MikuDesktop-macOS.zip</code> from <a href="https://github.com/miku2339/miku_desktop/releases/latest">GitHub Releases</a>, unzip it, and move the app to your Applications folder. Tda式初音ミクV4X is included, so there is no separate model to download. To build from source instead, follow the <a href="https://github.com/miku2339/miku_desktop/blob/main/README.en.md#install-and-build">GitHub installation instructions</a>.</p>
       </li>
       <li>
         <h3>Allow the app to open</h3>
-        <p>macOS may block the app the first time you open it. Go to “System Settings → Privacy &amp; Security” and select “Open Anyway.”</p>
+        <p>The app isn't notarized by Apple, so macOS may block it the first time you open it. Go to “System Settings → Privacy &amp; Security” and select “Open Anyway.”</p>
       </li>
       <li>
-        <h3>Prepare your local AI</h3>
-        <p>Install and start <a href="https://github.com/jundot/omlx">oMLX</a>, then load a model. The default is Qwen3.5-0.8B; a larger model will give better responses if your Mac has enough memory.</p>
+        <h3>Prepare your AI</h3>
+        <p>Local: install and start <a href="https://github.com/jundot/omlx">oMLX</a>, then load a model. The default is Qwen3.5-0.8B; a larger model will give better responses if your Mac has enough memory. Cloud: have your own OpenAI-compatible endpoint (HTTPS required), model ID, and API key ready.</p>
       </li>
       <li>
         <h3>Connect and start chatting</h3>
-        <p>Select ♪ in the menu bar, go to “Settings → Local AI,” then choose “Test connection.” Scenes and character interactions work without AI.</p>
+        <p>Select ♪ in the menu bar, go to “Settings → Local AI,” pick the AI source, fill in the endpoint and model, then choose “Test connection.” Scenes and character interactions work without AI.</p>
       </li>
     </ol>
+    <h3 class="platform">Windows <span class="tag">Preview</span></h3>
+    <p class="platform-note">It shares the character, animation, and scenes with the macOS version. Desktop display, chat, and album photos have been verified on Windows 11; microphone and calls, Windows 10, and multiple displays are still being tested. There is no installer yet, but you can download the GitHub Actions build artifact or build it yourself using the steps below; the executable is unsigned.</p>
+    <ol class="steps">
+      <li>
+        <h3>Get the windows branch</h3>
+        <p>Set up Windows 10/11 x64, the WebView2 Runtime, Rust (MSVC), and the “Desktop development with C++” workload of Visual Studio Build Tools, then clone the repository's <code>windows</code> branch.</p>
+      </li>
+      <li>
+        <h3>Build and run</h3>
+        <p>Follow the <a href="https://github.com/miku2339/miku_desktop/blob/windows/windows/README.md">Windows guide (in Chinese)</a>: run <code>windows/scripts/fetch-model.ps1</code> to get the fallback character, then run <code>cargo build --locked</code> in <code>windows/src-tauri</code>. You can import the Tda model in Settings by selecting the author's original ZIP.</p>
+      </li>
+      <li>
+        <h3>Prepare your AI and start chatting</h3>
+        <p>Install <a href="https://ollama.com/">Ollama</a>, download a model, and select it in Settings. You can also enter your own cloud endpoint, model, and key. Then open chat from the system tray or the desktop control bar.</p>
+      </li>
+    </ol>
+    </div>
   </div>
 </section>
 
@@ -234,10 +267,11 @@
 <footer class="foot">
   <div class="wrap">
     <p><b>An unofficial fan project.</b>Hatsune Miku is a character of Crypton Future Media, INC. This project is not affiliated with Crypton Future Media, Project SEKAI, OTOIRO, or JR East, and is used non-commercially under the <a href="https://piapro.jp/license/character_guideline">Piapro Character License</a>.</p>
+    <p><b>Character model.</b> Tda式初音ミクV4X is the work of Tda, bundled free of charge with the app on this project’s GitHub Releases with the author’s permission. Thanks to Narupajin for helping arrange it. The model’s original terms come with the app and still apply; to download the model on its own, use <a href="https://bowlroll.net/file/146088">Tda’s original distribution page</a>.</p>
     <p>Original project code is licensed under the <a href="https://github.com/miku2339/miku_desktop/blob/main/LICENSE">PolyForm Noncommercial License 1.0.0</a> for noncommercial use, modification, and distribution under its terms. Some backgrounds were converted with AnimeGANv2 and are restricted to non-commercial use. The Shibuya crossing and Akihabara scenes were AI-rendered from the author's own photographs; signs and advertisements shown remain the property of their respective owners. The Shibuya Station background the app keeps as a fallback is adapted from Mister0124's <a href="https://commons.wikimedia.org/wiki/File:JR_Shibuya_Station_Hachiko_Gates.jpg">JR Shibuya Station Hachiko Gates</a> under <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>. See <a href="https://github.com/miku2339/miku_desktop/blob/main/THIRD_PARTY_NOTICES.md">THIRD_PARTY_NOTICES</a> for the sources and terms of other assets.</p>
   </div>
 </footer>
 
-<script src="../script.js"></script>
+<script src="../script.js?v=98a42e5ab504"></script>
 </body>
 </html>

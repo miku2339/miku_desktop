@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Miku Desktop</title>
-<meta name="description" content="Macのデスクトップで初音ミクと暮らそう。時間とともに移り変わるシーン、ふれあい、チャット、記憶機能がすべてローカルで動作する非公式ファン作品です。">
+<meta name="description" content="デスクトップで初音ミクと暮らそう。時間とともに移り変わるシーン、ふれあい、ローカルまたは自分で選んだクラウドAIとのチャット、記憶機能を備えた非公式ファン作品です。macOS版とWindowsプレビュー版があります。">
 <meta name="robots" content="index,follow,max-image-preview:large">
 <link rel="canonical" href="https://desktop.mikutool.com/ja/">
 <link rel="alternate" hreflang="zh-Hant" href="https://desktop.mikutool.com/">
@@ -14,9 +14,17 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Miku Desktop">
 <meta property="og:title" content="Miku Desktop">
-<meta property="og:description" content="Macのデスクトップで初音ミクと暮らそう。時間とともに移り変わるシーン、ふれあい、チャット、記憶機能がすべてローカルで動作する非公式ファン作品です。">
+<meta property="og:description" content="デスクトップで初音ミクと暮らそう。時間とともに移り変わるシーン、ふれあい、ローカルまたは自分で選んだクラウドAIとのチャット、記憶機能を備えた非公式ファン作品です。macOS版とWindowsプレビュー版があります。">
 <meta property="og:url" content="https://desktop.mikutool.com/ja/">
 <meta property="og:locale" content="ja_JP">
+<meta property="og:image" content="https://desktop.mikutool.com/assets/miku-desktop-share-v2.jpg">
+<meta property="og:image:type" content="image/jpeg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="夕暮れの渋谷スクランブル交差点でウインクしながらピースする Tda式初音ミクV4X。左側には Miku Desktop、macOS 版、Windows プレビュー版の表記。">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://desktop.mikutool.com/assets/miku-desktop-share-v2.jpg">
+<meta name="twitter:image:alt" content="夕暮れの渋谷スクランブル交差点でウインクしながらピースする Tda式初音ミクV4X。左側には Miku Desktop、macOS 版、Windows プレビュー版の表記。">
 <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -26,7 +34,7 @@
         "@id": "https://desktop.mikutool.com/ja/#webpage",
         "name": "Miku Desktop",
         "url": "https://desktop.mikutool.com/ja/",
-        "description": "Macのデスクトップで初音ミクと暮らそう。時間とともに移り変わるシーン、ふれあい、チャット、記憶機能がすべてローカルで動作する非公式ファン作品です。",
+        "description": "デスクトップで初音ミクと暮らそう。時間とともに移り変わるシーン、ふれあい、ローカルまたは自分で選んだクラウドAIとのチャット、記憶機能を備えた非公式ファン作品です。macOS版とWindowsプレビュー版があります。",
         "inLanguage": "ja",
         "isPartOf": { "@id": "https://desktop.mikutool.com/#website" }
       }
@@ -37,7 +45,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;800&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../style.css">
+<link rel="stylesheet" href="../style.css?v=9e6ddd90d6dc">
 </head>
 <body data-time="day">
 
@@ -48,7 +56,7 @@
     <img class="scene-img" data-for="night" src="../assets/room-night.jpg" alt="">
   </div>
   <div class="miku-wrap" id="miku-wrap">
-    <img class="hero-miku" src="../assets/miku.png" alt="部屋に立つ初音ミク">
+    <img class="hero-miku" src="../assets/miku-v4x.webp" width="1000" height="1500" alt="ウインクしてピースする初音ミク（Tda式初音ミクV4X）">
   </div>
   <canvas class="particles" id="hero-particles" aria-hidden="true"></canvas>
 
@@ -72,14 +80,14 @@
     <h1><span class="line">ミクが暮らす</span><span class="line">あなたのデスクトップ</span></h1>
     <p class="lede">朝から夕暮れ、そして深夜へ。あなたの時刻に合わせて、ミクの部屋の光が移り変わります。頭をなでたり、手をつないだり、おしゃべりしたり。ミクはあなたとの会話を覚えています。</p>
     <div class="cta-row">
-      <a class="btn primary" href="https://github.com/miku2339/miku_desktop/blob/main/README.ja.md#インストールとビルド">ビルド手順を見る</a>
+      <a class="btn primary" href="https://github.com/miku2339/miku_desktop/releases/latest">macOS版をダウンロード</a>
       <a class="btn ghost repo" id="repo-link" href="https://github.com/miku2339/miku_desktop">
         <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
         GitHubリポジトリ
       </a>
       <a class="btn ghost" href="#install">インストール手順を見る</a>
     </div>
-    <p class="req">無料 · Appleシリコン搭載Mac、macOS 13以降が必要です</p>
+    <p class="req">無料 · Appleシリコン搭載Mac（macOS 13以降）· Windowsプレビュー版</p>
   </div>
 
   <div class="dial" role="group" aria-label="シーンの時間帯を切り替える">
@@ -95,8 +103,9 @@
   <div class="wrap two reveal">
     <h2>ただの壁紙ではありません</h2>
     <div class="prose">
-      <p>ミクはデスクトップを気ままに歩き回ります。マウスを近づけるとこちらを見つめ、頬をつついたり頭をなでたりすれば、かわいらしい反応を見せます。ドラッグして持ち上げ、手を離すと地面に着地します。</p>
+      <p>ミクはデスクトップを気ままに歩き回ります。マウスを近づけるとこちらを見つめ、頬をつついたり頭をなでたりすれば、かわいらしい反応を見せます。手をつなぐとカーソルについて歩き、ドラッグして持ち上げ、手を離すと地面に着地します。</p>
       <p>午前1時ごろになると部屋へ戻り、ベッドで横向きになって布団をかぶります。「おやすみ」と声をかければ、少し早めに休むこともあります。</p>
+      <p>標準のキャラクターは、Tdaさん制作の「Tda式初音ミクV4X」。ダウンロードしたAppに同梱されているので、起動するとすぐに会えます。「手帳 → 設定 → キャラクター」から、クラシック衣装やあにまさ式モデルへの切り替え、対応するPMXモデルの読み込みもできます。</p>
       <p>雨の日は透明なビニール傘をさし、ティータイムには飲み物を手に。ときにはうちわであおいだり、ネギを抱えたり、ペンライトを振ったりします。祝日には季節の帽子をかぶります。音楽を流すと、ヘッドセットに手を添えてリズムに乗ります。</p>
     </div>
   </div>
@@ -173,11 +182,13 @@
         <p class="her">お疲れさま～。元気が出る曲を歌おうか？♪</p>
       </div>
       <ul class="facts">
-        <li><b>3言語に対応。</b>繁體中文、日本語、Englishで会話できます。中国語は台湾華語の口調が基本で、頼めば広東語でも話します。</li>
+        <li><b>多言語で会話。</b>画面は繁體中文、日本語、English、한국어に対応。返事は中国語（標準語）、広東語、日本語、英語、韓国語から選べ、あなたの言語に自動で合わせることもできます。</li>
         <li><b>ミクらしい話し方。</b>明るくまっすぐで、音楽の話になると止まりません。鼻歌は歌っても、著作権のある歌詞は引用しません。</li>
         <li><b>性格を選べます。</b>元気、優しい、物静か、または自由に作成し、ミクからの呼び名も設定できます。</li>
         <li><b>長期記憶。</b>あなたの好みや二人の関係を覚えます。覚えている内容は1件ずつ削除できます。</li>
-        <li><b>画像を理解。</b>ローカルモデルが画像入力に対応していれば、画像をチャットウインドウへドラッグして送れます。</li>
+        <li><b>画像を理解。</b>選んだモデルが画像入力に対応していれば、画像をチャットウインドウへドラッグして送れます。</li>
+        <li><b>音声通話。</b>電話ボタンを押せば声で話せます。音声認識は端末内で行われ、ミクが話している途中でも割り込めます。読み上げには、自分で設定したローカルの音声を使います。</li>
+        <li><b>ローカルAIでもクラウドAIでも。</b>初期設定ではパソコン上のモデルを使います。自分のOpenAI互換クラウドサービスとAPIキーを設定することもできます。</li>
       </ul>
     </div>
   </div>
@@ -187,8 +198,10 @@
   <div class="wrap two reveal">
     <h2>ミクの毎日</h2>
     <ul class="facts">
-      <li><b>記念日。</b>自分の誕生日、ミクの日、クリスマス、お正月、夏祭り、そしてあなたと初めて会った日を覚えています。マジカルミライとSNOW MIKUの日程は、3日ごとに公式サイトで確認します。</li>
+      <li><b>記念日。</b>自分の誕生日、ミクの日、クリスマス、お正月、夏祭り、そしてあなたと初めて会った日を覚えています。マジカルミライ、未来有你、MIKU EXPO、SNOW MIKUの日程は、3日ごとに公式情報を確認します。</li>
       <li><b>手帳と日記。</b>毎晩寝る前に、その日のことを日記に書きます。「ミクの手帳」で読み返せます。</li>
+      <li><b>楽曲データベース。</b>作者、発表年、原曲リンクを確認済みの初音ミク楽曲を200曲収録。知らない曲は、わからないと正直に答えます。チャットで聴きたい曲を伝えれば、YouTubeやSpotifyで開いてくれます。</li>
+      <li><b>思い出アルバム。</b>そのときのミクとシーンを撮影し、タイトルやひとことを添えて、二人の思い出として残せます。</li>
       <li><b>ミニゲーム。</b>じゃんけん、ボカロ曲クイズ、リズムタップ。チャットで声をかければ始まります。</li>
       <li><b>ときどき、ミクから。</b>「ランダムな小さな出来事」を有効にすると、不定期に鼻歌を歌ったり、質問したり、遊びに誘ったりします。</li>
     </ul>
@@ -197,10 +210,11 @@
 
 <section class="band private">
   <div class="wrap two reveal">
-    <h2>すべてをあなたのMacに</h2>
+    <h2>初期設定では<br>端末内に保存</h2>
     <div class="prose">
-      <p>チャットはMac上のAIモデルで処理され、会話、記憶、画像が外部へ送信されることはありません。天気機能では、選択した都市の座標だけを送信します。マジカルミライとSNOW MIKUの日程の確認では、公式サイトの公開ページを読み込むだけです。</p>
-      <p>使用中のApp、再生中の音楽、視聴中の動画、ときどき画面を見る、ランダムな小さな出来事の5つの自発的な声かけ機能は、すべて初期設定で無効です。必要なものだけを個別に有効化できます。</p>
+      <p>初期設定では、チャットはパソコン上のAIモデルで処理され、会話、記憶、日記、画像は端末内に保存されます。クラウドAIに切り替えた場合は、チャットの内容、記憶の要約、日記の素材、添付した画像が、あなたの指定したサービスへ送信されます。APIキーはシステムの資格情報ストア（macOSのキーチェーン／Windowsの資格情報マネージャー）にのみ保存されます。</p>
+      <p>天気機能では、選択した地点の座標だけを送信します。公式イベントの日程確認とAppの更新確認では、公開ページを読み込むだけです。任意のオンライン楽曲検索では、曲名または入力した検索語だけを送信し、会話全体は送信しません。</p>
+      <p>使用中のApp、再生中の音楽、視聴中の動画、ときどき画面を見る、ランダムな小さな出来事の5つの自発的な声かけ機能は、すべて初期設定で無効です。必要なものだけを個別に有効化できます。クラウドAIの利用時は、画面、App、メディアの情報は、別途共有を有効にした場合にのみ送信されます。</p>
     </div>
   </div>
 </section>
@@ -208,24 +222,43 @@
 <section class="band install" id="install">
   <div class="wrap two reveal">
     <h2>インストール</h2>
+    <div class="platforms">
+    <h3 class="platform">macOS</h3>
     <ol class="steps">
       <li>
-        <h3>ソースコードを取得してインストール</h3>
-        <p><a href="https://github.com/miku2339/miku_desktop/blob/main/README.ja.md#インストールとビルド">GitHub のインストール手順</a>に従ってリポジトリを clone し、<code>./scripts/install-app.sh</code>を実行します。作者のオリジナル Tda モデルを取得・設定し、App をビルドしてインストールします。ダウンロードにログインや認証が必要な場合は、作者のページから ZIP を入手し、<code>--tda-archive</code>で続行します。</p>
+        <h3>Appをダウンロード</h3>
+        <p><a href="https://github.com/miku2339/miku_desktop/releases/latest">GitHub Releases</a>から<code>MikuDesktop-macOS.zip</code>をダウンロードして展開し、Appを「アプリケーション」フォルダへ移動します。Tda式初音ミクV4Xが同梱されているので、モデルを別途ダウンロードする必要はありません。ソースコードからビルドする場合は<a href="https://github.com/miku2339/miku_desktop/blob/main/README.ja.md#インストールとビルド">GitHub のインストール手順</a>をご覧ください。</p>
       </li>
       <li>
         <h3>起動を許可</h3>
-        <p>初回起動時にmacOSがブロックする場合があります。「システム設定 → プライバシーとセキュリティ」で「このまま開く」をクリックしてください。</p>
+        <p>このAppはAppleの公証を受けていないため、初回起動時にmacOSがブロックする場合があります。「システム設定 → プライバシーとセキュリティ」で「このまま開く」をクリックしてください。</p>
       </li>
       <li>
-        <h3>ローカルAIを準備</h3>
-        <p><a href="https://github.com/jundot/omlx">oMLX</a>をインストールして起動し、モデルを読み込みます。初期設定はQwen3.5-0.8Bです。メモリに余裕があれば、より大きなモデルで会話の品質が向上します。</p>
+        <h3>AIを準備</h3>
+        <p>ローカル：<a href="https://github.com/jundot/omlx">oMLX</a>をインストールして起動し、モデルを読み込みます。初期設定はQwen3.5-0.8Bです。メモリに余裕があれば、より大きなモデルで会話の品質が向上します。クラウド：自分のOpenAI互換エンドポイント（HTTPS必須）、モデルID、APIキーを用意します。</p>
       </li>
       <li>
         <h3>接続して、会話を始める</h3>
-        <p>メニューバーの♪から「設定 → ローカルAI」を開き、「接続テスト」をクリックします。シーンとキャラクターはAIに接続しなくても利用できます。</p>
+        <p>メニューバーの♪から「設定 → ローカルAI」を開き、AIの接続先を選んでエンドポイントとモデルを入力し、「接続テスト」をクリックします。シーンとキャラクターはAIに接続しなくても利用できます。</p>
       </li>
     </ol>
+    <h3 class="platform">Windows <span class="tag">プレビュー版</span></h3>
+    <p class="platform-note">キャラクター、アニメーション、シーンはmacOS版と共通です。Windows 11でデスクトップ表示、チャット、アルバム撮影を確認済みです。マイクと通話、Windows 10、マルチディスプレイは検証中です。インストーラーはまだありませんが、GitHub Actionsのビルド成果物をダウンロードするか、以下の手順で自分でビルドできます。実行ファイルは未署名です。</p>
+    <ol class="steps">
+      <li>
+        <h3>windowsブランチを取得</h3>
+        <p>Windows 10／11 x64、WebView2 Runtime、Rust（MSVC）、Visual Studio Build Toolsの「C++によるデスクトップ開発」を用意し、リポジトリの<code>windows</code>ブランチをcloneします。</p>
+      </li>
+      <li>
+        <h3>ビルドして起動</h3>
+        <p><a href="https://github.com/miku2339/miku_desktop/blob/windows/windows/README.md">Windows版の説明（中国語）</a>に従って<code>windows/scripts/fetch-model.ps1</code>で予備のキャラクターを取得し、<code>windows/src-tauri</code>で<code>cargo build --locked</code>を実行します。Tdaモデルは、設定で作者のオリジナルZIPを選んで読み込めます。</p>
+      </li>
+      <li>
+        <h3>AIを準備して、会話を始める</h3>
+        <p><a href="https://ollama.com/">Ollama</a>をインストールしてモデルをダウンロードし、設定で選択します。自分のクラウドエンドポイント、モデル、APIキーを設定することもできます。あとはシステムトレイかデスクトップのコントロールバーからチャットを開きます。</p>
+      </li>
+    </ol>
+    </div>
   </div>
 </section>
 
@@ -234,10 +267,11 @@
 <footer class="foot">
   <div class="wrap">
     <p><b>非公式のファン作品です。</b>初音ミクはクリプトン・フューチャー・メディア株式会社のキャラクターです。本プロジェクトは、クリプトン・フューチャー・メディア、プロジェクトセカイ、OTOIRO、JR東日本とは関係ありません。<a href="https://piapro.jp/license/character_guideline">ピアプロキャラクター利用ガイドライン</a>に基づき、非営利で利用しています。</p>
+    <p><b>キャラクターモデル。</b>「Tda式初音ミクV4X」はTdaさんの作品です。作者の許諾を得て、本プロジェクトの GitHub Releases で配布するAppに無料で同梱しています。連絡にご協力いただいたナルパジンさんに感謝します。モデルの利用規約はAppに同梱されており、引き続き適用されます。モデル単体は<a href="https://bowlroll.net/file/146088">作者の配布ページ</a>からダウンロードしてください。</p>
     <p>本プロジェクト独自のソースコードは<a href="https://github.com/miku2339/miku_desktop/blob/main/LICENSE">PolyForm Noncommercial License 1.0.0</a>に基づき、非商用での使用・改変・再配布が認められます。一部の背景はAnimeGANv2で変換され、非営利利用に限られます。渋谷スクランブル交差点と秋葉原のシーンは、作者が撮影した写真を参考にAIで制作しました。画面内の看板や広告の権利は、それぞれの所有者に帰属します。アプリ内で予備として使う渋谷駅の背景は、Mister0124による<a href="https://commons.wikimedia.org/wiki/File:JR_Shibuya_Station_Hachiko_Gates.jpg">JR Shibuya Station Hachiko Gates</a>をもとに加工し、<a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>で公開しています。その他の素材の出典と利用条件は<a href="https://github.com/miku2339/miku_desktop/blob/main/THIRD_PARTY_NOTICES.md">THIRD_PARTY_NOTICES</a>をご覧ください。</p>
   </div>
 </footer>
 
-<script src="../script.js"></script>
+<script src="../script.js?v=98a42e5ab504"></script>
 </body>
 </html>

@@ -245,7 +245,7 @@
 
   // ---------- Scroll reveals and the chat exchange ----------
   const bubbles = document.querySelector(".bubbles");
-  const steps = document.querySelector(".steps");
+  const steps = document.querySelectorAll(".steps");
   const io = new IntersectionObserver((entries) => {
     for (const e of entries) {
       if (!e.isIntersecting) continue;
@@ -256,11 +256,11 @@
         setTimeout(() => bubbles.classList.add("step2"), 600);
         setTimeout(() => bubbles.classList.add("step3"), 2000);
       }
-      if (e.target.contains(steps)) steps.classList.add("in");
+      steps.forEach((list) => { if (e.target.contains(list)) list.classList.add("in"); });
     }
-  }, { threshold: 0.2 });
+  });
   document.querySelectorAll(".reveal").forEach((el) => (reduceMotion ? el.classList.add("in") : io.observe(el)));
-  if (reduceMotion) { bubbles.classList.add("step1", "step2", "step3"); steps.classList.add("in"); }
+  if (reduceMotion) { bubbles.classList.add("step1", "step2", "step3"); steps.forEach((list) => list.classList.add("in")); }
   // ---------- Live background demo (the app's ambience engine in an iframe) ----------
   const frame = document.getElementById("live-demo");
   if (frame) {

@@ -4,6 +4,16 @@ Tauri 2 + WebView2 版本，與 macOS 共用 `Wallpaper/companion/` 的角色、
 
 目前為預覽版。已在 Windows 11（10.0.26200）／RTX 3080／單螢幕 RDP 環境驗證桌面透明合成、控制列與聊天入口、Ollama 繁體中文回覆及相簿拍照。麥克風與通話音訊尚未實測；Windows 10、多螢幕不同 DPI、實體主控台與 NSIS 安裝仍需驗收。
 
+## PowerShell 一鍵安裝
+
+Windows 10／11 x64 的正式安裝檔尚未發布。發布後，可直接在 PowerShell 貼上這一行安裝：
+
+```powershell
+$p = "$env:TEMP\miku-$([guid]::NewGuid()).ps1"; try { Invoke-WebRequest -UseBasicParsing -ErrorAction Stop 'https://raw.githubusercontent.com/miku2339/miku_desktop/c1d83c78aab6123d099b99812883bf92b50d54e4/windows/scripts/install-app.ps1' -OutFile $p; powershell.exe -NoProfile -ExecutionPolicy Bypass -File $p } finally { Remove-Item -LiteralPath $p -ErrorAction SilentlyContinue }
+```
+
+若想先試用，登入 GitHub，在 [Windows 建置紀錄](https://github.com/miku2339/miku_desktop/actions/workflows/windows-build.yml) 開啟有下載檔案的成功建置，在 **Artifacts** 下載 `miku-desktop-windows-x64`。將 ZIP 全部解壓縮，開啟 `miku-desktop.exe` 即可。此預覽版使用 Animasa，下載檔案保留 3 天。
+
 ## 使用
 
 從托盤或桌面控制列開啟聊天、手帳、設定、相簿與歌曲知識。拖動控制列的 ♪ 可移動位置，重新開啟時會恢復。
@@ -20,9 +30,18 @@ Tauri 2 + WebView2 版本，與 macOS 共用 `Wallpaper/companion/` 的角色、
 
 擁有者的私人 Miku 聲線、語音模型與訓練素材不對外提供，公開版不預載、下載或連接該私人服務。語音及辨識語言依 Windows 已安裝引擎／使用者自備服務而定。
 
-## 建置
+## 從原始碼建置
 
-需要 Windows 10/11 x64、WebView2 Runtime、Rust stable MSVC，以及 Visual Studio Build Tools 的「使用 C++ 的桌面開發」。
+開發環境需要 Windows 10／11 x64、Git、WebView2 Runtime、Rust stable MSVC（含 Cargo），以及 Visual Studio Build Tools 的「使用 C++ 的桌面開發」。安裝工具後重新開啟 PowerShell。
+
+初次建置時，先下載 Windows 分支並進入專案資料夾：
+
+```powershell
+git clone --branch windows --single-branch https://github.com/miku2339/miku_desktop.git
+cd .\miku_desktop
+```
+
+在包含 `windows` 資料夾的專案根目錄執行：
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File windows/scripts/fetch-model.ps1

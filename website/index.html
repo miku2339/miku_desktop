@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Miku Desktop</title>
+<title>Miku Desktop｜初音未來桌面夥伴</title>
 <meta name="description" content="住在你桌面上的初音未來：場景會隨著你的時間變化，可用本機或自選的雲端 AI 聊天，並記得你們的相處。提供 macOS 版與 Windows 預覽版。非官方同人作品。">
 <meta name="robots" content="index,follow,max-image-preview:large">
 <link rel="canonical" href="https://desktop.mikutool.com/">
@@ -13,7 +13,7 @@
 <link rel="alternate" hreflang="x-default" href="https://desktop.mikutool.com/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Miku Desktop">
-<meta property="og:title" content="Miku Desktop">
+<meta property="og:title" content="Miku Desktop｜初音未來桌面夥伴">
 <meta property="og:description" content="住在你桌面上的初音未來：場景會隨著你的時間變化，可用本機或自選的雲端 AI 聊天，並記得你們的相處。提供 macOS 版與 Windows 預覽版。非官方同人作品。">
 <meta property="og:url" content="https://desktop.mikutool.com/">
 <meta property="og:locale" content="zh_TW">
@@ -33,6 +33,7 @@
         "@type": "WebSite",
         "@id": "https://desktop.mikutool.com/#website",
         "name": "Miku Desktop",
+        "alternateName": "MikuDesktop",
         "url": "https://desktop.mikutool.com/"
       },
       {
@@ -42,7 +43,17 @@
         "url": "https://desktop.mikutool.com/",
         "description": "住在你桌面上的初音未來：場景會隨著你的時間變化，可用本機或自選的雲端 AI 聊天，並記得你們的相處。提供 macOS 版與 Windows 預覽版。非官方同人作品。",
         "inLanguage": "zh-Hant",
-        "isPartOf": { "@id": "https://desktop.mikutool.com/#website" }
+        "isPartOf": { "@id": "https://desktop.mikutool.com/#website" },
+        "mainEntity": { "@id": "https://desktop.mikutool.com/#app" }
+      },
+      {
+        "@type": "SoftwareApplication",
+        "@id": "https://desktop.mikutool.com/#app",
+        "name": "Miku Desktop",
+        "alternateName": "MikuDesktop",
+        "url": "https://desktop.mikutool.com/",
+        "operatingSystem": ["macOS", "Windows"],
+        "applicationCategory": "EntertainmentApplication"
       }
     ]
   }
@@ -235,7 +246,7 @@
     <h3 class="platform">macOS</h3>
     <ol class="steps">
       <li>
-        <h3>下載 App</h3>
+        <h3>下載 MikuDesktop</h3>
         <p>從 <a href="https://github.com/miku2339/miku_desktop/releases/latest">GitHub Releases</a> 下載 <code>MikuDesktop-macOS.zip</code>，解壓後把 App 移到「應用程式」。App 內附 Tda式初音ミクV4X，不用另外下載模型。想自己從原始碼建置，見 <a href="https://github.com/miku2339/miku_desktop#安裝與建置">GitHub 安裝指引</a>。</p>
       </li>
       <li>

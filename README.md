@@ -6,13 +6,33 @@
 
 **網站**：[desktop.mikutool.com](https://desktop.mikutool.com/)（介紹與動態背景示範）
 
-[**下載 macOS 版**](https://github.com/miku2339/miku_desktop/releases/latest)
+[**下載 macOS 版**](https://github.com/miku2339/miku_desktop/releases/latest) · [**macOS／Windows 一鍵安裝**](#一鍵安裝)
 
 ## 預設角色與致謝
 
 GitHub Releases 的 V4X 同捆版以 **Tda式初音ミクV4X** 為預設角色。感謝 **Tda** 製作模型並同意隨 App 免費發布，也謝謝 **ナルパジン（Narupajin）** 協助聯繫與確認。 [模型原始配布頁](https://bowlroll.net/file/146088)
 
 新使用者首次啟動時會載入 V4X，可在 **手帳 → 設定 → 角色** 切換模型。V4X 的原始使用規約隨 App 附上，並繼續適用。 [第三方素材與使用條款](THIRD_PARTY_NOTICES.md)
+
+## 一鍵安裝
+
+### macOS
+
+在搭載 Apple 晶片、執行 macOS 13 以上版本的 Mac 上，開啟「終端機」並貼上這一行，即可安裝內附 V4X 的正式版：
+
+```sh
+(installer=$(curl -fsSL https://raw.githubusercontent.com/miku2339/miku_desktop/705e9641cc6ccade258481de9780332ab2b1c3e2/scripts/install-macos-release.sh) && /bin/zsh -c "$installer")
+```
+
+此版本尚未經 Apple 公證。若 macOS 阻擋首次開啟，可在「系統設定 → 隱私權與安全性」選擇「仍要打開」。
+
+### Windows
+
+**Windows x64 正式安裝檔尚未發布。** 發布後，在 Windows 10／11 的 PowerShell 貼上這一行，即可下載、核對 SHA-256 並安裝：
+
+```powershell
+$p = "$env:TEMP\miku-$([guid]::NewGuid()).ps1"; try { Invoke-WebRequest -UseBasicParsing -ErrorAction Stop 'https://raw.githubusercontent.com/miku2339/miku_desktop/c1d83c78aab6123d099b99812883bf92b50d54e4/windows/scripts/install-app.ps1' -OutFile $p; powershell.exe -NoProfile -ExecutionPolicy Bypass -File $p } finally { Remove-Item -LiteralPath $p -ErrorAction SilentlyContinue }
+```
 
 ![黃昏的澀谷十字路口背景](Wallpaper/assets/scenes/shibuya-scramble-dusk.jpg)
 

@@ -4,7 +4,7 @@
 
 macOS のデスクトップに住む初音ミク。動く東京の街並みを歩き回り、マウスに反応し、ローカル AI または自分で選んだクラウド AI を通じておしゃべりして、一緒に過ごした時間を覚えていてくれます。
 
-**Web サイト**：[desktop.mikutool.com](https://desktop.mikutool.com/)（紹介と動く背景のデモ）
+[Miku Desktop 公式サイト](https://desktop.mikutool.com/ja/)（機能紹介・動く背景のデモ）
 
 [**macOS 版をダウンロード**](https://github.com/miku2339/miku_desktop/releases/latest)
 

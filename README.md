@@ -4,7 +4,7 @@
 
 住在 macOS 桌面上的初音未來：她會在動態的東京街景裡走動、回應你的滑鼠，也能透過本機或自選雲端 AI 和你聊天，並記住你們的相處。
 
-**網站**：[desktop.mikutool.com](https://desktop.mikutool.com/)（介紹與動態背景示範）
+[Miku Desktop 官網](https://desktop.mikutool.com/) · 功能介紹與動態背景示範
 
 [**下載 macOS 版**](https://github.com/miku2339/miku_desktop/releases/latest) · [**macOS／Windows 一鍵安裝**](#一鍵安裝)
 

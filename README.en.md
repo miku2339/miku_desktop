@@ -4,7 +4,7 @@
 
 Hatsune Miku, living on your macOS desktop. She walks around animated Tokyo street scenes, reacts to your pointer, and chats with you through a local AI or a cloud AI service you choose, remembering the time you spend together.
 
-**Website**: [desktop.mikutool.com](https://desktop.mikutool.com/) (overview and live background demo)
+[Miku Desktop website](https://desktop.mikutool.com/en/) · Features and live background demo
 
 [**Download for macOS**](https://github.com/miku2339/miku_desktop/releases/latest)
 

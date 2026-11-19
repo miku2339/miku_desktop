@@ -2,37 +2,26 @@
   box-sizing: border-box;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  min-height: 44px;
-  padding: 4px 15px 4px 6px;
-  border: 1px solid rgba(181, 240, 229, .5);
+  justify-self: end;
+  gap: 7px;
+  min-height: 38px;
+  padding: 0 12px 0 9px;
+  border: 1px solid rgba(255, 255, 255, .32);
   border-radius: 999px;
-  background: #123139eb;
-  color: #f3fffc;
-  font: 700 14px/1.25 var(--body, system-ui, sans-serif);
+  background: rgba(14, 22, 40, .68);
+  color: #fff;
+  font: 500 14px/1.25 var(--body, system-ui, sans-serif);
   text-decoration: none;
   white-space: nowrap;
-  box-shadow: 0 2px 6px rgba(6, 23, 29, .2);
 }
-.site-parent > span {
-  display: grid;
-  place-items: center;
-  width: 29px;
-  height: 29px;
-  border-radius: 50%;
-  background: #a3efe0;
-  color: #113d40;
-  font: 600 19px/1 system-ui, sans-serif;
-}
-.site-parent:focus-visible {
-  outline: 3px solid #aff8ef;
-  outline-offset: 3px;
-}
+.site-parent img { display: block; width: 22px; height: 22px; flex: none; }
+.site-parent:focus-visible { outline: 3px solid #75e2d9; outline-offset: 3px; }
 @media (hover: hover) {
-  .site-parent:hover { background: #18474d; border-color: #a3efe0; }
-  .site-parent:hover > span { transform: translateX(-2px); }
+  .site-parent:hover { background: #152a38; border-color: #82dcd2; }
 }
 @media (prefers-reduced-motion: no-preference) {
   .site-parent { transition: background-color .18s, border-color .18s; }
-  .site-parent > span { transition: transform .18s; }
+}
+@media (pointer: coarse) {
+  .site-parent { min-height: 44px; }
 }

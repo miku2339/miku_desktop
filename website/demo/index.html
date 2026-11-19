@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Miku Desktop 動態背景</title>
-<link rel="stylesheet" href="../site-parent.css?v=bae3aed74324">
+<link rel="stylesheet" href="../site-parent.css?v=448d0d6c7af9">
 <style>
   html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #0d3149; }
   .layer, canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
   .layer { background: center / cover no-repeat; }
   canvas { pointer-events: none; }
-  .site-parent { position: absolute; top: 12px; left: 12px; }
+  .site-parent { position: absolute; top: max(12px, env(safe-area-inset-top)); right: max(16px, env(safe-area-inset-right)); }
   .embedded .site-parent { display: none; }
 </style>
 <script>if (window.self !== window.top) document.documentElement.classList.add('embedded');</script>
@@ -20,7 +20,7 @@
   <div class="layer dusk"></div>
   <div class="layer night"></div>
   <canvas id="ambient"></canvas>
-  <a class="site-parent" href="https://mikutool.com/"><span aria-hidden="true">←</span> mikutool</a>
+  <a class="site-parent" href="https://mikutool.com/"><img src="../assets/mikutool.svg" width="22" height="22" alt=""> mikutool</a>
   <script type="module" src="demo.js"></script>
 </body>
 </html>

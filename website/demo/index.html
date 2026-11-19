@@ -4,16 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Miku Desktop 動態背景</title>
+<link rel="stylesheet" href="../site-parent.css?v=bae3aed74324">
 <style>
   html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #0d3149; }
   .layer, canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
   .layer { background: center / cover no-repeat; }
   canvas { pointer-events: none; }
-  .site-parent {
-    position: absolute; top: 12px; left: 12px; padding: 8px 14px; border-radius: 20px;
-    background: #142235e6; color: #fff; font: 500 14px/1.4 system-ui, sans-serif; text-decoration: none;
-  }
-  .site-parent:hover, .site-parent:focus-visible { text-decoration: underline; }
+  .site-parent { position: absolute; top: 12px; left: 12px; }
   .embedded .site-parent { display: none; }
 </style>
 <script>if (window.self !== window.top) document.documentElement.classList.add('embedded');</script>

@@ -103,7 +103,7 @@ body[data-time="night"] .hero-miku { filter: drop-shadow(0 18px 30px rgba(0,0,0,
 .topbar, .hero-copy, .dial { position: relative; z-index: 1; }
 
 .topbar {
-  display: flex; justify-content: space-between; align-items: center;
+  display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 8px;
   max-width: 1120px; width: 100%; margin: 0 auto; padding: 20px 24px;
 }
 .brand {
@@ -111,12 +111,7 @@ body[data-time="night"] .hero-miku { filter: drop-shadow(0 18px 30px rgba(0,0,0,
   color: #fff; text-decoration: none;
   font: 800 19px/1 var(--round);
 }
-.site-parent {
-  display: inline-block; margin-bottom: 6px; padding: 3px 0;
-  color: #fff; font: 500 14px/1.35 var(--body); text-decoration: none;
-  text-shadow: 0 1px 3px #142235;
-}
-.site-parent:hover, .site-parent:focus-visible { text-decoration: underline; }
+.topbar > .brand, .toplinks { justify-self: start; }
 .brand img { border-radius: 8px; }
 .toplinks { display: flex; align-items: center; gap: 8px; }
 .pill {
@@ -394,6 +389,12 @@ h2 { font-size: clamp(30px, 4vw, 44px); line-height: 1.2; }
   .hero { min-height: 100svh; }
   .wrap, .topbar, .hero-copy, .dial { padding-left: 16px; padding-right: 16px; }
   .strip { padding-left: 16px; padding-right: 16px; }
+}
+
+@media (max-width: 640px) {
+  .topbar { grid-template-columns: 1fr auto; row-gap: 12px; }
+  .topbar > .brand { grid-column: 1 / -1; }
+  .lang-menu { left: 0; right: auto; transform-origin: top left; }
 }
 
 @media (max-width: 480px) {

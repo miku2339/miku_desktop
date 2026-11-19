@@ -1,0 +1,27 @@
+.site-parent {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-self: end;
+  gap: 7px;
+  min-height: 38px;
+  padding: 0 12px 0 9px;
+  border: 1px solid rgba(255, 255, 255, .32);
+  border-radius: 999px;
+  background: rgba(14, 22, 40, .68);
+  color: #fff;
+  font: 500 14px/1.25 var(--body, system-ui, sans-serif);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.site-parent img { display: block; width: 22px; height: 22px; flex: none; }
+.site-parent:focus-visible { outline: 3px solid #75e2d9; outline-offset: 3px; }
+@media (hover: hover) {
+  .site-parent:hover { background: #152a38; border-color: #82dcd2; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .site-parent { transition: background-color .18s, border-color .18s; }
+}
+@media (pointer: coarse) {
+  .site-parent { min-height: 44px; }
+}

@@ -103,6 +103,7 @@ body[data-time="night"] .hero-miku { filter: drop-shadow(0 18px 30px rgba(0,0,0,
 .topbar, .hero-copy, .dial { position: relative; z-index: 1; }
 
 .topbar {
+  z-index: 2;
   display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 8px;
   max-width: 1120px; width: 100%; margin: 0 auto; padding: 20px 24px;
 }
@@ -392,22 +393,25 @@ h2 { font-size: clamp(30px, 4vw, 44px); line-height: 1.2; }
 }
 
 @media (max-width: 640px) {
-  .topbar { grid-template-columns: 1fr auto; row-gap: 12px; }
-  .topbar > .brand { grid-column: 1 / -1; }
-  .lang-menu { left: 0; right: auto; transform-origin: top left; }
-}
-
-@media (max-width: 480px) {
-  .topbar { gap: 10px; }
+  .topbar { gap: 4px; padding-block: 12px; }
   .brand { gap: 7px; font-size: 16px; white-space: nowrap; }
   .brand img { width: 28px; height: 28px; }
-  .toplinks { gap: 6px; }
-  .pill { height: 36px; padding: 0 11px; gap: 6px; font-size: 13px; }
+  .toplinks { gap: 4px; }
+  .topbar .pill, .topbar > .site-parent {
+    height: 44px; min-width: 44px; justify-content: center;
+  }
+  .topbar .pill { width: 44px; padding: 0; }
+  .topbar .lang-short, .topbar .chev, .gh .gh-text, .gh .stars { display: none; }
 }
 
 @media (max-width: 430px) {
-  .gh .gh-text, .gh .stars { display: none; }
-  .gh { width: 36px; padding: 0; justify-content: center; }
+  .site-parent .parent-name { display: none; }
+}
+
+@media (max-width: 359px) {
+  .topbar { padding-inline: 12px; }
+  .topbar > .site-parent { width: 44px; padding: 0; }
+  .site-parent .parent-label { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {

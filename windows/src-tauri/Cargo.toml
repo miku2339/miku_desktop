@@ -1,0 +1,40 @@
+[package]
+name = "miku-desktop"
+version = "0.1.0"
+description = "Miku Desktop: Windows shell (Tauri 2 + WebView2) around the shared Wallpaper/companion page"
+edition = "2021"
+rust-version = "1.88"
+publish = false
+
+[lib]
+name = "miku_desktop_lib"
+crate-type = ["rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+percent-encoding = "2"
+reqwest = { version = "0.12", default-features = false, features = ["json", "native-tls"] }
+tokio = { version = "1", features = ["sync", "time", "rt", "macros"] }
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+regex = "1"
+unicode-normalization = "0.1"
+base64 = "0.22"
+rand = "0.9"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+
+[target.'cfg(windows)'.dependencies]
+# Raw Win32 for attaching the background layer under WorkerW (desktop.rs).
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_Security_Credentials", "Win32_System_Power", "Win32_System_SystemInformation", "Win32_System_Threading", "Win32_UI_Input_KeyboardAndMouse", "Win32_Graphics_Gdi", "Win32_UI_Shell", "Win32_System_JobObjects", "Win32_System_RemoteDesktop", "Win32_System_LibraryLoader"] }
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Memory", "Win32_Media_Audio", "Win32_System_Variant"] }
+webview2-com = "0.39"
+
+[profile.release]
+codegen-units = 1
+lto = true
+strip = true

@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Miku Desktop</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div id="app"></div>
+  <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+  <dialog id="confirm-dialog" aria-labelledby="confirm-title">
+    <form method="dialog">
+      <h2 id="confirm-title"></h2>
+      <p id="confirm-detail"></p>
+      <label id="confirm-label" hidden><span id="confirm-prompt"></span><input id="confirm-word" autocomplete="off"></label>
+      <div class="actions"><button id="confirm-cancel" value="cancel"></button><button id="confirm-ok" class="danger" value="ok"></button></div>
+    </form>
+  </dialog>
+  <script type="module" src="./app.mjs"></script>
+</body>
+</html>

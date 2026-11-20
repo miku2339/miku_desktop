@@ -1,6 +1,6 @@
 # Windows 版架構規劃
 
-狀態：共用橋接層與 macOS 雲端 AI 設定已完成；Windows 外殼尚未合入 main。
+狀態：Windows 外殼已通過 CI 的 11 項 Rust 測試與 .exe 連結，並在 Windows 11（10.0.26200）／RTX 3080／單螢幕 RDP 載入共用頁面與私人匯入的 Tda 模型。已確認桌面圖示及一般 App 遮蓋角色，互動與焦點仍待完整驗收；聊天、AI、語音等功能尚未移植，外殼尚未合入 main。
 
 ## 1. 結論
 
@@ -51,11 +51,11 @@ miku_desktop/
 
 | 功能 | macOS 現在 | Windows 做法 | 難度 |
 | --- | --- | --- | --- |
-| 桌布層（背景 + 角色兩個 WebView） | 桌面層級 `NSPanel` | 把視窗掛到 `WorkerW`（桌面圖示後面），角色層用無邊框透明置頂視窗 | 高 |
+| 桌布層（背景 + 角色兩個 WebView） | 桌面層級 `NSPanel` | 背景掛到 `WorkerW`；角色由桌面擁有、透明且不全域置頂 | 高 |
 | 點穿與點擊判定 | `ignoresMouseEvents` + `hitTest` 輪詢 | `WS_EX_TRANSPARENT` / `WS_EX_LAYERED` 動態切換，同樣用 `mikuCompanion.hitTest` 判定 | 高 |
 | 多螢幕、所有桌面都顯示 | `canJoinAllSpaces` | 每個螢幕一組視窗；虛擬桌面用 `IVirtualDesktopManager` 固定 | 中 |
-| 本機網頁伺服器 | `StaticHTTPServer` | Tauri 自訂協定（`asset://`）或內建小型 HTTP 服務，同樣要能讀匯入的模型目錄 | 低 |
-| 聊天 AI | OpenAI 相容端點（預設 oMLX `127.0.0.1:8000/v1`） | **Ollama**，見 3.3 | 低 |
+| 本機網頁伺服器 | `StaticHTTPServer` | `miku://` 自訂協定，提供共用網頁與本機匯入的模型 | 低 |
+| 聊天 AI | OpenAI 相容端點（預設 oMLX `127.0.0.1:8000/v1`） | **Ollama**（待移植），見 3.3 | 低 |
 | 提示詞、記憶、主動說話規則 | Swift（`LocalAI`、`AwarenessPolicy` 等） | 移植到 Rust 或 TS；可把規則資料抽成 `shared/` JSON 兩邊共用 | 中 |
 | 語音合成（TTS） | HTTP 端點 + `AVAudioPlayer` | 同樣的 HTTP 端點，播放用 WebView 的 Web Audio 或 Rust 音訊庫 | 低 |
 | 語音辨識 | `SFSpeechRecognizer` / SpeechAnalyzer | Windows.Media.SpeechRecognition，或本機 whisper.cpp | 中 |
@@ -72,7 +72,7 @@ miku_desktop/
 
 ### 3.3 本機 AI：Ollama
 
-oMLX 只能在 Apple Silicon 上跑，Windows 版預設用 Ollama：
+oMLX 只能在 Apple Silicon 上跑，Windows 版預計使用 Ollama；以下連線與設定流程尚未實作：
 
 - 端點預設 `http://127.0.0.1:11434/v1`。Ollama 提供 OpenAI 相容的 `/v1/chat/completions`，現有的請求格式（`LocalAI` 的 `chat/completions`）可以照搬。
 - Ollama 本機服務不需要 API 金鑰；macOS 版讀 `~/.omlx/settings.json` 取金鑰的邏輯，Windows 版不用移植。
@@ -81,7 +81,7 @@ oMLX 只能在 Apple Silicon 上跑，Windows 版預設用 Ollama：
 - 聊天圖片：選用支援影像輸入的模型時才開放傳圖。
 - 預設模型與顯示卡需求要先在 Windows 實機測過再決定，寫進下載頁。
 
-### 3.4 雲端模型（macOS、Windows 都支援）
+### 3.4 雲端模型（macOS 已完成，Windows 待移植）
 
 本機模型之外，使用者可改用雲端模型，**API 金鑰由使用者自己填**：
 
@@ -95,7 +95,7 @@ oMLX 只能在 Apple Silicon 上跑，Windows 版預設用 Ollama：
 ## 4. 規則與限制（沿用 AGENTS.md）
 
 - GPT-SoVITS Miku 聲音只供擁有者使用：Windows 版公開建置**不得包含**任何語音模型、金鑰或語音素材，`voice-training/` 維持在 `.gitignore`。
-- 公開版不附 Tda 模型，維持使用者自行匯入。
+- 公開版不附 Tda 模型。使用者從作者原始 ZIP 私人匯入並保留規約後，程式自動優先選用本機 Tda；未匯入時使用 Animasa。
 - 修改提示詞、主動說話、日記、小遊戲台詞時，對照 `docs/miku-persona.md`，兩個平台行為要一致。
 - 歌曲知識庫只放曲名、作者與來源連結。
 
@@ -103,7 +103,7 @@ oMLX 只能在 Apple Silicon 上跑，Windows 版預設用 Ollama：
 
 1. **橋接層**（已完成）：新增 `bridge.js`，`companion.js` 改走橋接；macOS 版測試全部通過、行為不變。
    - macOS 版加入雲端模型設定（3.4，已完成）。
-2. **Windows 外殼骨架**：Tauri 專案，能在 Windows 上顯示背景 + 角色兩層、點穿、拖曳、多螢幕。
+2. **Windows 外殼骨架**（實機驗證中）：Tauri 專案，背景與角色雙層、桌面圖示及一般 App 遮蓋已驗證；點穿、拖曳、焦點與多螢幕仍須完整驗收。
 3. **聊天**：聊天視窗、接 Ollama、記憶檔、提示詞與人格規則。
 4. **語音**：TTS 播放與嘴型同步、語音辨識、通話。
 5. **感知與主動說話**：前景程式、全螢幕 / 勿擾、SMTC 讀取影音、安靜時段。
@@ -115,12 +115,12 @@ oMLX 只能在 Apple Silicon 上跑，Windows 版預設用 Ollama：
 ## 6. 測試
 
 - 共用網頁：現有 `node --test Tests/*.test.mjs` 繼續跑，兩平台共用。
-- Windows 外殼：Rust 單元測試（`cargo test`）涵蓋提示詞、記憶、主動說話規則；可移植的規則用同一組測試資料對照 Swift 版結果。
-- CI：GitHub Actions 加 `windows-latest` 建置與測試。
+- Windows 外殼：`cargo test --locked --lib` 的 11 項測試涵蓋協定路徑與點穿判定；提示詞、記憶與主動說話的測試隨模組移植加入。
+- CI：[Windows build](../.github/workflows/windows-build.yml) 已在 `windows-latest` 執行測試、連結 .exe 並產出可攜測試包。
+- 實機驗證：目前限 Windows 11 10.0.26200／RTX 3080／單螢幕 RDP。NSIS 安裝、多螢幕 DPI、Windows 10／11 23H2 與實體主控台尚未驗證；觸碰、拖曳與焦點行為仍待完整驗收。
 
 ## 7. 待決定
 
-- 外殼框架：Tauri（建議）還是 Electron（全用 JS、開發較快，但體積大、記憶體高）。
 - 規則邏輯：各平台各寫一份，還是抽成共用資料 / 共用核心。
 - 是否支援 Windows 10，或只支援 Windows 11。
 - Ollama 預設模型與最低硬體需求（顯示卡、記憶體）。
